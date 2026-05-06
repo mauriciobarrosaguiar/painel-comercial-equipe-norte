@@ -40,7 +40,13 @@ def aplicar_css() -> None:
             padding-top: 2.4rem;
             max-width: 1280px;
         }
-        header[data-testid="stHeader"],
+        header[data-testid="stHeader"] {
+            display: block !important;
+            visibility: visible !important;
+            height: 2.2rem !important;
+            background: transparent !important;
+            box-shadow: none !important;
+        }
         [data-testid="stToolbar"],
         [data-testid="stDecoration"],
         #MainMenu,
@@ -48,6 +54,18 @@ def aplicar_css() -> None:
             display: none !important;
             visibility: hidden !important;
             height: 0 !important;
+        }
+        [data-testid="stSidebarCollapseButton"],
+        [data-testid="stSidebarCollapsedControl"],
+        button[data-testid="stSidebarCollapseButton"],
+        button[data-testid="stSidebarCollapsedControl"] {
+            display: inline-flex !important;
+            visibility: visible !important;
+            opacity: 1 !important;
+            z-index: 999999 !important;
+        }
+        header[data-testid="stHeader"] button {
+            color: var(--norte-text) !important;
         }
         [data-testid="stSidebar"] {
             background: #062F22;
