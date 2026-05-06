@@ -60,16 +60,18 @@ def aplicar_css() -> None:
             opacity: 1 !important;
             background: transparent !important;
         }
-        [data-testid="stToolbar"] > div:not(:has([data-testid="stSidebarCollapseButton"])) {
+        [data-testid="stToolbar"] > div:not(:has([data-testid="stSidebarCollapseButton"])):not(:has([data-testid="stExpandSidebarButton"])):not(:has([data-testid="stSidebarCollapsedControl"])) {
             display: none !important;
         }
         [data-testid="stToolbar"] a,
-        [data-testid="stToolbar"] button:not([data-testid="stSidebarCollapseButton"]):not([data-testid="stSidebarCollapsedControl"]) {
+        [data-testid="stToolbar"] button:not([data-testid="stSidebarCollapseButton"]):not([data-testid="stExpandSidebarButton"]):not([data-testid="stSidebarCollapsedControl"]) {
             display: none !important;
         }
         [data-testid="stSidebarCollapseButton"],
+        [data-testid="stExpandSidebarButton"],
         [data-testid="stSidebarCollapsedControl"],
         button[data-testid="stSidebarCollapseButton"],
+        button[data-testid="stExpandSidebarButton"],
         button[data-testid="stSidebarCollapsedControl"] {
             display: inline-flex !important;
             visibility: visible !important;
