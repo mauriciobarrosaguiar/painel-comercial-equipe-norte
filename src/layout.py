@@ -47,13 +47,25 @@ def aplicar_css() -> None:
             background: transparent !important;
             box-shadow: none !important;
         }
-        [data-testid="stToolbar"],
         [data-testid="stDecoration"],
         #MainMenu,
         footer {
             display: none !important;
             visibility: hidden !important;
             height: 0 !important;
+        }
+        [data-testid="stToolbar"] {
+            display: flex !important;
+            visibility: visible !important;
+            opacity: 1 !important;
+            background: transparent !important;
+        }
+        [data-testid="stToolbar"] > div:not(:has([data-testid="stSidebarCollapseButton"])) {
+            display: none !important;
+        }
+        [data-testid="stToolbar"] a,
+        [data-testid="stToolbar"] button:not([data-testid="stSidebarCollapseButton"]):not([data-testid="stSidebarCollapsedControl"]) {
+            display: none !important;
         }
         [data-testid="stSidebarCollapseButton"],
         [data-testid="stSidebarCollapsedControl"],
