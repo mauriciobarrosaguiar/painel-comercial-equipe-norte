@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-from datetime import date
-
 import pandas as pd
 import streamlit as st
 
+from src.datas import hoje_brasilia
 from src.tratamento import STATUS_CANCELADO, STATUS_FATURADOS
 
 
@@ -89,12 +88,12 @@ def aplicar_filtros_globais(
     vendas_filtradas = vendas.copy()
     clientes_filtrados = clientes.copy()
 
-    st.sidebar.markdown("### Filtros comerciais")
     datas = pd.to_datetime(vendas_filtradas.get("data_base"), errors="coerce")
     data_min = datas.min()
     data_max = datas.max()
-    hoje = pd.Timestamp(date.today())
-    inicio_mes_atual = pd.Timestamp(date.today().replace(day=1))
+    hoje_data = hoje_brasilia()
+    hoje = pd.Timestamp(hoje_data)
+    inicio_mes_atual = pd.Timestamp(hoje_data.replace(day=1))
     if pd.isna(data_min) or pd.isna(data_max):
         data_min = inicio_mes_atual
         data_max = hoje
@@ -102,48 +101,55 @@ def aplicar_filtros_globais(
     min_calendario = min(pd.Timestamp(data_min), inicio_mes_atual)
     max_calendario = max(pd.Timestamp(data_max), hoje)
 
-    periodo = st.sidebar.date_input(
-        "Período",
-        value=(inicio_mes_atual.date(), hoje.date()),
-        min_value=min_calendario.date(),
-        max_value=max_calendario.date(),
-        key=f"{chave}_periodo_v2",
-    )
-    if isinstance(periodo, tuple) and len(periodo) == 2:
-        inicio, fim = pd.Timestamp(periodo[0]), pd.Timestamp(periodo[1])
-    else:
-        inicio, fim = inicio_mes_atual, hoje
+    with st.sidebar.expander("Filtros comerciais", expanded=False):
+        periodo = st.date_input(
+            "Período",
+            value=(inicio_mes_atual.date(), hoje.date()),
+            min_value=min_calendario.date(),
+            max_value=max_calendario.date(),
+            format="DD/MM/YYYY",
+            key=f"{chave}_periodo_v2",
+        )
+        if isinstance(periodo, tuple) and len(periodo) == 2:
+            inicio, fim = pd.Timestamp(periodo[0]), pd.Timestamp(periodo[1])
+        else:
+            inicio, fim = inicio_mes_atual, hoje
 
-    consultores = _opcoes_consultores(clientes_filtrados, vendas_filtradas)
-    consultor_sel = st.sidebar.multiselect("Consultor", consultores, key=f"{chave}_consultor")
+        consultores = _opcoes_consultores(clientes_filtrados, vendas_filtradas)
+        consultor_sel = st.multiselect("Consultor", consultores, key=f"{chave}_consultor")
 
-    distribuidoras = _opcoes(vendas_filtradas.get("distribuidora", pd.Series(dtype=str)))
-    distribuidora_sel = st.sidebar.multiselect("Distribuidora", distribuidoras, key=f"{chave}_distribuidora")
+        distribuidoras = _opcoes(vendas_filtradas.get("distribuidora", pd.Series(dtype=str)))
+        distribuidora_sel = st.multiselect("Distribuidora", distribuidoras, key=f"{chave}_distribuidora")
 
-    ufs = _opcoes(pd.concat([clientes_filtrados.get("uf", pd.Series(dtype=str)), vendas_filtradas.get("uf", pd.Series(dtype=str))], ignore_index=True))
-    uf_sel = st.sidebar.multiselect("UF", ufs, key=f"{chave}_uf")
+        ufs = _opcoes(
+            pd.concat(
+                [clientes_filtrados.get("uf", pd.Series(dtype=str)), vendas_filtradas.get("uf", pd.Series(dtype=str))],
+                ignore_index=True,
+            )
+        )
+        uf_sel = st.multiselect("UF", ufs, key=f"{chave}_uf")
 
-    cidades = _opcoes(clientes_filtrados.get("cidade", pd.Series(dtype=str)))
-    cidade_sel = st.sidebar.multiselect("Cidade", cidades, key=f"{chave}_cidade")
+        cidades = _opcoes(clientes_filtrados.get("cidade", pd.Series(dtype=str)))
+        cidade_sel = st.multiselect("Cidade", cidades, key=f"{chave}_cidade")
 
-    grupos = _opcoes(clientes_filtrados.get("grupo_sip", pd.Series(dtype=str)))
-    grupo_sel = st.sidebar.multiselect("Redes", grupos, key=f"{chave}_grupo")
+        grupos = _opcoes(clientes_filtrados.get("grupo_sip", pd.Series(dtype=str)))
+        grupo_sel = st.multiselect("Redes", grupos, key=f"{chave}_grupo")
 
-    status_modo = st.sidebar.radio(
-        "Status do pedido",
-        ["Apenas faturados", "Todos exceto cancelados", "Selecionar status"],
-        index=0,
-        key=f"{chave}_status_modo",
-    )
-    status_sel: list[str] = []
-    if status_modo == "Selecionar status":
-        status_opcoes = _opcoes(vendas_filtradas.get("status_normalizado", pd.Series(dtype=str)))
-        status_sel = st.sidebar.multiselect("Escolha os status", status_opcoes, default=STATUS_FATURADOS, key=f"{chave}_status_sel")
+        status_modo = st.radio(
+            "Status do pedido",
+            ["Apenas faturados", "Todos exceto cancelados", "Selecionar status"],
+            index=0,
+            key=f"{chave}_status_modo",
+        )
+        status_sel: list[str] = []
+        if status_modo == "Selecionar status":
+            status_opcoes = _opcoes(vendas_filtradas.get("status_normalizado", pd.Series(dtype=str)))
+            status_sel = st.multiselect("Escolha os status", status_opcoes, default=STATUS_FATURADOS, key=f"{chave}_status_sel")
 
-    tipo_mix_sel: list[str] = []
-    if mostrar_tipo_mix:
-        tipos = _opcoes(vendas_filtradas.get("tipo_mix", pd.Series(dtype=str)))
-        tipo_mix_sel = st.sidebar.multiselect("Tipo de mix", tipos, key=f"{chave}_tipo_mix")
+        tipo_mix_sel: list[str] = []
+        if mostrar_tipo_mix:
+            tipos = _opcoes(vendas_filtradas.get("tipo_mix", pd.Series(dtype=str)))
+            tipo_mix_sel = st.multiselect("Tipo de mix", tipos, key=f"{chave}_tipo_mix")
 
     vendas_filtradas = vendas_filtradas[
         (pd.to_datetime(vendas_filtradas["data_base"], errors="coerce") >= inicio)

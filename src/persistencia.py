@@ -11,6 +11,8 @@ import requests
 import streamlit as st
 from cryptography.fernet import Fernet
 
+from src.datas import datetime_arquivo_brasilia, formatar_datahora_brasil, agora_brasilia
+
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 DATA_DIR = ROOT_DIR / "data"
@@ -27,6 +29,15 @@ ARQUIVOS_JSON = {
     "metas": "metas_comerciais.json",
     "login_bussola": "bussola_login.json",
     "sip": "sip_grupos.json",
+    "metadata": "metadata.json",
+    "desafio": "desafio_gigantes.json",
+}
+
+ARQUIVOS_PADRAO_DATA = {
+    "bussola": DATA_DIR / "bussola.xlsx",
+    "painel": DATA_DIR / "PAINEL EQUIPE NORTE.xlsx",
+    "acoes": DATA_DIR / "template_acoes_promocionais.xlsx",
+    "produtos_mix": DATA_DIR / "template_produtos_mix.xlsx",
 }
 
 
@@ -158,6 +169,22 @@ def _github_get(path: str) -> dict[str, Any] | None:
     return dados if isinstance(dados, dict) else None
 
 
+def _github_commit_at(path: str) -> str | None:
+    cfg = _github_config()
+    url = f"https://api.github.com/repos/{cfg['repo']}/commits"
+    params = {"sha": cfg["branch"], "path": path, "per_page": 1}
+    resp = requests.get(url, headers=_headers(), params=params, timeout=30)
+    if resp.status_code == 404:
+        return None
+    resp.raise_for_status()
+    dados = resp.json()
+    if not isinstance(dados, list) or not dados:
+        return None
+    commit = dados[0].get("commit", {}) if isinstance(dados[0], dict) else {}
+    committer = commit.get("committer", {}) if isinstance(commit, dict) else {}
+    return committer.get("date")
+
+
 def _github_read(chave: str) -> bytes | None:
     dados = _github_get(_caminho_github(chave))
     if not dados or not dados.get("content"):
@@ -207,11 +234,47 @@ def carregar_bytes(chave: str) -> bytes | None:
     return None
 
 
+def carregar_metadados() -> dict[str, Any]:
+    dados = carregar_bytes("metadata")
+    if not dados:
+        return {}
+    try:
+        carregado = json.loads(dados.decode("utf-8"))
+    except Exception:
+        return {}
+    return carregado if isinstance(carregado, dict) else {}
+
+
+def _salvar_metadados(dados: dict[str, Any]) -> None:
+    conteudo = json.dumps(dados, ensure_ascii=False, indent=2).encode("utf-8")
+    LOCAL_STORE_DIR.mkdir(parents=True, exist_ok=True)
+    _caminho_local("metadata").write_bytes(conteudo)
+    if persistencia_github_ativa():
+        _github_write("metadata", conteudo, "Atualiza controle de atualizacoes pelo painel")
+
+
+def _registrar_atualizacao(chave: str, mensagem: str | None = None) -> None:
+    if chave == "metadata":
+        return
+    try:
+        metadados = carregar_metadados()
+        metadados[chave] = {
+            "updated_at": agora_brasilia().isoformat(),
+            "arquivo": _nome_arquivo(chave),
+            "mensagem": mensagem or f"Atualiza {chave} pelo painel",
+        }
+        _salvar_metadados(metadados)
+    except Exception as exc:
+        st.warning(f"Base salva, mas não consegui atualizar o horário fixo ({chave}): {exc}")
+
+
 def salvar_bytes(chave: str, conteudo: bytes, mensagem: str | None = None) -> None:
     LOCAL_STORE_DIR.mkdir(parents=True, exist_ok=True)
     _caminho_local(chave).write_bytes(conteudo)
+    mensagem_final = mensagem or f"Atualiza {chave} pelo painel"
     if persistencia_github_ativa():
-        _github_write(chave, conteudo, mensagem or f"Atualiza {chave} pelo painel")
+        _github_write(chave, conteudo, mensagem_final)
+    _registrar_atualizacao(chave, mensagem_final)
 
 
 def carregar_json(chave: str, padrao: Any) -> Any:
@@ -236,3 +299,29 @@ def existe_persistido(chave: str) -> bool:
         except Exception:
             return False
     return _caminho_local(chave).exists()
+
+
+def ultima_atualizacao(chave: str) -> object | None:
+    metadados = carregar_metadados()
+    item = metadados.get(chave, {}) if isinstance(metadados, dict) else {}
+    if isinstance(item, dict) and item.get("updated_at"):
+        return item["updated_at"]
+
+    caminho_local = _caminho_local(chave)
+    if caminho_local.exists():
+        return datetime_arquivo_brasilia(caminho_local)
+
+    caminho_padrao = ARQUIVOS_PADRAO_DATA.get(chave)
+    if caminho_padrao and caminho_padrao.exists():
+        return datetime_arquivo_brasilia(caminho_padrao)
+
+    if persistencia_github_ativa():
+        try:
+            return _github_commit_at(_caminho_github(chave))
+        except Exception:
+            return None
+    return None
+
+
+def formatar_ultima_atualizacao(chave: str) -> str:
+    return formatar_datahora_brasil(ultima_atualizacao(chave))

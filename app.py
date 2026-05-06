@@ -18,6 +18,7 @@ PAGINAS = [
     ("Ações Promocionais", "pages/05_Acoes_Promocionais.py"),
     ("Produtos / Mix", "pages/06_Produtos_Mix.py"),
     ("Oportunidades", "pages/07_Oportunidades.py"),
+    ("Desafio de Gigantes", "pages/09_Desafio_Gigantes.py"),
     ("Importação", "pages/08_Importar_Bases.py"),
 ]
 

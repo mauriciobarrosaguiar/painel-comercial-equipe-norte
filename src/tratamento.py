@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from datetime import date
 from decimal import Decimal, InvalidOperation
 import math
 import re
@@ -8,6 +7,8 @@ import unicodedata
 
 import numpy as np
 import pandas as pd
+
+from src.datas import hoje_brasilia
 
 
 TIPOS_MIX_VALIDOS = ["PRIORITARIO", "LANCAMENTO", "LINHA", "COMBATE"]
@@ -379,7 +380,7 @@ def preparar_acoes(df: pd.DataFrame) -> pd.DataFrame:
     sem_inicio = base["data_inicio"].isna() & base["data_fim"].notna()
     base.loc[sem_inicio, "data_inicio"] = base.loc[sem_inicio, "data_fim"].dt.to_period("M").dt.start_time
 
-    hoje = pd.Timestamp(date.today())
+    hoje = pd.Timestamp(hoje_brasilia())
     sem_status = base["status"].eq("")
     base.loc[sem_status & base["data_fim"].notna() & (base["data_fim"] >= hoje), "status"] = "ATIVA"
     base.loc[sem_status & base["data_fim"].notna() & (base["data_fim"] < hoje), "status"] = "ENCERRADA"

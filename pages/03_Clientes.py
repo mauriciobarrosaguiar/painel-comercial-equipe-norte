@@ -26,10 +26,10 @@ def contato_card(cliente) -> None:
             <div class="mini-grid">
                 <div class="mini-metric"><div class="mini-label">OL</div><div class="mini-value">{formatar_moeda(cliente.get('ol_sem_combate', 0))}</div></div>
                 <div class="mini-metric"><div class="mini-label">OL Prio</div><div class="mini-value">{formatar_moeda(cliente.get('ol_prioritarios', 0))}</div></div>
-                <div class="mini-metric"><div class="mini-label">OL Lanç</div><div class="mini-value">{formatar_moeda(cliente.get('ol_lancamentos', 0))}</div></div>
+                <div class="mini-metric"><div class="mini-label">OL Lanç.</div><div class="mini-value">{formatar_moeda(cliente.get('ol_lancamentos', 0))}</div></div>
                 <div class="mini-metric"><div class="mini-label">% Prio</div><div class="mini-value">{formatar_percentual(cliente.get('percentual_prioritarios', 0))}</div></div>
-                <div class="mini-metric"><div class="mini-label">% Lanc</div><div class="mini-value">{formatar_percentual(cliente.get('percentual_lancamentos', 0))}</div></div>
-                <div class="mini-metric"><div class="mini-label">Ult. compra</div><div class="mini-value">{formatar_data(cliente.get('ultima_compra'))}</div></div>
+                <div class="mini-metric"><div class="mini-label">% Lanç.</div><div class="mini-value">{formatar_percentual(cliente.get('percentual_lancamentos', 0))}</div></div>
+                <div class="mini-metric"><div class="mini-label">Últ. compra</div><div class="mini-value">{formatar_data(cliente.get('ultima_compra'))}</div></div>
             </div>
             <div class="contact-line"><b>Proprietário/Diretor:</b> {cliente.get('proprietario_diretor', '') or '-'}</div>
             <div class="contact-line"><b>Comprador:</b> {cliente.get('comprador_gerente_de_compras', '') or '-'}</div>

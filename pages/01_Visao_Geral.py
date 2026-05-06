@@ -1,14 +1,13 @@
 from __future__ import annotations
 
-from datetime import datetime
-
 import streamlit as st
 
 from src.calculos import calcular_indicadores, calcular_resumo_operacional
 from src.configuracoes import carregar_metas
 from src.filtros import aplicar_filtros_globais, filtrar_vendas_operacionais
 from src.layout import mostrar_status_periodo, titulo_pagina
-from src.loader import ARQUIVOS_PADRAO, carregar_dados_tratados
+from src.loader import carregar_dados_tratados
+from src.persistencia import formatar_ultima_atualizacao
 from src.tratamento import formatar_moeda, formatar_percentual
 
 
@@ -60,23 +59,18 @@ st.markdown(f"<div class='periodo-compacto'>Período: <b>{periodo}</b></div>", u
 with st.expander("Últimas atualizações", expanded=False):
     cols = st.columns(3)
     fontes = [
-        ("Bússola", ARQUIVOS_PADRAO["bussola"]),
-        ("Painel clientes", ARQUIVOS_PADRAO["painel"]),
-        ("Produtos / mix", ARQUIVOS_PADRAO["produtos_mix"]),
+        ("Bússola", "bussola"),
+        ("Painel clientes", "painel"),
+        ("Produtos / mix", "produtos_mix"),
     ]
-    for idx, (nome, caminho) in enumerate(fontes):
+    for idx, (nome, chave) in enumerate(fontes):
         with cols[idx]:
-            if caminho.exists():
-                atualizado = datetime.fromtimestamp(caminho.stat().st_mtime).strftime("%d/%m/%Y %H:%M:%S")
-                st.markdown(
-                    f"<div class='small-update'><div class='small-update-title'>{nome}</div><div class='small-update-value'>{atualizado}</div><div class='metric-note'>ok</div></div>",
-                    unsafe_allow_html=True,
-                )
-            else:
-                st.markdown(
-                    f"<div class='small-update'><div class='small-update-title'>{nome}</div><div class='small-update-value'>-</div><div class='metric-note'>arquivo não encontrado</div></div>",
-                    unsafe_allow_html=True,
-                )
+            atualizado = formatar_ultima_atualizacao(chave)
+            nota = "ok" if atualizado != "-" else "arquivo não encontrado"
+            st.markdown(
+                f"<div class='small-update'><div class='small-update-title'>{nome}</div><div class='small-update-value'>{atualizado}</div><div class='metric-note'>{nota}</div></div>",
+                unsafe_allow_html=True,
+            )
 
 st.markdown(f"### {nome_gd(clientes_f)}")
 c1, c2, c3, c4 = st.columns(4)

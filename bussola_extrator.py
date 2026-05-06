@@ -2,7 +2,7 @@ import argparse
 import os
 import shutil
 import time
-from datetime import datetime, timedelta
+from datetime import timedelta
 from pathlib import Path
 from typing import Optional
 from urllib.parse import quote
@@ -16,6 +16,8 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 from webdriver_manager.chrome import ChromeDriverManager
+
+from src.datas import hoje_brasilia
 
 
 BUSSOLA_URL = "https://bussolaweb.bussola.mercadofarma.com.br/login"
@@ -151,7 +153,7 @@ def entrar_bussola(driver, usuario: str, senha: str):
 
 
 def periodo_90_dias():
-    hoje = datetime.now().date()
+    hoje = hoje_brasilia()
     inicio = hoje - timedelta(days=89)
     return inicio.strftime("%d/%m/%Y"), hoje.strftime("%d/%m/%Y")
 

@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-from datetime import date
-
 import pandas as pd
 import streamlit as st
 
 from src.acoes import analisar_acoes_promocionais
 from src.calculos import formatar_tabela_metricas
+from src.datas import hoje_brasilia
 from src.filtros import aplicar_filtros_globais, filtrar_busca
 from src.layout import dataframe_com_download, titulo_pagina
 from src.loader import carregar_dados_tratados
@@ -23,7 +22,7 @@ titulo_pagina("Ações Promocionais")
 vendas_f, clientes_f, _ = aplicar_filtros_globais(vendas, clientes, chave="acoes", mostrar_tipo_mix=False)
 
 c1, c2 = st.columns([1, 2])
-mes_ref = c1.date_input("Mês de referência", value=date.today().replace(day=1))
+mes_ref = c1.date_input("Mês de referência", value=hoje_brasilia().replace(day=1), format="DD/MM/YYYY")
 busca = c2.text_input("Buscar campanha, produto, EAN ou consultor")
 inicio_mes = pd.Timestamp(mes_ref).replace(day=1)
 fim_mes = inicio_mes + pd.offsets.MonthEnd(0)

@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-from datetime import date
-
 import pandas as pd
 import streamlit as st
 
 from src.calculos import formatar_tabela_metricas, gerar_resultado_cliente
+from src.datas import hoje_brasilia
 from src.filtros import aplicar_filtros_globais
 from src.layout import botao_download_excel, card_metrica, dataframe_com_download, titulo_pagina
 from src.loader import carregar_dados_tratados
@@ -211,12 +210,13 @@ else:
     data_min = datas.min()
     data_max = datas.max()
     if pd.isna(data_min) or pd.isna(data_max):
-        data_min = pd.Timestamp(date.today().replace(day=1))
-        data_max = pd.Timestamp(date.today())
+        hoje = hoje_brasilia()
+        data_min = pd.Timestamp(hoje.replace(day=1))
+        data_max = pd.Timestamp(hoje)
 
     p1, p2, p3 = st.columns(3)
-    data_inicial = p1.date_input("Data inicial", value=filtros["inicio"].date(), key="sip_data_inicial")
-    data_final = p2.date_input("Data final", value=filtros["fim"].date(), key="sip_data_final")
+    data_inicial = p1.date_input("Data inicial", value=filtros["inicio"].date(), format="DD/MM/YYYY", key="sip_data_inicial")
+    data_final = p2.date_input("Data final", value=filtros["fim"].date(), format="DD/MM/YYYY", key="sip_data_final")
     status_sel = p3.selectbox("Status do pedido", ["Todos", "Faturados", "Sem nota", "Cancelados"], key="sip_status_pedido")
 
     vendas_sip = vendas_sip_total[

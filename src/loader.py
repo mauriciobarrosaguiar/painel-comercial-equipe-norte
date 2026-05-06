@@ -61,7 +61,7 @@ def fonte_ativa(chave: str) -> str:
     if upload:
         return f"Upload salvo: {upload.get('name', '')}"
     if existe_persistido(chave):
-        return "Base salva na persistência"
+        return "Base salva"
     caminho = ARQUIVOS_PADRAO[chave]
     return f"Pasta data: {caminho.name}" if caminho.exists() else "Arquivo não encontrado"
 

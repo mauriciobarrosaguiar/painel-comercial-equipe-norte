@@ -12,8 +12,8 @@ from src.configuracoes import (
     salvar_metas,
 )
 from src.layout import botao_download_excel, titulo_pagina
-from src.loader import carregar_dados_tratados, limpar_uploads, modelo_acoes, modelo_produtos_mix, registrar_upload
-from src.persistencia import gerar_chave_persistencia, status_persistencia
+from src.loader import carregar_dados_tratados, fonte_ativa, limpar_uploads, modelo_acoes, modelo_produtos_mix, registrar_upload
+from src.persistencia import formatar_ultima_atualizacao
 
 
 def credenciais_dataframe(consultores: list[str], login_salvo: dict) -> pd.DataFrame:
@@ -56,27 +56,6 @@ nomes_gd = clientes["nome_gd"].dropna().astype(str).str.strip() if not clientes.
 nome_gd = nomes_gd[nomes_gd.ne("")].iloc[0] if not nomes_gd[nomes_gd.ne("")].empty else "Gerente Distrital"
 
 titulo_pagina("Importação")
-
-status = status_persistencia()
-st.markdown(
-    f"<span class='pill-note'>Persistência: {status['modo']}</span>"
-    f"<span class='pill-note'>{status['detalhe']}</span>",
-    unsafe_allow_html=True,
-)
-if status["ok"] != "sim":
-    with st.expander("Como não perder uploads, metas e senhas no Streamlit Cloud", expanded=False):
-        st.markdown(
-            "No Streamlit Cloud, arquivos enviados só ficam permanentes quando os Secrets abaixo são configurados. "
-            "Depois disso, o painel salva bases, metas, SIPs e acessos do Bússola em arquivos criptografados no GitHub."
-        )
-        st.code(
-            f'GITHUB_TOKEN = "cole_aqui_um_token_do_github_com_permissao_contents_write"\n'
-            f'GITHUB_REPO = "mauriciobarrosaguiar/painel-comercial-equipe-norte"\n'
-            f'GITHUB_STORAGE_BRANCH = "app-storage"\n'
-            f'GITHUB_STORE_DIR = ".app_storage"\n'
-            f'PERSISTENCE_KEY = "{gerar_chave_persistencia()}"',
-            language="toml",
-        )
 
 tab_bussola, tab_metas, tab_arquivos = st.tabs(["Bússola Web", "Metas", "Arquivos"])
 
@@ -215,6 +194,27 @@ with tab_metas:
         st.rerun()
 
 with tab_arquivos:
+    st.subheader("Bases salvas")
+    bases = [
+        ("Bússola", "bussola"),
+        ("Painel clientes", "painel"),
+        ("Ações promocionais", "acoes"),
+        ("Produtos / mix", "produtos_mix"),
+    ]
+    cols = st.columns(2)
+    for idx, (nome, chave) in enumerate(bases):
+        with cols[idx % 2]:
+            st.markdown(
+                f"""
+                <div class="small-update">
+                    <div class="small-update-title">{nome}</div>
+                    <div class="small-update-value">{formatar_ultima_atualizacao(chave)}</div>
+                    <div class="metric-note">{fonte_ativa(chave)}</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
     st.subheader("Uploads manuais")
     up_bussola = st.file_uploader("bussola.xlsx", type=["xlsx"], key="file_bussola")
     up_painel = st.file_uploader("Base de clientes / painel distrital", type=["xlsx"], key="file_painel")
