@@ -7,7 +7,7 @@ from src.configuracoes import carregar_metas
 from src.filtros import aplicar_filtros_globais, filtrar_vendas_operacionais
 from src.layout import mostrar_status_periodo, titulo_pagina
 from src.loader import carregar_dados_tratados
-from src.persistencia import formatar_ultima_atualizacao
+from src.status_bases import formatar_ultima_atualizacao
 from src.tratamento import formatar_moeda, formatar_percentual
 
 

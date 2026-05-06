@@ -13,7 +13,7 @@ from src.configuracoes import (
 )
 from src.layout import botao_download_excel, titulo_pagina
 from src.loader import carregar_dados_tratados, fonte_ativa, limpar_uploads, modelo_acoes, modelo_produtos_mix, registrar_upload
-from src.persistencia import formatar_ultima_atualizacao
+from src.status_bases import formatar_ultima_atualizacao
 
 
 def credenciais_dataframe(consultores: list[str], login_salvo: dict) -> pd.DataFrame:
