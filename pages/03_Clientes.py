@@ -26,12 +26,12 @@ def contato_card(cliente) -> None:
             <div class="mini-grid">
                 <div class="mini-metric"><div class="mini-label">OL</div><div class="mini-value">{formatar_moeda(cliente.get('ol_sem_combate', 0))}</div></div>
                 <div class="mini-metric"><div class="mini-label">OL Prio</div><div class="mini-value">{formatar_moeda(cliente.get('ol_prioritarios', 0))}</div></div>
-                <div class="mini-metric"><div class="mini-label">OL Lanc</div><div class="mini-value">{formatar_moeda(cliente.get('ol_lancamentos', 0))}</div></div>
+                <div class="mini-metric"><div class="mini-label">OL Lanç</div><div class="mini-value">{formatar_moeda(cliente.get('ol_lancamentos', 0))}</div></div>
                 <div class="mini-metric"><div class="mini-label">% Prio</div><div class="mini-value">{formatar_percentual(cliente.get('percentual_prioritarios', 0))}</div></div>
                 <div class="mini-metric"><div class="mini-label">% Lanc</div><div class="mini-value">{formatar_percentual(cliente.get('percentual_lancamentos', 0))}</div></div>
                 <div class="mini-metric"><div class="mini-label">Ult. compra</div><div class="mini-value">{formatar_data(cliente.get('ultima_compra'))}</div></div>
             </div>
-            <div class="contact-line"><b>Proprietario/Diretor:</b> {cliente.get('proprietario_diretor', '') or '-'}</div>
+            <div class="contact-line"><b>Proprietário/Diretor:</b> {cliente.get('proprietario_diretor', '') or '-'}</div>
             <div class="contact-line"><b>Comprador:</b> {cliente.get('comprador_gerente_de_compras', '') or '-'}</div>
             <div class="contact-line"><b>Cargo:</b> {cliente.get('cargo', '') or '-'}</div>
             <div class="contact-line"><b>Celular:</b> {cliente.get('celular', '') or '-'}</div>
@@ -73,26 +73,26 @@ def base_exportacao_clientes(filtrado):
             "cidade": "Cidade",
             "uf": "UF",
             "grupo_sip": "Rede",
-            "situacao": "Situacao",
+            "situacao": "Situação",
             "proprietario_diretor": "PROPRIETARIO/DIRETOR",
             "comprador_gerente_de_compras": "COMPRADOR/GERENTE DE COMPRAS",
             "cargo": "CARGO",
             "celular": "CELULAR",
             "email": "EMAIL",
             "ol_sem_combate": "OL Sem Combate",
-            "ol_prioritarios": "OL Prioritarios",
-            "percentual_prioritarios": "% Prioritarios",
-            "ol_lancamentos": "OL Lancamentos",
-            "percentual_lancamentos": "% Lancamentos",
-            "ultima_compra": "Ultima compra",
+            "ol_prioritarios": "OL Prioritários",
+            "percentual_prioritarios": "% Prioritários",
+            "ol_lancamentos": "OL Lançamentos",
+            "percentual_lancamentos": "% Lançamentos",
+            "ultima_compra": "Última compra",
             "status_comercial": "Status comercial",
         }
     )
-    for col in ["OL Sem Combate", "OL Prioritarios", "OL Lancamentos"]:
+    for col in ["OL Sem Combate", "OL Prioritários", "OL Lançamentos"]:
         base[col] = base[col].apply(formatar_moeda)
-    for col in ["% Prioritarios", "% Lancamentos"]:
+    for col in ["% Prioritários", "% Lançamentos"]:
         base[col] = base[col].apply(formatar_percentual)
-    base["Ultima compra"] = base["Ultima compra"].apply(formatar_data)
+    base["Última compra"] = base["Última compra"].apply(formatar_data)
     return base
 
 
@@ -121,7 +121,7 @@ if rede_sel != "Todas":
     filtrado = filtrado[filtrado["grupo_sip"].eq(rede_sel)]
 
 st.markdown(
-    f"<span class='pill-note'>Clientes visiveis: {len(filtrado)}</span>"
+    f"<span class='pill-note'>Clientes visíveis: {len(filtrado)}</span>"
     f"<span class='pill-note'>Com venda: {int((filtrado['ol_sem_combate'] > 0).sum()) if not filtrado.empty else 0}</span>"
     f"<span class='pill-note'>Sem venda: {int((filtrado['ol_sem_combate'] <= 0).sum()) if not filtrado.empty else 0}</span>",
     unsafe_allow_html=True,
@@ -143,10 +143,10 @@ else:
         st.session_state[chave_pagina] -= 1
         st.rerun()
     nav2.markdown(
-        f"<div class='pill-note'>Pagina {st.session_state[chave_pagina]} de {total_paginas}</div>",
+        f"<div class='pill-note'>Página {st.session_state[chave_pagina]} de {total_paginas}</div>",
         unsafe_allow_html=True,
     )
-    if nav3.button("Proxima", width="stretch", disabled=st.session_state[chave_pagina] >= total_paginas):
+    if nav3.button("Próxima", width="stretch", disabled=st.session_state[chave_pagina] >= total_paginas):
         st.session_state[chave_pagina] += 1
         st.rerun()
 
@@ -186,11 +186,11 @@ with st.expander("Resultado completo por cliente", expanded=False):
             "uf": "UF",
             "grupo_sip": "Rede",
             "ol_sem_combate": "OL Sem Combate",
-            "ol_prioritarios": "OL Prioritarios",
-            "percentual_prioritarios": "% Prioritarios",
-            "ol_lancamentos": "OL Lancamentos",
-            "percentual_lancamentos": "% Lancamentos",
-            "ultima_compra": "Ultima compra",
+            "ol_prioritarios": "OL Prioritários",
+            "percentual_prioritarios": "% Prioritários",
+            "ol_lancamentos": "OL Lançamentos",
+            "percentual_lancamentos": "% Lançamentos",
+            "ultima_compra": "Última compra",
             "status_comercial": "Status comercial",
         }
     )

@@ -56,8 +56,8 @@ def card_consultor(item, metas: dict, vendas_operacionais, clientes_filtrados) -
             <div class="consultor-name">{nome}</div>
             <div class="indicator-grid">
                 {bloco("OL sem combate", item['ol_sem_combate'], meta_ol)}
-                {bloco("OL prioritarios", item['ol_prioritarios'], meta_prio)}
-                {bloco("OL lancamentos", item['ol_lancamentos'], meta_lanc)}
+                {bloco("OL prioritários", item['ol_prioritarios'], meta_prio)}
+                {bloco("OL lançamentos", item['ol_lancamentos'], meta_lanc)}
                 {bloco("Clientes com venda", item['clientes_com_compra'], meta_cli, moeda=False)}
             </div>
             {status_periodo_html(resumo, titulo=True)}
@@ -116,11 +116,11 @@ with st.expander("Carteira por consultor", expanded=False):
             "cidade": "Cidade",
             "uf": "UF",
             "grupo_sip": "Rede",
-            "situacao": "Situacao",
+            "situacao": "Situação",
             "ol_sem_combate": "OL Sem Combate",
-            "ol_prioritarios": "OL Prioritarios",
-            "ol_lancamentos": "OL Lancamentos",
-            "ultima_compra": "Ultima compra",
+            "ol_prioritarios": "OL Prioritários",
+            "ol_lancamentos": "OL Lançamentos",
+            "ultima_compra": "Última compra",
             "status_comercial": "Status comercial",
         }
     )

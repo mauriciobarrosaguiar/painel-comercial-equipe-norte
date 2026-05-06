@@ -37,8 +37,17 @@ def aplicar_css() -> None:
             color: var(--norte-text);
         }
         .block-container {
-            padding-top: 1.7rem;
+            padding-top: 2.4rem;
             max-width: 1280px;
+        }
+        header[data-testid="stHeader"],
+        [data-testid="stToolbar"],
+        [data-testid="stDecoration"],
+        #MainMenu,
+        footer {
+            display: none !important;
+            visibility: hidden !important;
+            height: 0 !important;
         }
         [data-testid="stSidebar"] {
             background: #062F22;
@@ -354,14 +363,14 @@ def card_metrica(rotulo: str, valor: str, nota: str = "") -> None:
 def cards_indicadores(indicadores: dict[str, object]) -> None:
     itens = [
         ("OL Sem Combate", formatar_moeda(indicadores.get("ol_sem_combate", 0))),
-        ("OL Prioritarios", formatar_moeda(indicadores.get("ol_prioritarios", 0))),
-        ("% Prioritarios", formatar_percentual(indicadores.get("percentual_prioritarios", 0))),
-        ("OL Lancamentos", formatar_moeda(indicadores.get("ol_lancamentos", 0))),
-        ("% Lancamentos", formatar_percentual(indicadores.get("percentual_lancamentos", 0))),
+        ("OL Prioritários", formatar_moeda(indicadores.get("ol_prioritarios", 0))),
+        ("% Prioritários", formatar_percentual(indicadores.get("percentual_prioritarios", 0))),
+        ("OL Lançamentos", formatar_moeda(indicadores.get("ol_lancamentos", 0))),
+        ("% Lançamentos", formatar_percentual(indicadores.get("percentual_lancamentos", 0))),
         ("Clientes positivados", f"{int(indicadores.get('clientes_positivados', 0)):,}".replace(",", ".")),
         ("Clientes sem compra", f"{int(indicadores.get('clientes_sem_compra', 0)):,}".replace(",", ".")),
         ("Pedidos", f"{int(indicadores.get('quantidade_pedidos', 0)):,}".replace(",", ".")),
-        ("Ticket medio", formatar_moeda(indicadores.get("ticket_medio", 0))),
+        ("Ticket médio", formatar_moeda(indicadores.get("ticket_medio", 0))),
     ]
     colunas = st.columns(3)
     for idx, (rotulo, valor) in enumerate(itens):
@@ -370,7 +379,7 @@ def cards_indicadores(indicadores: dict[str, object]) -> None:
 
 
 def status_periodo_html(resumo: dict[str, object], titulo: bool = True) -> str:
-    titulo_html = '<div class="status-title">Pedidos e notas do periodo</div>' if titulo else ""
+    titulo_html = '<div class="status-title">Pedidos e notas do período</div>' if titulo else ""
 
     def card(rotulo: str, valor: str, nota: str) -> str:
         return (
@@ -383,8 +392,8 @@ def status_periodo_html(resumo: dict[str, object], titulo: bool = True) -> str:
 
     return (
         '<div class="status-grid">'
-        + card("Combate", formatar_moeda(resumo.get("valor_combate", 0)), "Valor de combate no periodo")
-        + card("Faturado do periodo", formatar_moeda(resumo.get("faturado_periodo", 0)), "Base refletida pelas ultimas cargas")
+        + card("Combate", formatar_moeda(resumo.get("valor_combate", 0)), "Valor de combate no período")
+        + card("Faturado do período", formatar_moeda(resumo.get("faturado_periodo", 0)), "Base refletida pelas últimas cargas")
         + card(
             "Sem venda",
             str(int(resumo.get("clientes_sem_venda", 0) or 0)),

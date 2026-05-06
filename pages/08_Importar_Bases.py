@@ -13,6 +13,7 @@ from src.configuracoes import (
 )
 from src.layout import botao_download_excel, titulo_pagina
 from src.loader import carregar_dados_tratados, limpar_uploads, modelo_acoes, modelo_produtos_mix, registrar_upload
+from src.persistencia import gerar_chave_persistencia, status_persistencia
 
 
 def credenciais_dataframe(consultores: list[str], login_salvo: dict) -> pd.DataFrame:
@@ -51,15 +52,48 @@ def metas_dataframe(consultores: list[str], metas: dict) -> pd.DataFrame:
 dados = carregar_dados_tratados()
 clientes = dados["clientes"]
 consultores = consultores_unicos(clientes)
+nomes_gd = clientes["nome_gd"].dropna().astype(str).str.strip() if not clientes.empty and "nome_gd" in clientes.columns else pd.Series(dtype=str)
+nome_gd = nomes_gd[nomes_gd.ne("")].iloc[0] if not nomes_gd[nomes_gd.ne("")].empty else "Gerente Distrital"
 
-titulo_pagina("Importacao")
+titulo_pagina("Importação")
 
-tab_bussola, tab_metas, tab_arquivos = st.tabs(["Bussola Web", "Metas", "Arquivos"])
+status = status_persistencia()
+st.markdown(
+    f"<span class='pill-note'>Persistência: {status['modo']}</span>"
+    f"<span class='pill-note'>{status['detalhe']}</span>",
+    unsafe_allow_html=True,
+)
+if status["ok"] != "sim":
+    with st.expander("Como não perder uploads, metas e senhas no Streamlit Cloud", expanded=False):
+        st.markdown(
+            "No Streamlit Cloud, arquivos enviados só ficam permanentes quando os Secrets abaixo são configurados. "
+            "Depois disso, o painel salva bases, metas, SIPs e acessos do Bússola em arquivos criptografados no GitHub."
+        )
+        st.code(
+            f'GITHUB_TOKEN = "cole_aqui_um_token_do_github_com_permissao_contents_write"\n'
+            f'GITHUB_REPO = "mauriciobarrosaguiar/painel-comercial-equipe-norte"\n'
+            f'GITHUB_BRANCH = "main"\n'
+            f'PERSISTENCE_KEY = "{gerar_chave_persistencia()}"',
+            language="toml",
+        )
+
+tab_bussola, tab_metas, tab_arquivos = st.tabs(["Bússola Web", "Metas", "Arquivos"])
 
 with tab_bussola:
-    st.subheader("Acesso ao Bussola Web por consultor")
+    st.subheader("Acesso ao Bússola Web")
     login = carregar_login_bussola()
     headless = st.toggle("Rodar navegador oculto", value=bool(login.get("headless", False)))
+
+    st.markdown(f"<div class='consultor-name'>GD - {nome_gd}</div>", unsafe_allow_html=True)
+    gd_salvo = login.get("gd", {})
+    gd1, gd2, gd3 = st.columns([1.4, 1.4, 0.8])
+    gd_usuario = gd1.text_input("Login / e-mail da GD", value=gd_salvo.get("usuario", ""), key="bussola_gd_usuario")
+    gd_senha = gd2.text_input("Senha da GD", value=gd_salvo.get("senha", ""), type="password", key="bussola_gd_senha")
+    usar_gd = gd3.checkbox("Usar GD", value=bool(gd_salvo.get("usar_gd", True)), key="bussola_gd_usar")
+    st.caption("Se o acesso da GD estiver preenchido e marcado, a extração roda somente pela GD, pois ela já baixa a base de todos os vendedores.")
+    st.divider()
+
+    st.subheader("Acesso dos consultores")
     credenciais_editadas = {}
     salvos = login.get("consultores", {})
     for idx, consultor in enumerate(consultores):
@@ -72,19 +106,25 @@ with tab_bussola:
         credenciais_editadas[consultor] = {"usuario": usuario.strip(), "senha": senha.strip(), "extrair": extrair}
         st.divider()
 
+    gd_editada = {"usuario": gd_usuario.strip(), "senha": gd_senha.strip(), "usar_gd": usar_gd}
     col1, col2 = st.columns(2)
     if col1.button("Salvar acessos", width="stretch"):
-        salvar_login_bussola(credenciais_editadas, headless)
-        st.success("Acessos salvos para os proximos usos neste computador.")
+        salvar_login_bussola(credenciais_editadas, headless, gd=gd_editada)
+        st.success("Acessos salvos para os próximos usos.")
 
-    if col2.button("Extrair Bussola de todos", width="stretch"):
-        solicitados = []
-        for consultor, item in credenciais_editadas.items():
-            if item["extrair"]:
-                solicitados.append({"consultor": consultor, "usuario": item["usuario"], "senha": item["senha"]})
-        salvar_login_bussola(credenciais_editadas, headless)
+    if col2.button("Extrair Bússola agora", width="stretch"):
+        salvar_login_bussola(credenciais_editadas, headless, gd=gd_editada)
 
-        incompletos = [c["consultor"] for c in solicitados if not c["usuario"] or not c["senha"]]
+        if usar_gd and gd_usuario.strip() and gd_senha.strip():
+            solicitados = [{"consultor": f"GD - {nome_gd}", "usuario": gd_usuario.strip(), "senha": gd_senha.strip()}]
+            incompletos = []
+        else:
+            solicitados = []
+            for consultor, item in credenciais_editadas.items():
+                if item["extrair"]:
+                    solicitados.append({"consultor": consultor, "usuario": item["usuario"], "senha": item["senha"]})
+            incompletos = [c["consultor"] for c in solicitados if not c["usuario"] or not c["senha"]]
+
         credenciais = [c for c in solicitados if c["usuario"] and c["senha"]]
         if not solicitados:
             st.warning("Marque pelo menos um consultor para extrair.")
@@ -92,7 +132,7 @@ with tab_bussola:
             st.error("Nenhum consultor marcado tem login e senha preenchidos.")
         else:
             if incompletos:
-                st.warning("Sem login/senha, estes consultores foram ignorados nesta execucao: " + ", ".join(incompletos))
+                st.warning("Sem login/senha, estes consultores foram ignorados nesta execução: " + ", ".join(incompletos))
             logs: list[str] = []
             area_logs = st.empty()
             progresso = st.progress(0)
@@ -110,7 +150,7 @@ with tab_bussola:
                 st.success(f"Base consolidada atualizada: {destino}")
                 st.cache_data.clear()
             except Exception as exc:
-                st.error(f"Extracao interrompida: {exc}")
+                st.error(f"Extração interrompida: {exc}")
 
 with tab_metas:
     st.subheader("Metas do gerente territorial")
@@ -118,8 +158,8 @@ with tab_metas:
     gerente = metas.get("gerente_territorial", {})
     g1, g2, g3, g4 = st.columns(4)
     meta_ol = g1.number_input("OL sem combate", min_value=0.0, step=1000.0, value=float(gerente.get("ol_sem_combate", 0) or 0))
-    meta_prio = g2.number_input("OL prioritarios", min_value=0.0, step=1000.0, value=float(gerente.get("ol_prioritarios", 0) or 0))
-    meta_lanc = g3.number_input("OL lancamentos", min_value=0.0, step=1000.0, value=float(gerente.get("ol_lancamentos", 0) or 0))
+    meta_prio = g2.number_input("OL prioritários", min_value=0.0, step=1000.0, value=float(gerente.get("ol_prioritarios", 0) or 0))
+    meta_lanc = g3.number_input("OL lançamentos", min_value=0.0, step=1000.0, value=float(gerente.get("ol_lancamentos", 0) or 0))
     meta_cli = g4.number_input("Clientes com venda", min_value=0.0, step=1.0, value=float(gerente.get("clientes_positivados", 0) or 0))
 
     st.subheader("Metas dos consultores")
@@ -138,14 +178,14 @@ with tab_metas:
                 key=f"meta_ol_{idx}",
             ),
             "ol_prioritarios": c2.number_input(
-                "OL prioritarios",
+                "OL prioritários",
                 min_value=0.0,
                 step=1000.0,
                 value=float(atual.get("ol_prioritarios", 0) or 0),
                 key=f"meta_prio_{idx}",
             ),
             "ol_lancamentos": c3.number_input(
-                "OL lancamentos",
+                "OL lançamentos",
                 min_value=0.0,
                 step=1000.0,
                 value=float(atual.get("ol_lancamentos", 0) or 0),
@@ -176,17 +216,17 @@ with tab_metas:
 with tab_arquivos:
     st.subheader("Uploads manuais")
     up_bussola = st.file_uploader("bussola.xlsx", type=["xlsx"], key="file_bussola")
-    up_painel = st.file_uploader("PAINEL EQUIPE NORTE.xlsx", type=["xlsx"], key="file_painel")
+    up_painel = st.file_uploader("Base de clientes / painel distrital", type=["xlsx"], key="file_painel")
     up_acoes = st.file_uploader("template_acoes_promocionais.xlsx", type=["xlsx"], key="file_acoes")
     up_mix = st.file_uploader("template_produtos_mix.xlsx", type=["xlsx"], key="file_mix")
 
     c1, c2 = st.columns(2)
-    if c1.button("Usar uploads nesta sessao", width="stretch"):
+    if c1.button("Usar e salvar uploads", width="stretch"):
         registrar_upload("bussola", up_bussola)
         registrar_upload("painel", up_painel)
         registrar_upload("acoes", up_acoes)
         registrar_upload("produtos_mix", up_mix)
-        st.success("Uploads aplicados para esta sessao.")
+        st.success("Uploads aplicados e salvos.")
         st.rerun()
     if c2.button("Voltar para pasta data", width="stretch"):
         limpar_uploads()
@@ -196,6 +236,6 @@ with tab_arquivos:
     st.subheader("Modelos")
     m1, m2 = st.columns(2)
     with m1:
-        botao_download_excel(modelo_acoes(), "template_acoes_promocionais.xlsx", "Baixar modelo de acoes")
+        botao_download_excel(modelo_acoes(), "template_acoes_promocionais.xlsx", "Baixar modelo de ações")
     with m2:
         botao_download_excel(modelo_produtos_mix(), "template_produtos_mix.xlsx", "Baixar modelo de produtos mix")

@@ -103,7 +103,7 @@ def aplicar_filtros_globais(
     max_calendario = max(pd.Timestamp(data_max), hoje)
 
     periodo = st.sidebar.date_input(
-        "Periodo",
+        "Período",
         value=(inicio_mes_atual.date(), hoje.date()),
         min_value=min_calendario.date(),
         max_value=max_calendario.date(),

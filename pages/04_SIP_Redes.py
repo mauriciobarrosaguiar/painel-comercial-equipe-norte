@@ -32,7 +32,7 @@ def categoria_pedido(linha: pd.Series) -> str:
     if status in STATUS_FATURADOS and nota:
         return "Faturado / nota gerada"
     if not nota:
-        return "Ainda nao gerou nota"
+        return "Ainda não gerou nota"
     return "Em andamento"
 
 
@@ -129,11 +129,11 @@ redes_disponiveis = sorted(opcoes_clientes["rede"].dropna().astype(str).unique()
 
 c1, c2, c3 = st.columns([1.8, 1.0, 1.0])
 nome = c1.text_input("Nome do SIP (opcional)", value=editando["nome"] if editando else "")
-meta_mes = c2.number_input("Meta do mes", min_value=0.0, step=100.0, value=float(editando["meta_mes"]) if editando else 0.0)
+meta_mes = c2.number_input("Meta do mês", min_value=0.0, step=100.0, value=float(editando["meta_mes"]) if editando else 0.0)
 pagamento = c3.number_input("Pagamento a partir de (%)", min_value=0.0, max_value=100.0, step=1.0, value=float(editando["pagamento_percentual"]) if editando else 80.0)
 
 redes_default = [rede for rede in (editando["redes"] if editando else []) if rede in redes_disponiveis]
-redes_sel = st.multiselect("Rede / grupo economico", redes_disponiveis, default=redes_default)
+redes_sel = st.multiselect("Rede / grupo econômico", redes_disponiveis, default=redes_default)
 
 clientes_opcoes = opcoes_clientes.copy()
 if redes_sel:
@@ -161,7 +161,7 @@ if s1.button("Salvar SIP", width="stretch", disabled=not nome_final or not cnpjs
         pagamento_percentual=pagamento,
         sip_id=editando["id"] if editando else None,
     )
-    st.success("SIP salvo.")
+    st.success("SIP salva.")
     st.rerun()
 
 if editando:
@@ -176,7 +176,7 @@ if not grupos:
     st.info("Cadastre uma SIP para analisar pedidos, notas e CNPJs.")
 else:
     nomes_analise = [grupo["nome"] for grupo in grupos]
-    grupo_nome = st.selectbox("Grupo para analise", nomes_analise, key="sip_grupo_analise")
+    grupo_nome = st.selectbox("Grupo para análise", nomes_analise, key="sip_grupo_analise")
     grupo = next(grupo for grupo in grupos if grupo["nome"] == grupo_nome)
     membros_sip = clientes_resultado[clientes_resultado["cnpj_limpo"].astype(str).isin(grupo["cnpjs"])].copy()
     ol = float(membros_sip["ol_sem_combate"].sum()) if not membros_sip.empty else 0
@@ -194,9 +194,9 @@ else:
         card_metrica("Faturado", formatar_moeda(ol))
     c4, c5, c6 = st.columns(3)
     with c4:
-        card_metrica("OL prioritarios", formatar_moeda(prio))
+        card_metrica("OL prioritários", formatar_moeda(prio))
     with c5:
-        card_metrica("OL lancamentos", formatar_moeda(lanc))
+        card_metrica("OL lançamentos", formatar_moeda(lanc))
     with c6:
         card_metrica("Falta regra", formatar_moeda(falta_regra(ol, meta, pagamento_minimo)))
     st.markdown(
@@ -227,12 +227,12 @@ else:
     if status_sel == "Faturados":
         pedidos = pedidos[pedidos["categoria"].eq("Faturado / nota gerada")].copy()
     elif status_sel == "Sem nota":
-        pedidos = pedidos[pedidos["categoria"].eq("Ainda nao gerou nota")].copy()
+        pedidos = pedidos[pedidos["categoria"].eq("Ainda não gerou nota")].copy()
     elif status_sel == "Cancelados":
         pedidos = pedidos[pedidos["categoria"].eq("Cancelado")].copy()
 
     faturados = pedidos[pedidos["categoria"].eq("Faturado / nota gerada")]
-    sem_nota = pedidos[pedidos["categoria"].eq("Ainda nao gerou nota")]
+    sem_nota = pedidos[pedidos["categoria"].eq("Ainda não gerou nota")]
     cancelados = pedidos[pedidos["categoria"].eq("Cancelado")]
     m1, m2, m3 = st.columns(3)
     with m1:
@@ -287,9 +287,9 @@ else:
             "cidade": "Cidade",
             "uf": "UF",
             "ol_sem_combate": "Faturado",
-            "ol_prioritarios": "Prioritarios",
-            "ol_lancamentos": "Lancamentos",
-            "ultima_compra": "Ultima compra",
+            "ol_prioritarios": "Prioritários",
+            "ol_lancamentos": "Lançamentos",
+            "ultima_compra": "Última compra",
             "status_comercial": "Status",
         }
     )

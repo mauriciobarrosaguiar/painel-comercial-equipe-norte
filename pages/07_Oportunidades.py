@@ -21,7 +21,7 @@ vendas_f, clientes_f, _ = aplicar_filtros_globais(vendas, clientes, chave="oport
 oportunidades = gerar_oportunidades(vendas_f, clientes_f, produtos_mix)
 
 c1, c2, c3 = st.columns([1, 1.2, 2])
-prioridades = c1.multiselect("Prioridade", ["Alta", "Media", "Baixa"], default=[])
+prioridades = c1.multiselect("Prioridade", ["Alta", "Média", "Baixa"], default=[])
 consultores = ["Todos"]
 if not oportunidades.empty and "consultor" in oportunidades.columns:
     consultores += sorted(oportunidades["consultor"].dropna().astype(str).unique().tolist())
@@ -35,7 +35,7 @@ oportunidades = filtrar_busca(oportunidades, busca, ["consultor", "cliente", "cn
 
 st.markdown(
     f"<span class='pill-note'>Alta: {int((oportunidades.get('prioridade', '') == 'Alta').sum()) if not oportunidades.empty else 0}</span>"
-    f"<span class='pill-note'>Media: {int((oportunidades.get('prioridade', '') == 'Media').sum()) if not oportunidades.empty else 0}</span>"
+    f"<span class='pill-note'>Média: {int((oportunidades.get('prioridade', '') == 'Média').sum()) if not oportunidades.empty else 0}</span>"
     f"<span class='pill-note'>Baixa: {int((oportunidades.get('prioridade', '') == 'Baixa').sum()) if not oportunidades.empty else 0}</span>",
     unsafe_allow_html=True,
 )
@@ -55,7 +55,7 @@ else:
                         <div class="contact-line"><b>CNPJ:</b> {item['cnpj']}</div>
                         <div class="contact-line"><b>Rede:</b> {item['grupo_sip']}</div>
                         <div class="contact-line"><b>Motivo:</b> {item['motivo_alerta']}</div>
-                        <div class="contact-line"><b>Acao:</b> {item['acao_sugerida']}</div>
+                        <div class="contact-line"><b>Ação:</b> {item['acao_sugerida']}</div>
                         <div class="pill-note">OL {formatar_moeda(item['ol_sem_combate'])}</div>
                     </div>
                     """,
@@ -85,13 +85,13 @@ renomear = {
     "cidade": "Cidade",
     "uf": "UF",
     "motivo_alerta": "Motivo",
-    "acao_sugerida": "Acao sugerida",
+    "acao_sugerida": "Ação sugerida",
     "ol_sem_combate": "OL Sem Combate",
-    "ol_prioritarios": "OL Prioritarios",
-    "ol_lancamentos": "OL Lancamentos",
+    "ol_prioritarios": "OL Prioritários",
+    "ol_lancamentos": "OL Lançamentos",
 }
 
-with st.expander("Tabela completa e exportacao", expanded=False):
+with st.expander("Tabela completa e exportação", expanded=False):
     tabela = formatar_tabela_metricas(oportunidades[colunas]).rename(columns=renomear) if not oportunidades.empty else oportunidades
     dataframe_com_download(tabela, "oportunidades", altura=440)
     botao_download_excel(oportunidades[colunas].rename(columns=renomear) if not oportunidades.empty else oportunidades, "oportunidades_comerciais.xlsx", "Baixar oportunidades em Excel")

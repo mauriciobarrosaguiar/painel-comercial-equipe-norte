@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from src.persistencia import carregar_json, existe_persistido, salvar_json
 from src.tratamento import normalizar_cnpj, slug_coluna
 
 
@@ -13,6 +14,9 @@ SIP_FILE = DATA_DIR / "sip_grupos.json"
 
 
 def carregar_sips() -> list[dict]:
+    if existe_persistido("sip"):
+        dados_persistidos = carregar_json("sip", [])
+        return dados_persistidos if isinstance(dados_persistidos, list) else []
     if not SIP_FILE.exists():
         return []
     try:
@@ -25,6 +29,7 @@ def carregar_sips() -> list[dict]:
 def salvar_sips(grupos: list[dict]) -> None:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     SIP_FILE.write_text(json.dumps(grupos, ensure_ascii=False, indent=2), encoding="utf-8")
+    salvar_json("sip", grupos, "Atualiza SIPs pelo painel")
 
 
 def normalizar_grupo_sip(grupo: dict) -> dict:

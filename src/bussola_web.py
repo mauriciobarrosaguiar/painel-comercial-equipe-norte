@@ -5,6 +5,7 @@ from pathlib import Path
 import pandas as pd
 
 from src.loader import DATA_DIR
+from src.persistencia import salvar_bytes
 from src.tratamento import slug_coluna
 
 
@@ -28,7 +29,8 @@ def extrair_bussola_web(usuario: str, senha: str, headless: bool = False, log_fn
         with pd.ExcelWriter(destino, engine="openpyxl") as writer:
             df.to_excel(writer, sheet_name="Pedidos", index=False)
     if not destino.exists():
-        raise FileNotFoundError("A extracao terminou, mas nao encontrei data/bussola.xlsx.")
+        raise FileNotFoundError("A extração terminou, mas não encontrei data/bussola.xlsx.")
+    salvar_bytes("bussola", destino.read_bytes(), "Atualiza Bússola pelo painel")
     return destino
 
 
@@ -48,7 +50,7 @@ def extrair_bussola_web_todos(credenciais: list[dict[str, str]], headless: bool 
         usuario = str(item.get("usuario", "")).strip()
         senha = str(item.get("senha", "")).strip()
         if not consultor or not usuario or not senha:
-            erros.append(f"{consultor or 'Consultor sem nome'}: login ou senha nao cadastrados.")
+            erros.append(f"{consultor or 'Consultor sem nome'}: login ou senha não cadastrados.")
             continue
 
         etapa = "inicio"
@@ -63,7 +65,7 @@ def extrair_bussola_web_todos(credenciais: list[dict[str, str]], headless: bool 
                 log_fn(f"{consultor}: {msg}")
 
         try:
-            log_local("iniciando extracao")
+            log_local("iniciando extração")
             executar(
                 usuario=usuario,
                 senha=senha,
@@ -79,7 +81,7 @@ def extrair_bussola_web_todos(credenciais: list[dict[str, str]], headless: bool 
             elif csv.exists():
                 df = pd.read_csv(csv, sep=";", dtype=str, encoding="utf-8-sig")
             else:
-                raise FileNotFoundError("arquivo Pedidos.xlsx/Pedidos_bussola.csv nao encontrado apos extracao")
+                raise FileNotFoundError("arquivo Pedidos.xlsx/Pedidos_bussola.csv não encontrado após extração")
             df["consultor_extracao"] = consultor
             df["login_extracao"] = usuario
             frames.append(df)
@@ -91,15 +93,16 @@ def extrair_bussola_web_todos(credenciais: list[dict[str, str]], headless: bool 
 
     if not frames:
         detalhe = "\n".join(erros) if erros else "Nenhuma base retornou linhas."
-        raise RuntimeError(f"Nenhuma extracao foi concluida.\n{detalhe}")
+        raise RuntimeError(f"Nenhuma extração foi concluída.\n{detalhe}")
 
     combinado = pd.concat(frames, ignore_index=True)
     destino = DATA_DIR / "bussola.xlsx"
     with pd.ExcelWriter(destino, engine="openpyxl") as writer:
         combinado.to_excel(writer, sheet_name="Pedidos", index=False)
+    salvar_bytes("bussola", destino.read_bytes(), "Atualiza Bússola pelo painel")
 
     if erros and callable(log_fn):
-        log_fn("Extracao concluida com alertas:")
+        log_fn("Extração concluída com alertas:")
         for erro in erros:
             log_fn(erro)
     return destino

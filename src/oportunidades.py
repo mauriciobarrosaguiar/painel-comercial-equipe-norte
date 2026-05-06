@@ -15,8 +15,8 @@ def _prioridade(cliente: pd.Series, motivo: str) -> str:
         grupo = str(cliente.get("grupo_sip", "")).strip()
         if grupo and grupo not in {"SEM IDENTIFICACAO", str(cliente.get("nome_pdv", "")).strip().upper()}:
             return "Alta"
-    if "prioritarios" in motivo.lower() or "lancamentos" in motivo.lower():
-        return "Media"
+    if "prioritários" in motivo.lower() or "prioritarios" in motivo.lower() or "lançamentos" in motivo.lower() or "lancamentos" in motivo.lower():
+        return "Média"
     return "Baixa"
 
 
@@ -65,30 +65,30 @@ def gerar_oportunidades(vendas: pd.DataFrame, clientes: pd.DataFrame, produtos_m
         positivacao = normalizar_texto_alto(cliente.get("positivacao", ""))
 
         if ol <= 0:
-            oportunidades.append(_linha(cliente, "Cliente sem compra no periodo", "Priorizar contato, confirmar estoque no distribuidor e montar pedido inicial."))
+            oportunidades.append(_linha(cliente, "Cliente sem compra no período", "Priorizar contato, confirmar estoque no distribuidor e montar pedido inicial."))
             if "FOCO" in foco or foco in {"SIM", "S", "YES", "1"}:
-                oportunidades.append(_linha(cliente, "Cliente foco PEX sem compra", "Agendar visita consultiva e levar oferta de mix prioritario."))
+                oportunidades.append(_linha(cliente, "Cliente foco PEX sem compra", "Agendar visita consultiva e levar oferta de mix prioritário."))
             if positivacao and positivacao not in {"NAO", "N", "0", "-"}:
-                oportunidades.append(_linha(cliente, "Cliente com positivacao esperada, mas sem venda", "Checar barreiras de compra e registrar proximo passo com data."))
+                oportunidades.append(_linha(cliente, "Cliente com positivação esperada, mas sem venda", "Checar barreiras de compra e registrar próximo passo com data."))
             if str(cliente.get("grupo_sip", "")) in redes_sem_compra:
-                oportunidades.append(_linha(cliente, "Rede com CNPJ sem compra", "Usar compras das demais lojas da rede como argumento e abrir negociacao por CNPJ."))
+                oportunidades.append(_linha(cliente, "Rede com CNPJ sem compra", "Usar compras das demais lojas da rede como argumento e abrir negociação por CNPJ."))
             if str(cliente.get("cnpj_limpo", "")) in sips_por_cnpj:
                 oportunidades.append(_linha(cliente, "SIP com CNPJ sem compra", "Usar o cadastro de SIP para negociar o grupo e recuperar o CNPJ sem venda."))
             continue
 
         if pri <= 0:
-            oportunidades.append(_linha(cliente, "Cliente comprou OL, mas nao comprou prioritarios", "Ofertar lista curta de prioritarios aderente ao perfil do cliente."))
+            oportunidades.append(_linha(cliente, "Cliente comprou OL, mas não comprou prioritários", "Ofertar lista curta de prioritários aderente ao perfil do cliente."))
         elif ol > 0 and pri / ol < 0.05:
-            oportunidades.append(_linha(cliente, "Produto prioritario com baixa venda", "Reforcar mix prioritario e negociar volume minimo por visita."))
+            oportunidades.append(_linha(cliente, "Produto prioritário com baixa venda", "Reforçar mix prioritário e negociar volume mínimo por visita."))
 
         if lan <= 0:
-            oportunidades.append(_linha(cliente, "Cliente comprou OL, mas nao comprou lancamentos", "Apresentar lancamentos com beneficio comercial e argumento de giro."))
+            oportunidades.append(_linha(cliente, "Cliente comprou OL, mas não comprou lançamentos", "Apresentar lançamentos com benefício comercial e argumento de giro."))
         elif ol > 0 and lan / ol < 0.03:
-            oportunidades.append(_linha(cliente, "Produto lancamento com baixa penetracao", "Adicionar lancamentos ao pedido recorrente e acompanhar recompra."))
+            oportunidades.append(_linha(cliente, "Produto lançamento com baixa penetração", "Adicionar lançamentos ao pedido recorrente e acompanhar recompra."))
 
     resultado = pd.DataFrame(oportunidades)
     if resultado.empty:
         return resultado
-    ordem = {"Alta": 0, "Media": 1, "Baixa": 2}
+    ordem = {"Alta": 0, "Média": 1, "Media": 1, "Baixa": 2}
     resultado["_ordem"] = resultado["prioridade"].map(ordem).fillna(3)
     return resultado.sort_values(["_ordem", "consultor", "cliente", "motivo_alerta"]).drop(columns="_ordem").reset_index(drop=True)

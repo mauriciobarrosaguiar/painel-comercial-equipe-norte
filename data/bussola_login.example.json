@@ -1,6 +1,9 @@
 {
-  "usuario": "",
-  "senha": "",
+  "gd": {
+    "usuario": "",
+    "senha": "",
+    "usar_gd": true
+  },
+  "consultores": {},
   "headless": false
 }
-

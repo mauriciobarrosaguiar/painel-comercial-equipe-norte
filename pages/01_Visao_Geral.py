@@ -33,6 +33,14 @@ def painel_meta(titulo: str, valor: float, meta: float) -> None:
     )
 
 
+def nome_gd(clientes) -> str:
+    if clientes is None or clientes.empty or "nome_gd" not in clientes.columns:
+        return "Gerente Distrital"
+    nomes = clientes["nome_gd"].dropna().astype(str).str.strip()
+    nomes = nomes[nomes.ne("")]
+    return nomes.iloc[0] if not nomes.empty else "Gerente Distrital"
+
+
 dados = carregar_dados_tratados()
 vendas = dados["vendas"]
 clientes = dados["clientes"]
@@ -46,13 +54,13 @@ vendas_operacionais = filtrar_vendas_operacionais(vendas, clientes_f, filtros)
 resumo_operacional = calcular_resumo_operacional(vendas_operacionais, clientes_f)
 meta_gt = metas.get("gerente_territorial", {})
 
-periodo = f"{filtros['inicio'].strftime('%d/%m/%Y')} ate {filtros['fim'].strftime('%d/%m/%Y')}"
-st.markdown(f"<div class='periodo-compacto'>Periodo: <b>{periodo}</b></div>", unsafe_allow_html=True)
+periodo = f"{filtros['inicio'].strftime('%d/%m/%Y')} até {filtros['fim'].strftime('%d/%m/%Y')}"
+st.markdown(f"<div class='periodo-compacto'>Período: <b>{periodo}</b></div>", unsafe_allow_html=True)
 
-with st.expander("Ultimas atualizacoes", expanded=False):
+with st.expander("Últimas atualizações", expanded=False):
     cols = st.columns(3)
     fontes = [
-        ("Bussola", ARQUIVOS_PADRAO["bussola"]),
+        ("Bússola", ARQUIVOS_PADRAO["bussola"]),
         ("Painel clientes", ARQUIVOS_PADRAO["painel"]),
         ("Produtos / mix", ARQUIVOS_PADRAO["produtos_mix"]),
     ]
@@ -66,18 +74,18 @@ with st.expander("Ultimas atualizacoes", expanded=False):
                 )
             else:
                 st.markdown(
-                    f"<div class='small-update'><div class='small-update-title'>{nome}</div><div class='small-update-value'>-</div><div class='metric-note'>arquivo nao encontrado</div></div>",
+                    f"<div class='small-update'><div class='small-update-title'>{nome}</div><div class='small-update-value'>-</div><div class='metric-note'>arquivo não encontrado</div></div>",
                     unsafe_allow_html=True,
                 )
 
-st.markdown("### Indicadores do periodo")
+st.markdown(f"### {nome_gd(clientes_f)}")
 c1, c2, c3, c4 = st.columns(4)
 with c1:
     painel_meta("OL sem combate", indicadores["ol_sem_combate"], meta_gt.get("ol_sem_combate", 0))
 with c2:
-    painel_meta("OL prioritarios", indicadores["ol_prioritarios"], meta_gt.get("ol_prioritarios", 0))
+    painel_meta("OL prioritários", indicadores["ol_prioritarios"], meta_gt.get("ol_prioritarios", 0))
 with c3:
-    painel_meta("OL lancamentos", indicadores["ol_lancamentos"], meta_gt.get("ol_lancamentos", 0))
+    painel_meta("OL lançamentos", indicadores["ol_lancamentos"], meta_gt.get("ol_lancamentos", 0))
 with c4:
     painel_meta("Clientes com venda", indicadores["clientes_positivados"], meta_gt.get("clientes_positivados", 0))
 

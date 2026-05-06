@@ -153,11 +153,11 @@ def _agregar_vendas_por_chave(vendas: pd.DataFrame, chaves: list[str]) -> pd.Dat
 
 def _status_comercial(linha: pd.Series) -> str:
     if linha.get("ol_sem_combate", 0) <= 0:
-        return "Sem compra no periodo"
+        return "Sem compra no período"
     if linha.get("ol_prioritarios", 0) <= 0:
-        return "Comprou sem prioritarios"
+        return "Comprou sem prioritários"
     if linha.get("ol_lancamentos", 0) <= 0:
-        return "Comprou sem lancamentos"
+        return "Comprou sem lançamentos"
     return "Comprou bem"
 
 

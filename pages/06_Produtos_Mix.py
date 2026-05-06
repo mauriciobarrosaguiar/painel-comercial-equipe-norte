@@ -16,16 +16,16 @@ produtos_mix = dados["produtos_mix"]
 
 titulo_pagina(
     "Produtos / Mix",
-    "Classificacao dos produtos e desempenho por tipo de mix.",
+    "Classificação dos produtos e desempenho por tipo de mix.",
 )
 
 vendas_f, clientes_f, _ = aplicar_filtros_globais(vendas, clientes, chave="produtos")
 
 sem_classificacao = vendas_f[vendas_f["tipo_mix"].eq(TIPO_SEM_CLASSIFICACAO)]["ean_limpo"].nunique()
 if produtos_mix.empty:
-    st.warning("Produtos ainda sem classificacao. Cadastre o mix para liberar leituras confiaveis de prioritarios e lancamentos.")
+    st.warning("Produtos ainda sem classificação. Cadastre o mix para liberar leituras confiáveis de prioritários e lançamentos.")
 elif sem_classificacao:
-    st.warning(f"Existem {sem_classificacao} EANs vendidos sem classificacao. Corrija o template de produtos mix.")
+    st.warning(f"Existem {sem_classificacao} EANs vendidos sem classificação. Corrija o template de produtos mix.")
 
 resultado = gerar_resultado_produto(vendas_f, produtos_mix)
 tipos = ["PRIORITARIO", "LANCAMENTO", "LINHA", "COMBATE", TIPO_SEM_CLASSIFICACAO]

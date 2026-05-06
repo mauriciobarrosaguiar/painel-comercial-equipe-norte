@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from src.persistencia import carregar_json, existe_persistido, salvar_json
+
 
 DATA_DIR = Path(__file__).resolve().parents[1] / "data"
 METAS_FILE = DATA_DIR / "metas_comerciais.json"
@@ -21,6 +23,10 @@ METAS_PADRAO = {
 
 
 def _ler_json(caminho: Path, padrao: dict) -> dict:
+    chave = "metas" if caminho == METAS_FILE else "login_bussola" if caminho == BUSSOLA_LOGIN_FILE else ""
+    if chave and existe_persistido(chave):
+        dados_persistidos = carregar_json(chave, padrao)
+        return dados_persistidos if isinstance(dados_persistidos, dict) else padrao.copy()
     if not caminho.exists():
         return padrao.copy()
     try:
@@ -33,6 +39,9 @@ def _ler_json(caminho: Path, padrao: dict) -> dict:
 def _salvar_json(caminho: Path, dados: dict) -> None:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     caminho.write_text(json.dumps(dados, ensure_ascii=False, indent=2), encoding="utf-8")
+    chave = "metas" if caminho == METAS_FILE else "login_bussola" if caminho == BUSSOLA_LOGIN_FILE else ""
+    if chave:
+        salvar_json(chave, dados, f"Atualiza {chave} pelo painel")
 
 
 def carregar_metas() -> dict:
@@ -49,18 +58,19 @@ def salvar_metas(dados: dict) -> None:
 
 
 def carregar_login_bussola() -> dict:
-    dados = _ler_json(BUSSOLA_LOGIN_FILE, {"consultores": {}, "headless": False})
+    dados = _ler_json(BUSSOLA_LOGIN_FILE, {"gd": {}, "consultores": {}, "headless": False})
     if "consultores" not in dados:
         usuario = dados.get("usuario", "")
         senha = dados.get("senha", "")
-        dados = {"consultores": {"GERAL": {"usuario": usuario, "senha": senha}} if usuario or senha else {}, "headless": dados.get("headless", False)}
+        dados = {"gd": {}, "consultores": {"GERAL": {"usuario": usuario, "senha": senha}} if usuario or senha else {}, "headless": dados.get("headless", False)}
+    dados.setdefault("gd", {})
     dados.setdefault("consultores", {})
     dados.setdefault("headless", False)
     return dados
 
 
-def salvar_login_bussola(consultores: dict, headless: bool) -> None:
-    _salvar_json(BUSSOLA_LOGIN_FILE, {"consultores": consultores, "headless": bool(headless)})
+def salvar_login_bussola(consultores: dict, headless: bool, gd: dict | None = None) -> None:
+    _salvar_json(BUSSOLA_LOGIN_FILE, {"gd": gd or {}, "consultores": consultores, "headless": bool(headless)})
 
 
 def consultores_unicos(clientes) -> list[str]:

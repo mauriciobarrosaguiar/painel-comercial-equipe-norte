@@ -23,13 +23,13 @@ titulo_pagina("Ações Promocionais")
 vendas_f, clientes_f, _ = aplicar_filtros_globais(vendas, clientes, chave="acoes", mostrar_tipo_mix=False)
 
 c1, c2 = st.columns([1, 2])
-mes_ref = c1.date_input("Mes de referencia", value=date.today().replace(day=1))
+mes_ref = c1.date_input("Mês de referência", value=date.today().replace(day=1))
 busca = c2.text_input("Buscar campanha, produto, EAN ou consultor")
 inicio_mes = pd.Timestamp(mes_ref).replace(day=1)
 fim_mes = inicio_mes + pd.offsets.MonthEnd(0)
 
 if acoes.empty:
-    st.info("Nenhuma acao promocional cadastrada.")
+    st.info("Nenhuma ação promocional cadastrada.")
     st.stop()
 
 acoes_mes = acoes[
@@ -44,7 +44,7 @@ analise = filtrar_busca(analise, busca, ["campanha", "produto", "ean", "consulto
 
 st.subheader("Ações do período")
 if analise.empty:
-    st.info("Sem acoes para o mes selecionado.")
+    st.info("Sem ações para o mês selecionado.")
 else:
     for fatia in [analise.iloc[i : i + 2] for i in range(0, len(analise), 2)]:
         cols = st.columns(2)
@@ -57,7 +57,7 @@ else:
                     <div class="consultor-card">
                         <div class="consultor-name">{acao['campanha'] or acao['produto']}</div>
                         <div class="contact-line"><b>Produto:</b> {acao['produto']} | <b>EAN:</b> {acao['ean']}</div>
-                        <div class="contact-line"><b>Periodo:</b> {acao['data_inicio'].strftime('%d/%m/%Y') if pd.notna(acao['data_inicio']) else '-'} a {acao['data_fim'].strftime('%d/%m/%Y') if pd.notna(acao['data_fim']) else '-'}</div>
+                        <div class="contact-line"><b>Período:</b> {acao['data_inicio'].strftime('%d/%m/%Y') if pd.notna(acao['data_inicio']) else '-'} a {acao['data_fim'].strftime('%d/%m/%Y') if pd.notna(acao['data_fim']) else '-'}</div>
                         <div class="mini-grid">
                             <div class="mini-metric"><div class="mini-label">Antes</div><div class="mini-value">{formatar_moeda(acao['ol_antes_acao'])}</div></div>
                             <div class="mini-metric"><div class="mini-label">Durante</div><div class="mini-value">{formatar_moeda(acao['ol_durante_acao'])}</div></div>
@@ -71,7 +71,7 @@ else:
                     unsafe_allow_html=True,
                 )
 
-with st.expander("Detalhes das acoes", expanded=False):
+with st.expander("Detalhes das ações", expanded=False):
     colunas = [
         "campanha",
         "produto",
@@ -99,7 +99,7 @@ with st.expander("Detalhes das acoes", expanded=False):
             "tipo_mix": "Tipo mix",
             "distribuidora": "Distribuidora",
             "desconto": "Desconto",
-            "data_inicio": "Data inicio",
+            "data_inicio": "Data início",
             "data_fim": "Data fim",
             "consultor": "Consultor",
             "status": "Status",
