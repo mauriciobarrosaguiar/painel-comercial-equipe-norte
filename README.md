@@ -41,11 +41,12 @@ Para que uploads, metas, SIPs e acessos salvos não sejam perdidos quando o app 
 ```toml
 GITHUB_TOKEN = "token_do_github_com_permissao_contents_write"
 GITHUB_REPO = "mauriciobarrosaguiar/painel-comercial-equipe-norte"
-GITHUB_BRANCH = "main"
+GITHUB_STORAGE_BRANCH = "app-storage"
+GITHUB_STORE_DIR = ".app_storage"
 PERSISTENCE_KEY = "chave_gerada_na_tela_importacao"
 ```
 
-O token precisa ter permissão de leitura e escrita em Contents no repositório. A chave `PERSISTENCE_KEY` aparece pronta para copiar na tela **Importação** quando ainda não há persistência configurada. Os arquivos persistidos ficam criptografados no GitHub.
+O token precisa ter permissão de leitura e escrita em Contents no repositório. A chave `PERSISTENCE_KEY` aparece pronta para copiar na tela **Importação** quando ainda não há persistência configurada. Os arquivos persistidos ficam criptografados no GitHub, na branch `app-storage`, separada da branch `main` do sistema.
 
 ## Como atualizar as bases
 

@@ -43,7 +43,8 @@ def _github_config() -> dict[str, str]:
     return {
         "token": _secret("GITHUB_TOKEN"),
         "repo": _secret("GITHUB_REPO", "mauriciobarrosaguiar/painel-comercial-equipe-norte"),
-        "branch": _secret("GITHUB_BRANCH", "main"),
+        "branch": _secret("GITHUB_STORAGE_BRANCH", "app-storage"),
+        "source_branch": _secret("GITHUB_SOURCE_BRANCH", _secret("GITHUB_BRANCH", "main")),
         "dir": _secret("GITHUB_STORE_DIR", ".app_storage"),
         "key": _secret("PERSISTENCE_KEY"),
     }
@@ -59,7 +60,7 @@ def status_persistencia() -> dict[str, str]:
     if persistencia_github_ativa():
         return {
             "modo": "GitHub criptografado",
-            "detalhe": f"{cfg['repo']} / {cfg['dir']}",
+            "detalhe": f"{cfg['repo']} / {cfg['dir']} / branch {cfg['branch']}",
             "ok": "sim",
         }
     faltantes = []
@@ -116,6 +117,36 @@ def _headers() -> dict[str, str]:
     }
 
 
+def _github_get_ref(branch: str) -> dict[str, Any] | None:
+    cfg = _github_config()
+    url = f"https://api.github.com/repos/{cfg['repo']}/git/ref/heads/{branch}"
+    resp = requests.get(url, headers=_headers(), timeout=30)
+    if resp.status_code == 404:
+        return None
+    resp.raise_for_status()
+    dados = resp.json()
+    return dados if isinstance(dados, dict) else None
+
+
+def _garantir_branch_storage() -> None:
+    cfg = _github_config()
+    if _github_get_ref(cfg["branch"]):
+        return
+
+    origem = _github_get_ref(cfg["source_branch"])
+    if not origem:
+        raise RuntimeError(f"Branch de origem {cfg['source_branch']} não encontrada para criar {cfg['branch']}.")
+    sha_origem = origem.get("object", {}).get("sha")
+    if not sha_origem:
+        raise RuntimeError(f"Não consegui identificar o commit da branch {cfg['source_branch']}.")
+
+    url = f"https://api.github.com/repos/{cfg['repo']}/git/refs"
+    payload = {"ref": f"refs/heads/{cfg['branch']}", "sha": sha_origem}
+    resp = requests.post(url, headers=_headers(), json=payload, timeout=30)
+    if resp.status_code not in {201, 422}:
+        resp.raise_for_status()
+
+
 def _github_get(path: str) -> dict[str, Any] | None:
     cfg = _github_config()
     url = f"https://api.github.com/repos/{cfg['repo']}/contents/{path}"
@@ -137,19 +168,29 @@ def _github_read(chave: str) -> bytes | None:
 
 def _github_write(chave: str, conteudo: bytes, mensagem: str) -> None:
     cfg = _github_config()
+    _garantir_branch_storage()
     path = _caminho_github(chave)
-    existente = _github_get(path)
     criptografado = _fernet().encrypt(conteudo)
-    payload: dict[str, Any] = {
-        "message": mensagem,
-        "content": base64.b64encode(criptografado).decode("ascii"),
-        "branch": cfg["branch"],
-    }
-    if existente and existente.get("sha"):
-        payload["sha"] = existente["sha"]
     url = f"https://api.github.com/repos/{cfg['repo']}/contents/{path}"
-    resp = requests.put(url, headers=_headers(), json=payload, timeout=60)
-    resp.raise_for_status()
+
+    ultimo_erro: requests.Response | None = None
+    for _ in range(2):
+        existente = _github_get(path)
+        payload: dict[str, Any] = {
+            "message": mensagem,
+            "content": base64.b64encode(criptografado).decode("ascii"),
+            "branch": cfg["branch"],
+        }
+        if existente and existente.get("sha"):
+            payload["sha"] = existente["sha"]
+        resp = requests.put(url, headers=_headers(), json=payload, timeout=60)
+        if resp.status_code in {200, 201}:
+            return
+        ultimo_erro = resp
+        if resp.status_code not in {409, 422}:
+            break
+    if ultimo_erro is not None:
+        ultimo_erro.raise_for_status()
 
 
 def carregar_bytes(chave: str) -> bytes | None:

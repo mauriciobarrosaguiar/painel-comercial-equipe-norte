@@ -72,7 +72,8 @@ if status["ok"] != "sim":
         st.code(
             f'GITHUB_TOKEN = "cole_aqui_um_token_do_github_com_permissao_contents_write"\n'
             f'GITHUB_REPO = "mauriciobarrosaguiar/painel-comercial-equipe-norte"\n'
-            f'GITHUB_BRANCH = "main"\n'
+            f'GITHUB_STORAGE_BRANCH = "app-storage"\n'
+            f'GITHUB_STORE_DIR = ".app_storage"\n'
             f'PERSISTENCE_KEY = "{gerar_chave_persistencia()}"',
             language="toml",
         )
