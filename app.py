@@ -5,7 +5,29 @@ import runpy
 
 import streamlit as st
 
-from src.layout import configurar_pagina, ocultar_sidebar_publica
+from src.layout import configurar_pagina
+
+try:
+    from src.layout import ocultar_sidebar_publica
+except ImportError:
+    def ocultar_sidebar_publica() -> None:
+        st.markdown(
+            """
+            <style>
+            [data-testid="stSidebar"],
+            [data-testid="stSidebarCollapsedControl"],
+            [data-testid="stSidebarCollapseButton"],
+            [data-testid="stExpandSidebarButton"] {
+                display: none !important;
+            }
+            .stApp {
+                padding-left: 0 !important;
+            }
+            </style>
+            <div class="public-shell"></div>
+            """,
+            unsafe_allow_html=True,
+        )
 
 
 ROOT = Path(__file__).resolve().parent
