@@ -340,6 +340,46 @@ def aplicar_css() -> None:
             color: var(--norte-muted);
             margin: .16rem 0;
         }
+        .mix-op-card {
+            background: rgba(255,255,255,.9);
+            border: 1px solid var(--norte-border);
+            border-radius: 18px;
+            padding: 1rem;
+            min-height: 240px;
+            box-shadow: 0 10px 24px rgba(6,47,34,.05);
+        }
+        .mix-op-title {
+            color: var(--norte-text);
+            font-size: .96rem;
+            font-weight: 900;
+            margin-bottom: .45rem;
+        }
+        .mix-product-row {
+            border-top: 1px solid #E3E9DD;
+            padding: .58rem 0;
+        }
+        .mix-product-title {
+            color: var(--norte-text);
+            font-size: .82rem;
+            font-weight: 850;
+            line-height: 1.25;
+        }
+        .mix-product-meta {
+            color: var(--norte-muted);
+            font-size: .72rem;
+            line-height: 1.35;
+        }
+        .mix-product-price {
+            color: #00709C;
+            font-size: .78rem;
+            font-weight: 900;
+            margin-top: .18rem;
+        }
+        .mix-empty {
+            color: var(--norte-muted);
+            font-size: .82rem;
+            padding: .8rem 0;
+        }
         .pill-note {
             display: inline-block;
             background: #EEF5EA;

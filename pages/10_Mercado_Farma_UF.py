@@ -8,17 +8,7 @@ import streamlit as st
 from src.configuracoes import carregar_login_bussola, consultores_unicos
 from src.layout import botao_download_excel, card_metrica, dataframe_com_download, titulo_pagina
 from src.loader import carregar_dados_tratados, registrar_upload
-from src.mercado_farma import (
-    alvos_unicos_por_uf,
-    cancelar_extracao_background,
-    carregar_estado_extracao,
-    formatar_tabela_mercado,
-    iniciar_extracao_background,
-    mercado_farma_atual,
-    melhor_preco_por_ean,
-    obter_eans_para_consulta,
-    ufs_validas_clientes,
-)
+from src import mercado_farma as mf
 from src.status_bases import formatar_ultima_atualizacao
 from src.tratamento import formatar_moeda
 
@@ -131,12 +121,12 @@ produtos_mercado = dados["produtos_mercado_farma"]
 
 titulo_pagina("Mercado Farma / UF", "Preços e estoque por UF da carteira")
 
-mercado = mercado_farma_atual()
+mercado = mf.mercado_farma_atual()
 consultores = consultores_unicos(clientes)
 login = carregar_login_bussola()
 credenciais = credenciais_por_consultor(login, consultores)
-alvos = alvos_unicos_por_uf(clientes, credenciais, exigir_login=True)
-ufs_carteira = set(ufs_validas_clientes(clientes))
+alvos = mf.alvos_unicos_por_uf(clientes, credenciais, exigir_login=True)
+ufs_carteira = set(mf.ufs_validas_clientes(clientes))
 ufs_com_login = {alvo["uf"] for alvo in alvos}
 ufs_sem_login = sorted(ufs_carteira - ufs_com_login)
 
@@ -154,7 +144,7 @@ with st.expander("Extração Mercado Farma", expanded=False):
     if ufs_sem_login:
         st.warning("UFs na carteira ainda sem vendedor com login salvo: " + ", ".join(ufs_sem_login))
 
-    eans = obter_eans_para_consulta(produtos_mercado)
+    eans = mf.obter_eans_para_consulta(produtos_mercado)
     st.markdown(
         f"<span class='pill-note'>Lista produtos.xlsx: {len(eans)} EANs</span>"
         f"<span class='pill-note'>Atualização da lista: {formatar_ultima_atualizacao('produtos_mercado_farma')}</span>",
@@ -167,7 +157,7 @@ with st.expander("Extração Mercado Farma", expanded=False):
         st.success("Lista produtos.xlsx salva para as próximas extrações.")
         st.rerun()
 
-    estado = carregar_estado_extracao()
+    estado = mf.carregar_estado_extracao()
     painel_status_extracao(estado)
 
     headless = st.toggle("Rodar navegador oculto", value=True, key="mercado_headless")
@@ -178,7 +168,7 @@ with st.expander("Extração Mercado Farma", expanded=False):
     col1, col2, col3 = st.columns(3)
     if col1.button("Iniciar extração do zero", width="stretch", disabled=rodando or not bool(alvos)):
         try:
-            iniciar_extracao_background(
+            mf.iniciar_extracao_background(
                 credenciais,
                 clientes,
                 produtos_mercado,
@@ -193,7 +183,7 @@ with st.expander("Extração Mercado Farma", expanded=False):
 
     if col2.button("Retomar de onde parou", width="stretch", disabled=rodando or not pode_retomar or not bool(alvos)):
         try:
-            iniciar_extracao_background(
+            mf.iniciar_extracao_background(
                 credenciais,
                 clientes,
                 produtos_mercado,
@@ -207,7 +197,7 @@ with st.expander("Extração Mercado Farma", expanded=False):
             st.error(f"Falha ao retomar extração: {exc}")
 
     if col3.button("Cancelar extração", width="stretch", disabled=not rodando):
-        cancelar_extracao_background()
+        mf.cancelar_extracao_background()
         st.warning("Cancelamento solicitado.")
         st.rerun()
 
@@ -218,7 +208,7 @@ with st.expander("Extração Mercado Farma", expanded=False):
         st.success("Planilha Mercado Farma salva.")
         st.rerun()
 
-mercado = mercado_farma_atual()
+mercado = mf.mercado_farma_atual()
 if mercado.empty:
     st.info("Ainda não existe base do Mercado Farma salva. Extraia pelo botão acima ou importe uma planilha.")
     st.stop()
@@ -246,7 +236,7 @@ if busca:
     )
     filtrado = filtrado[mask].copy()
 
-melhores = melhor_preco_por_ean(filtrado)
+melhores = mf.melhor_preco_por_ean(filtrado)
 m1, m2, m3, m4 = st.columns(4)
 with m1:
     card_metrica("Produtos com preço", str(int(filtrado["ean"].nunique())))
@@ -272,9 +262,9 @@ else:
 
 c1, c2 = st.columns(2)
 with c1:
-    botao_download_excel(formatar_tabela_mercado(filtrado), "mercado_farma_por_uf.xlsx", "Extrair lista completa em Excel")
+    botao_download_excel(mf.formatar_tabela_mercado(filtrado), "mercado_farma_por_uf.xlsx", "Extrair lista completa em Excel")
 with c2:
-    botao_download_excel(formatar_tabela_mercado(melhores), "mercado_farma_melhores_precos.xlsx", "Extrair melhores preços em Excel")
+    botao_download_excel(mf.formatar_tabela_mercado(melhores), "mercado_farma_melhores_precos.xlsx", "Extrair melhores preços em Excel")
 
 with st.expander("Tabela completa", expanded=False):
-    dataframe_com_download(formatar_tabela_mercado(filtrado), "mercado_farma_completo", altura=420)
+    dataframe_com_download(mf.formatar_tabela_mercado(filtrado), "mercado_farma_completo", altura=420)
