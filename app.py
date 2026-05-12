@@ -5,7 +5,7 @@ import runpy
 
 import streamlit as st
 
-from src.layout import configurar_pagina
+from src.layout import configurar_pagina, ocultar_sidebar_publica
 
 
 ROOT = Path(__file__).resolve().parent
@@ -18,6 +18,7 @@ PAGINAS = [
     ("Ações Promocionais", "pages/05_Acoes_Promocionais.py"),
     ("Produtos / Mix", "pages/06_Produtos_Mix.py"),
     ("Oportunidades", "pages/07_Oportunidades.py"),
+    ("Mercado Farma / UF", "pages/10_Mercado_Farma_UF.py"),
     ("Desafio de Gigantes", "pages/09_Desafio_Gigantes.py"),
     ("Importação", "pages/08_Importar_Bases.py"),
 ]
@@ -25,6 +26,12 @@ PAGINAS = [
 
 def main() -> None:
     configurar_pagina()
+    sip_publico = str(st.query_params.get("sip", "") or "").strip()
+    if sip_publico:
+        ocultar_sidebar_publica()
+        runpy.run_path(str(ROOT / "pages/11_Acesso_SIP.py"), run_name="__main__")
+        return
+
     st.sidebar.markdown("## Painel Comercial")
     st.sidebar.caption("Equipe Norte")
     st.sidebar.markdown('<div class="sidebar-spacer"></div>', unsafe_allow_html=True)

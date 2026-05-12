@@ -23,6 +23,7 @@ ARQUIVOS_BINARIOS = {
     "painel": "painel_clientes.xlsx",
     "acoes": "template_acoes_promocionais.xlsx",
     "produtos_mix": "template_produtos_mix.xlsx",
+    "mercado_farma": "mercado_farma.xlsx",
 }
 
 ARQUIVOS_JSON = {
@@ -38,6 +39,7 @@ ARQUIVOS_PADRAO_DATA = {
     "painel": DATA_DIR / "PAINEL EQUIPE NORTE.xlsx",
     "acoes": DATA_DIR / "template_acoes_promocionais.xlsx",
     "produtos_mix": DATA_DIR / "template_produtos_mix.xlsx",
+    "mercado_farma": DATA_DIR / "mercado_farma.xlsx",
 }
 
 

@@ -177,6 +177,18 @@ else:
     nomes_analise = [grupo["nome"] for grupo in grupos]
     grupo_nome = st.selectbox("Grupo para análise", nomes_analise, key="sip_grupo_analise")
     grupo = next(grupo for grupo in grupos if grupo["nome"] == grupo_nome)
+    link_sip = f"?sip={grupo['id']}"
+    st.markdown(
+        f"""
+        <div class="small-update">
+            <div class="small-update-title">Link do cliente SIP</div>
+            <div class="metric-note">Compartilhe este acesso para a SIP acompanhar os resultados sem o menu interno.</div>
+            <div class="small-update-value">{link_sip}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    st.link_button("Abrir visão do cliente SIP", link_sip, width="stretch")
     membros_sip = clientes_resultado[clientes_resultado["cnpj_limpo"].astype(str).isin(grupo["cnpjs"])].copy()
     ol = float(membros_sip["ol_sem_combate"].sum()) if not membros_sip.empty else 0
     prio = float(membros_sip["ol_prioritarios"].sum()) if not membros_sip.empty else 0

@@ -361,7 +361,99 @@ def aplicar_css() -> None:
             padding: 0.5rem 0.8rem;
             font-weight: 800;
         }
+        .produto-card {
+            background: #FFFFFF;
+            border: 1px solid #DDE5DD;
+            border-radius: 10px;
+            padding: 14px;
+            min-height: 270px;
+            box-shadow: 0 2px 10px rgba(15, 23, 42, .08);
+            margin-bottom: 1rem;
+            display: flex;
+            flex-direction: column;
+            gap: .6rem;
+        }
+        .produto-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: .5rem;
+        }
+        .desconto-badge {
+            background: #00A43A;
+            color: white;
+            font-weight: 900;
+            border-radius: 5px;
+            padding: .18rem .45rem;
+            font-size: .82rem;
+        }
+        .produto-nome {
+            color: #061A16;
+            font-weight: 800;
+            line-height: 1.35;
+            min-height: 44px;
+        }
+        .produto-meta {
+            color: #61716B;
+            font-size: .78rem;
+            overflow-wrap: anywhere;
+        }
+        .preco-box {
+            border: 1px solid #E1E5E2;
+            border-radius: 9px;
+            padding: .75rem;
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: .35rem .75rem;
+            align-items: center;
+        }
+        .preco-dist {
+            font-weight: 800;
+            color: var(--norte-text);
+        }
+        .preco-estoque {
+            color: #00709C;
+            font-size: .78rem;
+        }
+        .preco-principal {
+            color: #00709C;
+            font-size: 1.45rem;
+            font-weight: 900;
+            line-height: 1;
+            text-align: right;
+        }
+        .preco-secundario {
+            color: #61716B;
+            font-size: .68rem;
+            text-align: right;
+        }
+        .public-shell .block-container {
+            max-width: 1180px;
+            padding-top: 1.5rem;
+        }
         </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def ocultar_sidebar_publica() -> None:
+    st.markdown(
+        """
+        <style>
+        [data-testid="stSidebar"] {
+            display: none !important;
+        }
+        [data-testid="stSidebarCollapsedControl"],
+        [data-testid="stSidebarCollapseButton"],
+        [data-testid="stExpandSidebarButton"] {
+            display: none !important;
+        }
+        .stApp {
+            padding-left: 0 !important;
+        }
+        </style>
+        <div class="public-shell"></div>
         """,
         unsafe_allow_html=True,
     )

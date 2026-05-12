@@ -28,6 +28,7 @@ ARQUIVOS_PADRAO = {
     "painel": DATA_DIR / "PAINEL EQUIPE NORTE.xlsx",
     "acoes": DATA_DIR / "template_acoes_promocionais.xlsx",
     "produtos_mix": DATA_DIR / "template_produtos_mix.xlsx",
+    "mercado_farma": DATA_DIR / "mercado_farma.xlsx",
 }
 
 ABAS_PADRAO = {
@@ -35,6 +36,7 @@ ABAS_PADRAO = {
     "painel": "Planilha1",
     "acoes": 0,
     "produtos_mix": 0,
+    "mercado_farma": 0,
 }
 
 
@@ -77,12 +79,12 @@ def _ler_excel_caminho(caminho: str, sheet_name: str | int, mtime: float) -> pd.
 
 
 def _carregar_excel(chave: str) -> pd.DataFrame:
-    upload = _uploads_sessao().get(chave)
-    if upload and upload.get("bytes"):
-        return _ler_excel_bytes(upload["bytes"], ABAS_PADRAO[chave])
     persistido = carregar_bytes(chave)
     if persistido:
         return _ler_excel_bytes(persistido, ABAS_PADRAO[chave])
+    upload = _uploads_sessao().get(chave)
+    if upload and upload.get("bytes"):
+        return _ler_excel_bytes(upload["bytes"], ABAS_PADRAO[chave])
     caminho = ARQUIVOS_PADRAO[chave]
     if not caminho.exists():
         return pd.DataFrame()
@@ -105,11 +107,16 @@ def carregar_produtos_mix() -> pd.DataFrame:
     return _carregar_excel("produtos_mix")
 
 
+def carregar_mercado_farma() -> pd.DataFrame:
+    return _carregar_excel("mercado_farma")
+
+
 def carregar_dados_tratados() -> dict[str, pd.DataFrame | list[str]]:
     bussola_raw = carregar_bussola()
     painel_raw = carregar_painel_equipe()
     acoes_raw = carregar_acoes()
     produtos_raw = carregar_produtos_mix()
+    mercado_raw = carregar_mercado_farma()
 
     avisos: list[str] = []
     avisos.extend(validar_colunas_esperadas(bussola_raw, COLUNAS_BUSSOLA, "bussola.xlsx"))
@@ -138,6 +145,7 @@ def carregar_dados_tratados() -> dict[str, pd.DataFrame | list[str]]:
         "raw_painel": painel_raw,
         "raw_acoes": acoes_raw,
         "raw_produtos_mix": produtos_raw,
+        "mercado_farma": mercado_raw,
     }
 
 
