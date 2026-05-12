@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from io import BytesIO
+import os
 from pathlib import Path
+import shutil
 from typing import Callable
 
 import numpy as np
@@ -9,7 +11,6 @@ import pandas as pd
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
-from webdriver_manager.chrome import ChromeDriverManager
 
 from src.datas import agora_brasilia
 from src.loader import DATA_DIR, carregar_mercado_farma
@@ -190,9 +191,41 @@ def criar_driver(headless: bool = True):
     options.add_argument("--disable-gpu")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--disable-extensions")
+    options.add_argument("--disable-background-networking")
     options.add_experimental_option("excludeSwitches", ["enable-logging"])
-    service = Service(ChromeDriverManager().install())
-    return webdriver.Chrome(service=service, options=options)
+
+    chrome_bin = (
+        os.environ.get("CHROME_BIN")
+        or shutil.which("chromium")
+        or shutil.which("chromium-browser")
+        or shutil.which("google-chrome")
+        or shutil.which("chrome")
+    )
+    if chrome_bin:
+        options.binary_location = chrome_bin
+
+    erros: list[str] = []
+    driver_path = os.environ.get("CHROMEDRIVER_PATH") or shutil.which("chromedriver")
+    if driver_path:
+        try:
+            return webdriver.Chrome(service=Service(driver_path), options=options)
+        except Exception as exc:
+            erros.append(f"chromedriver do sistema ({driver_path}): {exc}")
+
+    try:
+        return webdriver.Chrome(options=options)
+    except Exception as exc:
+        erros.append(f"Selenium Manager: {exc}")
+
+    try:
+        from webdriver_manager.chrome import ChromeDriverManager
+
+        return webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
+    except Exception as exc:
+        erros.append(f"webdriver-manager: {exc}")
+        resumo = " | ".join(str(erro).splitlines()[0] for erro in erros if erro)
+        raise RuntimeError(f"Não consegui abrir o navegador para o Mercado Farma. {resumo}") from exc
 
 
 def converter_linhas_extrator(linhas: list[dict], consultor: str, uf: str, cnpj: str) -> list[dict]:
