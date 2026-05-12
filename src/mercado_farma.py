@@ -4,7 +4,9 @@ from io import BytesIO
 import os
 from pathlib import Path
 import shutil
+import threading
 from typing import Callable
+from uuid import uuid4
 
 import numpy as np
 import pandas as pd
@@ -15,7 +17,7 @@ from selenium.webdriver.chrome.service import Service
 from src.datas import agora_brasilia
 from src.loader import DATA_DIR, carregar_mercado_farma
 from src.mercadofarma_inventory import login_mercadofarma, processar_ean_catalogo, selecionar_cnpj_catalogo
-from src.persistencia import salvar_bytes
+from src.persistencia import carregar_json, salvar_bytes, salvar_json
 from src.tratamento import converter_numero, formatar_moeda, normalizar_cnpj, normalizar_ean, padronizar_colunas
 
 
@@ -36,6 +38,12 @@ COLUNAS_MERCADO = [
     "status",
     "erro",
 ]
+
+JOB_KEY = "mercado_farma_job"
+JOB_PARTIAL_PATH = DATA_DIR / "_mercado_farma_parcial.xlsx"
+FLUSH_EVERY_EANS = 25
+_THREADS: dict[str, threading.Thread] = {}
+_CANCEL_FLAGS: dict[str, threading.Event] = {}
 
 VALID_UFS = {
     "AC",
@@ -70,6 +78,89 @@ VALID_UFS = {
 
 def _texto(valor: object) -> str:
     return "" if valor is None or pd.isna(valor) else str(valor).strip()
+
+
+def _norm_nome(valor: object) -> str:
+    return " ".join(_texto(valor).upper().split())
+
+
+def _estado_padrao() -> dict:
+    return {
+        "job_id": "",
+        "status": "parado",
+        "mensagem": "",
+        "erro": "",
+        "logs": [],
+        "inicio": "",
+        "fim": "",
+        "total_eans": 0,
+        "total_alvos": 0,
+        "target_index": 0,
+        "ean_index": 0,
+        "processados": 0,
+        "total_passos": 0,
+        "current_uf": "",
+        "current_consultor": "",
+        "current_cnpj": "",
+        "current_ean": "",
+        "alvos": [],
+        "cancelar": False,
+        "partial_path": str(JOB_PARTIAL_PATH),
+    }
+
+
+def carregar_estado_extracao() -> dict:
+    estado = carregar_json(JOB_KEY, _estado_padrao())
+    if not isinstance(estado, dict):
+        estado = _estado_padrao()
+    base = _estado_padrao()
+    base.update(estado)
+    job_id = str(base.get("job_id", ""))
+    thread = _THREADS.get(job_id)
+    if base.get("status") == "rodando" and thread is not None and thread.is_alive():
+        base["thread_alive"] = True
+    else:
+        base["thread_alive"] = False
+        if base.get("status") == "rodando":
+            base["status"] = "interrompido"
+            base["mensagem"] = "A extração não está mais em execução. Você pode retomar de onde parou."
+            _salvar_estado_extracao(base)
+    return base
+
+
+def extracao_em_execucao() -> bool:
+    estado = carregar_estado_extracao()
+    job_id = str(estado.get("job_id", ""))
+    thread = _THREADS.get(job_id)
+    return bool(thread is not None and thread.is_alive())
+
+
+def _salvar_estado_extracao(estado: dict) -> None:
+    salvar_json(JOB_KEY, estado, "Atualiza status da extração Mercado Farma")
+
+
+def _log_estado(estado: dict, mensagem: str) -> None:
+    logs = list(estado.get("logs", []))
+    logs.append(f"{agora_brasilia().strftime('%d/%m/%Y %H:%M:%S')} - {mensagem}")
+    estado["logs"] = logs[-80:]
+    estado["mensagem"] = mensagem
+
+
+def limpar_estado_extracao() -> dict:
+    estado = _estado_padrao()
+    estado["mensagem"] = "Pronto para iniciar uma nova extração."
+    _salvar_estado_extracao(estado)
+    return estado
+
+
+def ufs_validas_clientes(clientes: pd.DataFrame) -> list[str]:
+    if clientes is None or clientes.empty or "uf" not in clientes.columns:
+        return []
+    base = clientes.copy()
+    if "cliente_ativo" in base.columns:
+        base = base[base["cliente_ativo"].fillna(True)].copy()
+    ufs = base["uf"].dropna().astype(str).str.strip().str.upper()
+    return sorted(uf for uf in ufs.unique().tolist() if uf in VALID_UFS)
 
 
 def preparar_mercado_farma(df: pd.DataFrame | None) -> pd.DataFrame:
@@ -143,6 +234,22 @@ def salvar_mercado_farma(df: pd.DataFrame) -> Path:
     return destino
 
 
+def _salvar_parcial(df: pd.DataFrame) -> None:
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    base = preparar_mercado_farma(df)
+    with pd.ExcelWriter(JOB_PARTIAL_PATH, engine="openpyxl") as writer:
+        base.to_excel(writer, sheet_name="Mercado Farma", index=False)
+
+
+def _carregar_parcial() -> pd.DataFrame:
+    if not JOB_PARTIAL_PATH.exists():
+        return pd.DataFrame(columns=COLUNAS_MERCADO)
+    try:
+        return pd.read_excel(JOB_PARTIAL_PATH, dtype=str, engine="openpyxl")
+    except Exception:
+        return pd.DataFrame(columns=COLUNAS_MERCADO)
+
+
 def dataframe_excel_bytes(df: pd.DataFrame) -> bytes:
     buffer = BytesIO()
     with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
@@ -181,6 +288,54 @@ def ufs_por_consultor(clientes: pd.DataFrame) -> dict[str, list[dict[str, str]]]
     for consultor in retorno:
         retorno[consultor] = sorted(retorno[consultor], key=lambda item: item["uf"])
     return retorno
+
+
+def alvos_unicos_por_uf(
+    clientes: pd.DataFrame,
+    credenciais: list[dict[str, str]] | None = None,
+    *,
+    exigir_login: bool | None = None,
+) -> list[dict[str, str]]:
+    if clientes is None or clientes.empty:
+        return []
+    credenciais = credenciais or []
+    cred_por_consultor = {
+        _norm_nome(item.get("consultor")): item
+        for item in credenciais
+        if _texto(item.get("usuario")) and _texto(item.get("senha"))
+    }
+    exigir_login = bool(cred_por_consultor) if exigir_login is None else exigir_login
+
+    base = clientes.copy()
+    for coluna in ["nome_rep", "uf", "cnpj_limpo"]:
+        if coluna not in base.columns:
+            base[coluna] = ""
+    if "cliente_ativo" in base.columns:
+        base = base[base["cliente_ativo"].fillna(True)].copy()
+    base["uf"] = base["uf"].astype(str).str.strip().str.upper()
+    base = base[base["uf"].isin(VALID_UFS) & base["cnpj_limpo"].astype(str).str.strip().ne("")]
+    if base.empty:
+        return []
+
+    alvos: list[dict[str, str]] = []
+    for uf, grupo_uf in base.sort_values(["uf", "nome_rep", "cnpj_limpo"]).groupby("uf", dropna=False):
+        escolhido: dict[str, str] | None = None
+        for _, linha in grupo_uf.iterrows():
+            consultor = _texto(linha.get("nome_rep")) or "SEM CONSULTOR"
+            cred = cred_por_consultor.get(_norm_nome(consultor), {})
+            if exigir_login and not cred:
+                continue
+            escolhido = {
+                "consultor": consultor,
+                "uf": str(uf),
+                "cnpj": normalizar_cnpj(linha.get("cnpj_limpo")),
+                "usuario": _texto(cred.get("usuario", "")),
+                "senha": _texto(cred.get("senha", "")),
+            }
+            break
+        if escolhido:
+            alvos.append(escolhido)
+    return alvos
 
 
 def criar_driver(headless: bool = True):
@@ -269,63 +424,226 @@ def extrair_mercado_farma(
     if not eans:
         raise RuntimeError("Não encontrei EANs na planilha produtos.xlsx para consultar o Mercado Farma.")
 
-    mapa_ufs = ufs_por_consultor(clientes)
-    if not mapa_ufs:
+    alvos_unicos = alvos_unicos_por_uf(clientes, credenciais, exigir_login=True)
+    if not alvos_unicos:
         raise RuntimeError("Não encontrei CNPJs com UF na base de clientes.")
 
-    existentes = mercado_farma_atual()
-    resultados: list[dict] = [] if existentes.empty else existentes.to_dict("records")
-
-    for cred in credenciais:
-        consultor = _texto(cred.get("consultor", ""))
-        usuario = _texto(cred.get("usuario", ""))
-        senha = _texto(cred.get("senha", ""))
-        alvos = mapa_ufs.get(consultor, [])
-        if not alvos or not usuario or not senha:
-            continue
-        for alvo in alvos:
-            driver = None
-            uf = alvo["uf"]
-            cnpj = alvo["cnpj"]
-            try:
-                if callable(log_fn):
-                    log_fn(f"{consultor} / {uf}: abrindo Mercado Farma")
-                driver = criar_driver(headless=headless)
-                login_mercadofarma(driver, usuario, senha, log_fn=log_fn)
-                selecionar_cnpj_catalogo(driver, cnpj, log_fn=log_fn)
-                for pos, ean in enumerate(eans, start=1):
-                    if callable(log_fn):
-                        log_fn(f"{consultor} / {uf}: consultando {pos}/{len(eans)} - {ean}")
-                    try:
-                        linhas = processar_ean_catalogo(driver, ean)
-                        resultados.extend(converter_linhas_extrator(linhas, consultor, uf, cnpj))
-                    except Exception as exc:
-                        resultados.append(
-                            {
-                                "consultor": consultor,
-                                "uf": uf,
-                                "cnpj_referencia": cnpj,
-                                "ean": ean,
-                                "produto": "",
-                                "distribuidora": "",
-                                "estoque": 0,
-                                "desconto": 0,
-                                "pf_dist": 0,
-                                "pf_fabrica": 0,
-                                "preco_com_imposto": 0,
-                                "preco_sem_imposto": 0,
-                                "data_atualizacao": agora_brasilia().strftime("%d/%m/%Y %H:%M:%S"),
-                                "status": "ERRO",
-                                "erro": str(exc),
-                            }
-                        )
-            finally:
-                if driver is not None:
-                    driver.quit()
+    resultados: list[dict] = []
+    for alvo in alvos_unicos:
+        resultados.extend(_extrair_alvo(alvo, eans, headless=headless, log_fn=log_fn))
 
     if not resultados:
         raise RuntimeError("Nenhum preço foi extraído. Verifique logins, senhas e CNPJs.")
     return salvar_mercado_farma(preparar_mercado_farma(pd.DataFrame(resultados)))
+
+
+def _linha_erro(alvo: dict[str, str], ean: str, erro: Exception | str) -> dict:
+    return {
+        "consultor": _texto(alvo.get("consultor")),
+        "uf": _texto(alvo.get("uf")).upper(),
+        "cnpj_referencia": normalizar_cnpj(alvo.get("cnpj")),
+        "ean": normalizar_ean(ean),
+        "produto": "",
+        "distribuidora": "",
+        "estoque": 0,
+        "desconto": 0,
+        "pf_dist": 0,
+        "pf_fabrica": 0,
+        "preco_com_imposto": 0,
+        "preco_sem_imposto": 0,
+        "data_atualizacao": agora_brasilia().strftime("%d/%m/%Y %H:%M:%S"),
+        "status": "ERRO",
+        "erro": str(erro),
+    }
+
+
+def _extrair_alvo(
+    alvo: dict[str, str],
+    eans: list[str],
+    *,
+    headless: bool,
+    log_fn: Callable[[str], None] | None = None,
+    start_index: int = 0,
+    estado: dict | None = None,
+    resultados: list[dict] | None = None,
+) -> list[dict]:
+    saida = resultados if resultados is not None else []
+    driver = None
+    consultor = _texto(alvo.get("consultor"))
+    uf = _texto(alvo.get("uf")).upper()
+    cnpj = normalizar_cnpj(alvo.get("cnpj"))
+    usuario = _texto(alvo.get("usuario"))
+    senha = _texto(alvo.get("senha"))
+    try:
+        if callable(log_fn):
+            log_fn(f"{consultor} / {uf}: abrindo Mercado Farma")
+        driver = criar_driver(headless=headless)
+        login_mercadofarma(driver, usuario, senha, log_fn=log_fn)
+        selecionar_cnpj_catalogo(driver, cnpj, log_fn=log_fn)
+        for idx in range(start_index, len(eans)):
+            ean = eans[idx]
+            if estado is not None and estado.get("cancelar"):
+                raise RuntimeError("Extração cancelada pelo usuário.")
+            job_id = str(estado.get("job_id", "")) if estado is not None else ""
+            cancel_event = _CANCEL_FLAGS.get(job_id)
+            if cancel_event is not None and cancel_event.is_set():
+                raise RuntimeError("Extração cancelada pelo usuário.")
+            if estado is not None:
+                estado["ean_index"] = idx
+                estado["current_ean"] = ean
+                estado["processados"] = int(estado.get("target_index", 0)) * len(eans) + idx
+            if callable(log_fn):
+                log_fn(f"{consultor} / {uf}: consultando {idx + 1}/{len(eans)} - {ean}")
+            try:
+                linhas = processar_ean_catalogo(driver, ean)
+                saida.extend(converter_linhas_extrator(linhas, consultor, uf, cnpj))
+            except Exception as exc:
+                saida.append(_linha_erro(alvo, ean, exc))
+            if estado is not None:
+                estado["ean_index"] = idx + 1
+                estado["processados"] = int(estado.get("target_index", 0)) * len(eans) + idx + 1
+            if estado is not None and (idx + 1) % FLUSH_EVERY_EANS == 0:
+                _salvar_parcial(pd.DataFrame(saida))
+                _salvar_estado_extracao(estado)
+        return saida
+    finally:
+        if driver is not None:
+            driver.quit()
+
+
+def iniciar_extracao_background(
+    credenciais: list[dict[str, str]],
+    clientes: pd.DataFrame,
+    produtos_mercado_farma: pd.DataFrame,
+    *,
+    headless: bool = True,
+    limite_eans: int | None = None,
+    retomar: bool = False,
+) -> dict:
+    atual = carregar_estado_extracao()
+    if atual.get("status") == "rodando" and atual.get("thread_alive"):
+        return atual
+
+    eans = obter_eans_para_consulta(produtos_mercado_farma)
+    if limite_eans:
+        eans = eans[: int(limite_eans)]
+    alvos = alvos_unicos_por_uf(clientes, credenciais, exigir_login=True)
+    if not eans:
+        raise RuntimeError("A planilha produtos.xlsx não tem EANs válidos.")
+    if not alvos:
+        raise RuntimeError("Não encontrei UF válida com vendedor que tenha login salvo.")
+
+    job_id = uuid4().hex
+    start_target = int(atual.get("target_index", 0) or 0) if retomar else 0
+    start_ean = int(atual.get("ean_index", 0) or 0) if retomar else 0
+    if not retomar and JOB_PARTIAL_PATH.exists():
+        JOB_PARTIAL_PATH.unlink()
+
+    estado = _estado_padrao()
+    estado.update(
+        {
+            "job_id": job_id,
+            "status": "rodando",
+            "inicio": agora_brasilia().isoformat(),
+            "total_eans": len(eans),
+            "total_alvos": len(alvos),
+            "total_passos": len(eans) * len(alvos),
+            "target_index": start_target,
+            "ean_index": start_ean,
+            "alvos": [{k: alvo.get(k, "") for k in ["consultor", "uf", "cnpj"]} for alvo in alvos],
+            "cancelar": False,
+        }
+    )
+    _log_estado(estado, "Extração iniciada em segundo plano.")
+    _salvar_estado_extracao(estado)
+
+    _CANCEL_FLAGS[job_id] = threading.Event()
+    thread = threading.Thread(
+        target=_worker_extracao,
+        args=(job_id, alvos, eans, headless, retomar, start_target, start_ean),
+        daemon=True,
+    )
+    _THREADS[job_id] = thread
+    thread.start()
+    return carregar_estado_extracao()
+
+
+def cancelar_extracao_background() -> dict:
+    estado = carregar_estado_extracao()
+    estado["cancelar"] = True
+    estado["mensagem"] = "Cancelamento solicitado. A extração vai parar ao finalizar o item atual."
+    job_id = str(estado.get("job_id", ""))
+    if job_id in _CANCEL_FLAGS:
+        _CANCEL_FLAGS[job_id].set()
+    _salvar_estado_extracao(estado)
+    return estado
+
+
+def _worker_extracao(
+    job_id: str,
+    alvos: list[dict[str, str]],
+    eans: list[str],
+    headless: bool,
+    retomar: bool,
+    start_target: int,
+    start_ean: int,
+) -> None:
+    estado = carregar_estado_extracao()
+    resultados: list[dict] = []
+    if retomar:
+        parcial = _carregar_parcial()
+        resultados = [] if parcial.empty else preparar_mercado_farma(parcial).to_dict("records")
+    try:
+        for target_idx in range(start_target, len(alvos)):
+            alvo = alvos[target_idx]
+            estado.update(
+                {
+                    "job_id": job_id,
+                    "status": "rodando",
+                    "target_index": target_idx,
+                    "ean_index": start_ean if target_idx == start_target else 0,
+                    "current_uf": alvo.get("uf", ""),
+                    "current_consultor": alvo.get("consultor", ""),
+                    "current_cnpj": alvo.get("cnpj", ""),
+                }
+            )
+            _log_estado(estado, f"{alvo.get('consultor')} / {alvo.get('uf')}: iniciando UF.")
+            _salvar_estado_extracao(estado)
+            _extrair_alvo(
+                alvo,
+                eans,
+                headless=headless,
+                start_index=start_ean if target_idx == start_target else 0,
+                estado=estado,
+                resultados=resultados,
+            )
+            start_ean = 0
+            estado["target_index"] = target_idx + 1
+            estado["ean_index"] = 0
+            estado["processados"] = min((target_idx + 1) * len(eans), int(estado.get("total_passos", 0) or 0))
+            _salvar_parcial(pd.DataFrame(resultados))
+            _salvar_estado_extracao(estado)
+            if estado.get("cancelar"):
+                raise RuntimeError("Extração cancelada pelo usuário.")
+
+        destino = salvar_mercado_farma(preparar_mercado_farma(pd.DataFrame(resultados)))
+        estado["status"] = "concluido"
+        estado["fim"] = agora_brasilia().isoformat()
+        estado["processados"] = int(estado.get("total_passos", 0) or 0)
+        estado["current_ean"] = ""
+        estado["erro"] = ""
+        _log_estado(estado, f"Extração concluída e salva em {destino.name}.")
+        _salvar_estado_extracao(estado)
+    except Exception as exc:
+        if resultados:
+            _salvar_parcial(pd.DataFrame(resultados))
+        estado["status"] = "cancelado" if "cancelada" in str(exc).lower() else "erro"
+        estado["fim"] = agora_brasilia().isoformat()
+        estado["erro"] = str(exc)
+        _log_estado(estado, f"Extração interrompida: {exc}")
+        _salvar_estado_extracao(estado)
+    finally:
+        _CANCEL_FLAGS.pop(job_id, None)
 
 
 def melhor_preco_por_ean(df: pd.DataFrame) -> pd.DataFrame:
@@ -334,7 +652,7 @@ def melhor_preco_por_ean(df: pd.DataFrame) -> pd.DataFrame:
         return base
     validos = base[(base["estoque"] > 0) & (base["preco_sem_imposto"] > 0)].copy()
     if validos.empty:
-        validos = base.copy()
+        return pd.DataFrame(columns=COLUNAS_MERCADO)
     return validos.sort_values(["uf", "ean", "preco_sem_imposto", "estoque"], ascending=[True, True, True, False]).drop_duplicates(["uf", "ean"])
 
 

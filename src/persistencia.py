@@ -33,6 +33,7 @@ ARQUIVOS_JSON = {
     "sip": "sip_grupos.json",
     "metadata": "metadata.json",
     "desafio": "desafio_gigantes.json",
+    "mercado_farma_job": "mercado_farma_job.json",
 }
 
 ARQUIVOS_PADRAO_DATA = {
