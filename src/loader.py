@@ -29,6 +29,7 @@ ARQUIVOS_PADRAO = {
     "acoes": DATA_DIR / "template_acoes_promocionais.xlsx",
     "produtos_mix": DATA_DIR / "template_produtos_mix.xlsx",
     "mercado_farma": DATA_DIR / "mercado_farma.xlsx",
+    "produtos_mercado_farma": DATA_DIR / "produtos.xlsx",
 }
 
 ABAS_PADRAO = {
@@ -37,6 +38,7 @@ ABAS_PADRAO = {
     "acoes": 0,
     "produtos_mix": 0,
     "mercado_farma": 0,
+    "produtos_mercado_farma": 0,
 }
 
 
@@ -111,12 +113,17 @@ def carregar_mercado_farma() -> pd.DataFrame:
     return _carregar_excel("mercado_farma")
 
 
+def carregar_produtos_mercado_farma() -> pd.DataFrame:
+    return _carregar_excel("produtos_mercado_farma")
+
+
 def carregar_dados_tratados() -> dict[str, pd.DataFrame | list[str]]:
     bussola_raw = carregar_bussola()
     painel_raw = carregar_painel_equipe()
     acoes_raw = carregar_acoes()
     produtos_raw = carregar_produtos_mix()
     mercado_raw = carregar_mercado_farma()
+    produtos_mercado_raw = carregar_produtos_mercado_farma()
 
     avisos: list[str] = []
     avisos.extend(validar_colunas_esperadas(bussola_raw, COLUNAS_BUSSOLA, "bussola.xlsx"))
@@ -146,6 +153,7 @@ def carregar_dados_tratados() -> dict[str, pd.DataFrame | list[str]]:
         "raw_acoes": acoes_raw,
         "raw_produtos_mix": produtos_raw,
         "mercado_farma": mercado_raw,
+        "produtos_mercado_farma": produtos_mercado_raw,
     }
 
 

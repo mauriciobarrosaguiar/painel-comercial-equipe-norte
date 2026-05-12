@@ -201,6 +201,7 @@ with tab_arquivos:
         ("Ações promocionais", "acoes"),
         ("Produtos / mix", "produtos_mix"),
         ("Mercado Farma", "mercado_farma"),
+        ("Produtos Mercado Farma", "produtos_mercado_farma"),
     ]
     cols = st.columns(2)
     for idx, (nome, chave) in enumerate(bases):
@@ -222,6 +223,7 @@ with tab_arquivos:
     up_acoes = st.file_uploader("template_acoes_promocionais.xlsx", type=["xlsx"], key="file_acoes")
     up_mix = st.file_uploader("template_produtos_mix.xlsx", type=["xlsx"], key="file_mix")
     up_mercado = st.file_uploader("mercado_farma.xlsx", type=["xlsx"], key="file_mercado_farma")
+    up_produtos_mercado = st.file_uploader("produtos.xlsx - EANs Mercado Farma", type=["xlsx"], key="file_produtos_mercado")
 
     c1, c2 = st.columns(2)
     if c1.button("Usar e salvar uploads", width="stretch"):
@@ -230,6 +232,7 @@ with tab_arquivos:
         registrar_upload("acoes", up_acoes)
         registrar_upload("produtos_mix", up_mix)
         registrar_upload("mercado_farma", up_mercado)
+        registrar_upload("produtos_mercado_farma", up_produtos_mercado)
         st.success("Uploads aplicados e salvos.")
         st.rerun()
     if c2.button("Voltar para pasta data", width="stretch"):

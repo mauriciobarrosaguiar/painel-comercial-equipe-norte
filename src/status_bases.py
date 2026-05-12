@@ -22,6 +22,7 @@ ARQUIVOS = {
     "acoes": "template_acoes_promocionais.xlsx",
     "produtos_mix": "template_produtos_mix.xlsx",
     "mercado_farma": "mercado_farma.xlsx",
+    "produtos_mercado_farma": "produtos.xlsx",
 }
 
 ARQUIVOS_PADRAO = {
@@ -30,6 +31,7 @@ ARQUIVOS_PADRAO = {
     "acoes": DATA_DIR / "template_acoes_promocionais.xlsx",
     "produtos_mix": DATA_DIR / "template_produtos_mix.xlsx",
     "mercado_farma": DATA_DIR / "mercado_farma.xlsx",
+    "produtos_mercado_farma": DATA_DIR / "produtos.xlsx",
 }
 
 

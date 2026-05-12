@@ -11,6 +11,7 @@ from src.mercado_farma import (
     formatar_tabela_mercado,
     mercado_farma_atual,
     melhor_preco_por_ean,
+    obter_eans_para_consulta,
     ufs_por_consultor,
 )
 from src.status_bases import formatar_ultima_atualizacao
@@ -57,13 +58,7 @@ def produto_card(item: pd.Series) -> None:
     )
 
 
-def credenciais_por_consultor(login: dict, consultores: list[str], usar_gd: bool) -> list[dict[str, str]]:
-    gd = login.get("gd", {}) if isinstance(login, dict) else {}
-    if usar_gd and gd.get("usuario") and gd.get("senha"):
-        return [
-            {"consultor": consultor, "usuario": str(gd.get("usuario", "")).strip(), "senha": str(gd.get("senha", "")).strip()}
-            for consultor in consultores
-        ]
+def credenciais_por_consultor(login: dict, consultores: list[str]) -> list[dict[str, str]]:
     salvos = login.get("consultores", {}) if isinstance(login, dict) else {}
     credenciais = []
     for consultor in consultores:
@@ -75,8 +70,7 @@ def credenciais_por_consultor(login: dict, consultores: list[str], usar_gd: bool
 
 dados = carregar_dados_tratados()
 clientes = dados["clientes"]
-vendas = dados["vendas"]
-produtos_mix = dados["produtos_mix"]
+produtos_mercado = dados["produtos_mercado_farma"]
 
 titulo_pagina("Mercado Farma / UF", "Preços e estoque por UF da carteira")
 
@@ -87,9 +81,8 @@ consultores = consultores_unicos(clientes)
 st.markdown(f"<span class='pill-note'>Última atualização: {formatar_ultima_atualizacao('mercado_farma')}</span>", unsafe_allow_html=True)
 
 with st.expander("Extração Mercado Farma", expanded=False):
-    st.caption("A extração usa os mesmos logins salvos para o Bússola. Para cada consultor, o painel escolhe um CNPJ de referência por UF da carteira.")
+    st.caption("A extração usa somente os logins dos vendedores salvos para o Bússola. Para cada consultor, o painel escolhe um CNPJ de referência por UF válida da carteira.")
     login = carregar_login_bussola()
-    usar_gd = st.checkbox("Usar login da GD quando estiver cadastrado", value=True)
     alvos = []
     for consultor, ufs in mapa_ufs.items():
         for item in ufs:
@@ -99,13 +92,28 @@ with st.expander("Extração Mercado Farma", expanded=False):
     else:
         st.info("Não encontrei CNPJs com UF para montar a extração.")
 
+    eans = obter_eans_para_consulta(produtos_mercado)
+    st.markdown(
+        f"<span class='pill-note'>Lista produtos.xlsx: {len(eans)} EANs</span>"
+        f"<span class='pill-note'>Atualização da lista: {formatar_ultima_atualizacao('produtos_mercado_farma')}</span>",
+        unsafe_allow_html=True,
+    )
+    upload_eans = st.file_uploader("Atualizar planilha produtos.xlsx com EANs", type=["xlsx"], key="upload_produtos_mercado_farma")
+    if upload_eans is not None:
+        registrar_upload("produtos_mercado_farma", upload_eans)
+        st.cache_data.clear()
+        st.success("Lista produtos.xlsx salva para as próximas extrações.")
+        st.rerun()
+
     headless = st.toggle("Rodar navegador oculto", value=True, key="mercado_headless")
     limite_eans = st.number_input("Limite de EANs para teste (0 = todos)", min_value=0, step=10, value=0)
     col1, col2 = st.columns(2)
     if col1.button("Extrair Mercado Farma por UF", width="stretch", disabled=not bool(alvos)):
-        credenciais = credenciais_por_consultor(login, consultores, usar_gd=usar_gd)
+        credenciais = credenciais_por_consultor(login, consultores)
         if not credenciais:
-            st.error("Nenhum login salvo encontrado. Cadastre os acessos na tela Importação > Bússola Web.")
+            st.error("Nenhum login de vendedor salvo encontrado. Cadastre os acessos dos vendedores na tela Importação > Bússola Web.")
+        elif not eans:
+            st.error("A planilha produtos.xlsx não tem EANs válidos para consultar.")
         else:
             logs: list[str] = []
             area = st.empty()
@@ -118,8 +126,7 @@ with st.expander("Extração Mercado Farma", expanded=False):
                 destino = extrair_mercado_farma(
                     credenciais,
                     clientes,
-                    produtos_mix,
-                    vendas,
+                    produtos_mercado,
                     headless=headless,
                     limite_eans=int(limite_eans) if limite_eans else None,
                     log_fn=log,

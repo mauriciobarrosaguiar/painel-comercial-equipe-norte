@@ -36,6 +36,36 @@ COLUNAS_MERCADO = [
     "erro",
 ]
 
+VALID_UFS = {
+    "AC",
+    "AL",
+    "AP",
+    "AM",
+    "BA",
+    "CE",
+    "DF",
+    "ES",
+    "GO",
+    "MA",
+    "MT",
+    "MS",
+    "MG",
+    "PA",
+    "PB",
+    "PR",
+    "PE",
+    "PI",
+    "RJ",
+    "RN",
+    "RS",
+    "RO",
+    "RR",
+    "SC",
+    "SP",
+    "SE",
+    "TO",
+}
+
 
 def _texto(valor: object) -> str:
     return "" if valor is None or pd.isna(valor) else str(valor).strip()
@@ -119,17 +149,12 @@ def dataframe_excel_bytes(df: pd.DataFrame) -> bytes:
     return buffer.getvalue()
 
 
-def obter_eans_para_consulta(produtos_mix: pd.DataFrame, vendas: pd.DataFrame) -> list[str]:
-    fontes: list[pd.Series] = []
-    if produtos_mix is not None and not produtos_mix.empty:
-        coluna = "ean_limpo" if "ean_limpo" in produtos_mix.columns else "ean"
-        if coluna in produtos_mix.columns:
-            fontes.append(produtos_mix[coluna])
-    if vendas is not None and not vendas.empty and "ean_limpo" in vendas.columns:
-        fontes.append(vendas["ean_limpo"])
-    if not fontes:
+def obter_eans_para_consulta(produtos_mercado_farma: pd.DataFrame) -> list[str]:
+    if produtos_mercado_farma is None or produtos_mercado_farma.empty:
         return []
-    valores = pd.concat(fontes, ignore_index=True).dropna().astype(str).map(normalizar_ean)
+    base = padronizar_colunas(produtos_mercado_farma.copy())
+    coluna = "ean_limpo" if "ean_limpo" in base.columns else "ean" if "ean" in base.columns else base.columns[0]
+    valores = base[coluna].dropna().astype(str).map(normalizar_ean)
     valores = valores[valores.ne("")]
     return sorted(valores.unique().tolist())
 
@@ -148,7 +173,7 @@ def ufs_por_consultor(clientes: pd.DataFrame) -> dict[str, list[dict[str, str]]]
     for (consultor, uf), grupo in base.groupby(["nome_rep", "uf"], dropna=False):
         consultor_txt = _texto(consultor) or "SEM CONSULTOR"
         uf_txt = _texto(uf).upper()
-        if not uf_txt:
+        if uf_txt not in VALID_UFS:
             continue
         cnpj = str(grupo["cnpj_limpo"].dropna().astype(str).iloc[0])
         retorno.setdefault(consultor_txt, []).append({"uf": uf_txt, "cnpj": cnpj})
@@ -199,18 +224,17 @@ def converter_linhas_extrator(linhas: list[dict], consultor: str, uf: str, cnpj:
 def extrair_mercado_farma(
     credenciais: list[dict[str, str]],
     clientes: pd.DataFrame,
-    produtos_mix: pd.DataFrame,
-    vendas: pd.DataFrame,
+    produtos_mercado_farma: pd.DataFrame,
     *,
     headless: bool = True,
     limite_eans: int | None = None,
     log_fn: Callable[[str], None] | None = None,
 ) -> Path:
-    eans = obter_eans_para_consulta(produtos_mix, vendas)
+    eans = obter_eans_para_consulta(produtos_mercado_farma)
     if limite_eans:
         eans = eans[: int(limite_eans)]
     if not eans:
-        raise RuntimeError("Não encontrei EANs em Produtos / Mix ou nas vendas para consultar o Mercado Farma.")
+        raise RuntimeError("Não encontrei EANs na planilha produtos.xlsx para consultar o Mercado Farma.")
 
     mapa_ufs = ufs_por_consultor(clientes)
     if not mapa_ufs:
