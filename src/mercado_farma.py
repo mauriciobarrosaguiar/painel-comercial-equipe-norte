@@ -41,6 +41,10 @@ COLUNAS_MERCADO = [
 
 JOB_KEY = "mercado_farma_job"
 JOB_PARTIAL_PATH = DATA_DIR / "_mercado_farma_parcial.xlsx"
+MERCADO_FARMA_DIR = DATA_DIR / "mercadofarma"
+MERCADO_FARMA_CONSOLIDADO = MERCADO_FARMA_DIR / "mercadofarma_consolidado.csv"
+MERCADO_FARMA_STATUS = MERCADO_FARMA_DIR / "status_mercadofarma.json"
+DESCONTOS_KEY = "mercado_farma_descontos"
 FLUSH_EVERY_EANS = 25
 _THREADS: dict[str, threading.Thread] = {}
 _CANCEL_FLAGS: dict[str, threading.Event] = {}
@@ -200,6 +204,7 @@ def preparar_mercado_farma(df: pd.DataFrame | None) -> pd.DataFrame:
         "erro": "erro",
         "uf": "uf",
         "consultor": "consultor",
+        "consultor_usado": "consultor",
     }
     for origem, destino in aliases.items():
         if origem in base.columns and destino not in base.columns:
@@ -222,6 +227,61 @@ def preparar_mercado_farma(df: pd.DataFrame | None) -> pd.DataFrame:
 
 def mercado_farma_atual() -> pd.DataFrame:
     return preparar_mercado_farma(carregar_mercado_farma())
+
+
+def carregar_status_consolidado() -> dict:
+    if not MERCADO_FARMA_STATUS.exists():
+        return {}
+    try:
+        import json
+
+        dados = json.loads(MERCADO_FARMA_STATUS.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    return dados if isinstance(dados, dict) else {}
+
+
+def carregar_descontos_adicionais() -> dict:
+    dados = carregar_json(DESCONTOS_KEY, {"distribuidoras": {}})
+    if not isinstance(dados, dict):
+        return {"distribuidoras": {}}
+    dados.setdefault("distribuidoras", {})
+    return dados
+
+
+def salvar_descontos_adicionais(dados: dict) -> None:
+    if not isinstance(dados, dict):
+        dados = {"distribuidoras": {}}
+    dados.setdefault("distribuidoras", {})
+    salvar_json(DESCONTOS_KEY, dados, "Atualiza descontos adicionais Mercado Farma")
+
+
+def aplicar_descontos_adicionais(df: pd.DataFrame, configuracao: dict | None = None) -> pd.DataFrame:
+    base = preparar_mercado_farma(df)
+    if base.empty:
+        return base
+    dados = configuracao if isinstance(configuracao, dict) else carregar_descontos_adicionais()
+    regras = dados.get("distribuidoras", {}) if isinstance(dados, dict) else {}
+    if not isinstance(regras, dict):
+        return base
+    for distribuidora, regra in regras.items():
+        if not isinstance(regra, dict):
+            continue
+        percentual = converter_numero(regra.get("percentual", 0))
+        if percentual > 1:
+            percentual = percentual / 100
+        percentual = max(min(percentual, 1), 0)
+        if percentual <= 0:
+            continue
+        sem_desconto = {normalizar_ean(ean) for ean in regra.get("eans_sem_desconto", []) if normalizar_ean(ean)}
+        mask = base["distribuidora"].astype(str).eq(str(distribuidora))
+        if sem_desconto:
+            mask = mask & ~base["ean"].astype(str).isin(sem_desconto)
+        fator = 1 - percentual
+        base.loc[mask, "preco_sem_imposto"] = base.loc[mask, "preco_sem_imposto"] * fator
+        base.loc[mask, "preco_com_imposto"] = base.loc[mask, "preco_com_imposto"] * fator
+        base.loc[mask, "desconto"] = (base.loc[mask, "desconto"] + percentual).clip(upper=1)
+    return base
 
 
 def salvar_mercado_farma(df: pd.DataFrame) -> Path:
@@ -519,6 +579,7 @@ def iniciar_extracao_background(
     headless: bool = True,
     limite_eans: int | None = None,
     retomar: bool = False,
+    ufs: list[str] | None = None,
 ) -> dict:
     atual = carregar_estado_extracao()
     if atual.get("status") == "rodando" and atual.get("thread_alive"):
@@ -528,6 +589,9 @@ def iniciar_extracao_background(
     if limite_eans:
         eans = eans[: int(limite_eans)]
     alvos = alvos_unicos_por_uf(clientes, credenciais, exigir_login=True)
+    if ufs:
+        ufs_set = {str(uf).strip().upper() for uf in ufs if str(uf).strip()}
+        alvos = [alvo for alvo in alvos if str(alvo.get("uf", "")).upper() in ufs_set]
     if not eans:
         raise RuntimeError("A planilha produtos.xlsx não tem EANs válidos.")
     if not alvos:

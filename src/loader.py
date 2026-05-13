@@ -22,6 +22,7 @@ from src.tratamento import (
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 DATA_DIR = ROOT_DIR / "data"
+MERCADO_FARMA_CONSOLIDADO = DATA_DIR / "mercadofarma" / "mercadofarma_consolidado.csv"
 
 ARQUIVOS_PADRAO = {
     "bussola": DATA_DIR / "bussola.xlsx",
@@ -110,6 +111,8 @@ def carregar_produtos_mix() -> pd.DataFrame:
 
 
 def carregar_mercado_farma() -> pd.DataFrame:
+    if MERCADO_FARMA_CONSOLIDADO.exists():
+        return pd.read_csv(MERCADO_FARMA_CONSOLIDADO, dtype=str, sep=None, engine="python")
     return _carregar_excel("mercado_farma")
 
 

@@ -32,6 +32,26 @@ def aplicar_css() -> None:
             --norte-red: #D15353;
             --norte-amber: #C7A945;
         }
+        * {
+            scrollbar-width: auto;
+            scrollbar-color: #176A45 #E8EFE4;
+        }
+        ::-webkit-scrollbar {
+            width: 16px;
+            height: 14px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #E8EFE4;
+            border-radius: 999px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #176A45;
+            border: 3px solid #E8EFE4;
+            border-radius: 999px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #0D3B2A;
+        }
         .stApp {
             background: linear-gradient(110deg, #F8F5E9 0%, #EEF6EF 100%);
             color: var(--norte-text);
@@ -84,6 +104,9 @@ def aplicar_css() -> None:
         [data-testid="stSidebar"] {
             background: #062F22;
             border-right: 0;
+        }
+        [data-testid="stSidebar"] ::-webkit-scrollbar {
+            width: 16px;
         }
         [data-testid="stSidebarNav"],
         [data-testid="stSidebarNavItems"],

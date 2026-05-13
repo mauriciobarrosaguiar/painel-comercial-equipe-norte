@@ -33,6 +33,7 @@ ARQUIVOS_PADRAO = {
     "mercado_farma": DATA_DIR / "mercado_farma.xlsx",
     "produtos_mercado_farma": DATA_DIR / "produtos.xlsx",
 }
+MERCADO_FARMA_CONSOLIDADO = DATA_DIR / "mercadofarma" / "mercadofarma_consolidado.csv"
 
 
 def _secret(nome: str, padrao: str = "") -> str:
@@ -119,6 +120,9 @@ def _github_metadata(chave: str) -> str | None:
 def ultima_atualizacao_base(chave: str) -> object | None:
     if chave not in ARQUIVOS:
         return None
+
+    if chave == "mercado_farma" and MERCADO_FARMA_CONSOLIDADO.exists():
+        return datetime_arquivo_brasilia(MERCADO_FARMA_CONSOLIDADO)
 
     local = LOCAL_STORE_DIR / ARQUIVOS[chave]
     if local.exists():

@@ -81,17 +81,23 @@ def compras_mix_por_cliente(vendas: pd.DataFrame, mix_foco: pd.DataFrame) -> pd.
         if coluna not in base.columns:
             base[coluna] = 0 if coluna in {"valor_vendido_sem_imposto", "quantidade_base"} else ""
     base["ean_limpo"] = base["ean_limpo"].apply(normalizar_ean)
-    base = base.merge(mix_foco.rename(columns={"produto": "produto_mix", "tipo_mix": "tipo_mix_mix"}), on="ean_limpo", how="inner")
+    base = base.merge(
+        mix_foco.rename(columns={"produto": "produto_cadastro_mix", "tipo_mix": "tipo_cadastro_mix"}),
+        on="ean_limpo",
+        how="inner",
+    )
     if base.empty:
         return pd.DataFrame(columns=["cnpj_limpo", "ean_limpo", "produto", "tipo_mix", "valor_vendido", "unidades_vendidas"])
     base["valor_vendido_sem_imposto"] = pd.to_numeric(base["valor_vendido_sem_imposto"], errors="coerce").fillna(0)
     base["quantidade_base"] = pd.to_numeric(base["quantidade_base"], errors="coerce").fillna(0)
-    base["produto_final"] = base["produto_mix"].where(base["produto_mix"].astype(str).str.strip().ne(""), base["produto"])
+    produto_mix = base.get("produto_cadastro_mix", pd.Series("", index=base.index)).astype(str)
+    produto_venda = base.get("produto", pd.Series("", index=base.index)).astype(str)
+    base["produto_final"] = produto_mix.where(produto_mix.str.strip().ne(""), produto_venda)
     agrupado = (
         base.groupby(["cnpj_limpo", "ean_limpo"], dropna=False)
         .agg(
             produto=("produto_final", "first"),
-            tipo_mix=("tipo_mix_mix", "first"),
+            tipo_mix=("tipo_cadastro_mix", "first"),
             valor_vendido=("valor_vendido_sem_imposto", "sum"),
             unidades_vendidas=("quantidade_base", "sum"),
         )
@@ -104,7 +110,7 @@ def carregar_melhores_precos() -> pd.DataFrame:
     try:
         from src import mercado_farma as mf
 
-        mercado = mf.mercado_farma_atual()
+        mercado = mf.aplicar_descontos_adicionais(mf.mercado_farma_atual())
         return mf.melhor_preco_por_ean(mercado)
     except Exception:
         return pd.DataFrame()

@@ -34,6 +34,7 @@ ARQUIVOS_JSON = {
     "metadata": "metadata.json",
     "desafio": "desafio_gigantes.json",
     "mercado_farma_job": "mercado_farma_job.json",
+    "mercado_farma_descontos": "mercado_farma_descontos.json",
 }
 
 ARQUIVOS_PADRAO_DATA = {

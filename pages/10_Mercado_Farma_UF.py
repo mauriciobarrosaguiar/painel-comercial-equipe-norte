@@ -5,12 +5,13 @@ from html import escape
 import pandas as pd
 import streamlit as st
 
+from src import github_actions as gha
+from src import mercado_farma as mf
 from src.configuracoes import carregar_login_bussola, consultores_unicos
 from src.layout import botao_download_excel, card_metrica, dataframe_com_download, titulo_pagina
 from src.loader import carregar_dados_tratados, registrar_upload
-from src import mercado_farma as mf
 from src.status_bases import formatar_ultima_atualizacao
-from src.tratamento import formatar_moeda
+from src.tratamento import formatar_moeda, normalizar_ean
 
 
 def desconto_texto(valor: object) -> str:
@@ -21,30 +22,71 @@ def desconto_texto(valor: object) -> str:
     return f"{numero * 100:,.2f}%".replace(",", "X").replace(".", ",").replace("X", ".")
 
 
-def _texto_card(valor: object, padrao: str = "-") -> str:
+def _texto(valor: object, padrao: str = "-") -> str:
     texto = "" if valor is None or pd.isna(valor) else str(valor).strip()
-    return escape(texto or padrao)
+    return texto or padrao
 
 
-def produto_card(item: pd.Series) -> None:
-    preco = float(item.get("preco_sem_imposto", 0) or 0)
-    preco_com = float(item.get("preco_com_imposto", 0) or 0)
-    pf_dist = float(item.get("pf_dist", 0) or 0)
-    estoque = int(float(item.get("estoque", 0) or 0))
-    produto = _texto_card(item.get("produto"), "Produto sem descrição")
-    distribuidora = _texto_card(item.get("distribuidora"), "Distribuidora não identificada")
-    st.markdown(
-        f"""
-        <div class="produto-card">
+def _html(valor: object, padrao: str = "-") -> str:
+    return escape(_texto(valor, padrao))
+
+
+def tabela_mercado_sem_consultor(df: pd.DataFrame) -> pd.DataFrame:
+    tabela = mf.formatar_tabela_mercado(df)
+    return tabela.drop(columns=["Consultor"], errors="ignore")
+
+
+def produto_card_distribuidora(grupo: pd.DataFrame, key: str) -> None:
+    opcoes = grupo.sort_values(["preco_sem_imposto", "estoque"], ascending=[True, False]).reset_index(drop=True)
+    if opcoes.empty:
+        return
+
+    with st.container(border=True):
+        primeiro = opcoes.iloc[0]
+        st.markdown(
+            f"""
             <div class="produto-top">
-                <span class="desconto-badge">{desconto_texto(item.get('desconto', 0))}</span>
-                <span class="produto-meta">{_texto_card(item.get('uf'))}</span>
+                <span class="desconto-badge">{desconto_texto(primeiro.get('desconto', 0))}</span>
+                <span class="produto-meta">{_html(primeiro.get('uf'))}</span>
             </div>
-            <div class="produto-nome">{produto}</div>
-            <div class="produto-meta">EMS Genéricos &nbsp; | &nbsp; {_texto_card(item.get('ean'))}</div>
+            <div class="produto-nome">{_html(primeiro.get('produto'), 'Produto sem descrição')}</div>
+            <div class="produto-meta">EMS Genéricos &nbsp; | &nbsp; {_html(primeiro.get('ean'))}</div>
+            """,
+            unsafe_allow_html=True,
+        )
+        st.caption("Distribuidora")
+        if len(opcoes) > 1:
+            def rotulo(indice: int) -> str:
+                item = opcoes.iloc[indice]
+                dist = _texto(item.get("distribuidora"), "Distribuidora não identificada")
+                preco = formatar_moeda(item.get("preco_sem_imposto", 0))
+                estoque = int(float(item.get("estoque", 0) or 0))
+                return f"{dist} | {preco} | {estoque} un."
+
+            escolha = st.selectbox(
+                "Distribuidora do produto",
+                list(range(len(opcoes))),
+                format_func=rotulo,
+                key=key,
+                label_visibility="collapsed",
+            )
+        else:
+            escolha = 0
+            st.markdown(
+                f"<span class='pill-note'>{_html(opcoes.iloc[0].get('distribuidora'), 'Distribuidora não identificada')}</span>",
+                unsafe_allow_html=True,
+            )
+
+        item = opcoes.iloc[int(escolha)]
+        preco = float(item.get("preco_sem_imposto", 0) or 0)
+        preco_com = float(item.get("preco_com_imposto", 0) or 0)
+        pf_dist = float(item.get("pf_dist", 0) or 0)
+        estoque = int(float(item.get("estoque", 0) or 0))
+        st.markdown(
+            f"""
             <div class="preco-box">
                 <div>
-                    <div class="preco-dist">{distribuidora}</div>
+                    <div class="preco-dist">{_html(item.get('distribuidora'), 'Distribuidora não identificada')}</div>
                     <div class="preco-estoque">{estoque} un. disponíveis</div>
                 </div>
                 <div>
@@ -53,30 +95,9 @@ def produto_card(item: pd.Series) -> None:
                     <div class="preco-secundario">Com imposto: {formatar_moeda(preco_com)}</div>
                 </div>
             </div>
-            <div class="produto-meta">Consultor: {_texto_card(item.get('consultor'))}</div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-
-def produto_card_distribuidora(grupo: pd.DataFrame, key: str) -> None:
-    opcoes = grupo.sort_values(["preco_sem_imposto", "estoque"], ascending=[True, False]).reset_index(drop=True)
-    if opcoes.empty:
-        return
-
-    if len(opcoes) > 1:
-        def rotulo(indice: int) -> str:
-            item = opcoes.iloc[indice]
-            dist = str(item.get("distribuidora") or "Distribuidora não identificada")
-            preco = formatar_moeda(item.get("preco_sem_imposto", 0))
-            estoque = int(float(item.get("estoque", 0) or 0))
-            return f"{dist} | {preco} | {estoque} un."
-
-        escolha = st.selectbox("Distribuidora", list(range(len(opcoes))), format_func=rotulo, key=key)
-    else:
-        escolha = 0
-    produto_card(opcoes.iloc[int(escolha)])
+            """,
+            unsafe_allow_html=True,
+        )
 
 
 def credenciais_por_consultor(login: dict, consultores: list[str]) -> list[dict[str, str]]:
@@ -112,7 +133,96 @@ def painel_status_extracao(estado: dict) -> None:
         st.error(str(estado["erro"]))
     logs = estado.get("logs", [])
     if logs:
-        st.code("\n".join(str(item) for item in logs[-18:]), language="text")
+        linhas = []
+        for item in logs[-18:]:
+            texto = str(item)
+            if " / " in texto and ": " in texto:
+                inicio, resto = texto.split(" - ", 1) if " - " in texto else ("", texto)
+                partes = resto.split(" / ", 1)
+                if len(partes) == 2:
+                    texto = f"{inicio} - UF {partes[1]}" if inicio else f"UF {partes[1]}"
+            linhas.append(texto)
+        st.code("\n".join(linhas), language="text")
+
+
+def tabela_status_consolidado(status: dict) -> pd.DataFrame:
+    itens = status.get("status", []) if isinstance(status, dict) else []
+    if not isinstance(itens, list):
+        return pd.DataFrame()
+    linhas = []
+    for item in itens:
+        if not isinstance(item, dict):
+            continue
+        linhas.append(
+            {
+                "UF": item.get("uf", ""),
+                "Status": item.get("status", ""),
+                "CNPJ referência": item.get("cnpj_referencia", ""),
+                "Produtos": item.get("total_produtos", 0),
+                "Erro": item.get("erro", ""),
+            }
+        )
+    return pd.DataFrame(linhas)
+
+
+def configurar_desconto_adicional(mercado_base: pd.DataFrame) -> dict:
+    config = mf.carregar_descontos_adicionais()
+    with st.expander("Desconto adicional por distribuidora", expanded=False):
+        if mercado_base.empty:
+            st.info("Extraia ou importe o Mercado Farma para cadastrar desconto adicional.")
+            return config
+        distribuidoras = sorted(mercado_base["distribuidora"].dropna().astype(str).str.strip().replace("", pd.NA).dropna().unique().tolist())
+        if not distribuidoras:
+            st.info("Nenhuma distribuidora encontrada na base atual.")
+            return config
+        dist = st.selectbox("Distribuidora", distribuidoras, key="mf_desconto_dist")
+        regras = config.setdefault("distribuidoras", {})
+        regra = regras.get(dist, {})
+        percentual_atual = float(regra.get("percentual", 0) or 0)
+        percentual_visual = percentual_atual * 100 if percentual_atual <= 1 else percentual_atual
+        percentual = st.number_input("Desconto adicional (%)", min_value=0.0, max_value=100.0, step=0.5, value=float(percentual_visual), key="mf_desconto_pct")
+
+        produtos_dist = mercado_base[mercado_base["distribuidora"].astype(str).eq(dist)].copy()
+        produtos_dist = produtos_dist[["ean", "produto"]].drop_duplicates("ean").sort_values("produto")
+        mapa_label_ean = {
+            f"{_texto(row.produto, 'Produto sem descrição')} | {row.ean}": str(row.ean)
+            for row in produtos_dist.itertuples(index=False)
+        }
+        eans_sem = set(str(ean) for ean in regra.get("eans_sem_desconto", []))
+        default_labels = [label for label, ean in mapa_label_ean.items() if ean in eans_sem]
+        selecionados = st.multiselect(
+            "Produtos sem desconto adicional nesta distribuidora",
+            list(mapa_label_ean.keys()),
+            default=default_labels,
+            key="mf_desconto_excecoes",
+        )
+        c1, c2 = st.columns(2)
+        if c1.button("Salvar desconto adicional", width="stretch"):
+            regras[dist] = {
+                "percentual": float(percentual) / 100,
+                "eans_sem_desconto": [normalizar_ean(mapa_label_ean[label]) for label in selecionados],
+            }
+            mf.salvar_descontos_adicionais(config)
+            st.success("Desconto adicional salvo.")
+            st.rerun()
+        if c2.button("Remover desconto da distribuidora", width="stretch", disabled=dist not in regras):
+            regras.pop(dist, None)
+            mf.salvar_descontos_adicionais(config)
+            st.success("Desconto adicional removido.")
+            st.rerun()
+
+        if regras:
+            resumo = [
+                {
+                    "Distribuidora": nome,
+                    "Desconto adicional": f"{float(regra.get('percentual', 0) or 0) * 100:.2f}%",
+                    "Produtos sem adicional": len(regra.get("eans_sem_desconto", [])),
+                }
+                for nome, regra in regras.items()
+                if isinstance(regra, dict)
+            ]
+            st.dataframe(pd.DataFrame(resumo), width="stretch", hide_index=True)
+    return config
 
 
 dados = carregar_dados_tratados()
@@ -121,24 +231,24 @@ produtos_mercado = dados["produtos_mercado_farma"]
 
 titulo_pagina("Mercado Farma / UF", "Preços e estoque por UF da carteira")
 
-mercado = mf.mercado_farma_atual()
+mercado_original = mf.mercado_farma_atual()
+descontos_config = mf.carregar_descontos_adicionais()
+mercado = mf.aplicar_descontos_adicionais(mercado_original, descontos_config)
 consultores = consultores_unicos(clientes)
 login = carregar_login_bussola()
 credenciais = credenciais_por_consultor(login, consultores)
 alvos = mf.alvos_unicos_por_uf(clientes, credenciais, exigir_login=True)
 ufs_carteira = set(mf.ufs_validas_clientes(clientes))
-ufs_com_login = {alvo["uf"] for alvo in alvos}
-ufs_sem_login = sorted(ufs_carteira - ufs_com_login)
+ufs_alvos = sorted({alvo["uf"] for alvo in alvos} or ufs_carteira)
+ufs_sem_login = sorted(ufs_carteira - {alvo["uf"] for alvo in alvos})
 
-st.markdown(f"<span class='pill-note'>Última atualização: {formatar_ultima_atualizacao('mercado_farma')}</span>", unsafe_allow_html=True)
+st.markdown(f"<span class='pill-note'>Última atualização consolidada: {formatar_ultima_atualizacao('mercado_farma')}</span>", unsafe_allow_html=True)
 
 with st.expander("Extração Mercado Farma", expanded=False):
-    st.caption("A extração usa somente logins de vendedores. Cada UF é extraída uma única vez com um CNPJ de referência válido.")
+    st.caption("Cada UF usa um CNPJ de referência. O nome do usuário usado fica oculto na tela.")
     if alvos:
-        tabela_alvos = pd.DataFrame(
-            [{"UF": item["uf"], "Consultor usado": item["consultor"], "CNPJ referência": item["cnpj"]} for item in alvos]
-        )
-        st.dataframe(tabela_alvos, width="stretch", height=190)
+        tabela_alvos = pd.DataFrame([{"UF": item["uf"], "CNPJ referência": item["cnpj"]} for item in alvos])
+        st.dataframe(tabela_alvos, width="stretch", height=170, hide_index=True)
     else:
         st.info("Cadastre pelo menos um login de vendedor para montar a extração por UF.")
     if ufs_sem_login:
@@ -157,49 +267,91 @@ with st.expander("Extração Mercado Farma", expanded=False):
         st.success("Lista produtos.xlsx salva para as próximas extrações.")
         st.rerun()
 
-    estado = mf.carregar_estado_extracao()
-    painel_status_extracao(estado)
-
-    headless = st.toggle("Rodar navegador oculto", value=True, key="mercado_headless")
+    ufs_para_rodar = st.multiselect("UFs para atualizar", ufs_alvos, default=ufs_alvos, key="mf_ufs_rodar")
     limite_eans = st.number_input("Limite de EANs para teste (0 = todos)", min_value=0, step=10, value=0)
-    rodando = estado.get("status") == "rodando" and estado.get("thread_alive")
-    pode_retomar = estado.get("status") in {"erro", "cancelado", "interrompido"}
 
-    col1, col2, col3 = st.columns(3)
-    if col1.button("Iniciar extração do zero", width="stretch", disabled=rodando or not bool(alvos)):
+    col_git1, col_git2 = st.columns(2)
+    if col_git1.button("Atualizar UFs selecionadas pelo GitHub Actions", width="stretch", disabled=not bool(ufs_para_rodar)):
         try:
-            mf.iniciar_extracao_background(
-                credenciais,
-                clientes,
-                produtos_mercado,
-                headless=headless,
-                limite_eans=int(limite_eans) if limite_eans else None,
-                retomar=False,
-            )
-            st.success("Extração iniciada. Você pode sair desta página e voltar para acompanhar.")
-            st.rerun()
+            gha.disparar_mercado_farma(ufs_para_rodar, int(limite_eans or 0))
+            st.success("GitHub Actions disparado. Acompanhe o status abaixo.")
         except Exception as exc:
-            st.error(f"Falha ao iniciar extração: {exc}")
-
-    if col2.button("Retomar de onde parou", width="stretch", disabled=rodando or not pode_retomar or not bool(alvos)):
+            st.error(f"Não consegui disparar o GitHub Actions: {exc}")
+    if col_git2.button("Atualizar todas as UFs pelo GitHub Actions", width="stretch", disabled=not bool(ufs_alvos)):
         try:
-            mf.iniciar_extracao_background(
-                credenciais,
-                clientes,
-                produtos_mercado,
-                headless=headless,
-                limite_eans=int(limite_eans) if limite_eans else None,
-                retomar=True,
-            )
-            st.success("Extração retomada em segundo plano.")
-            st.rerun()
+            gha.disparar_mercado_farma(ufs_alvos, int(limite_eans or 0))
+            st.success("GitHub Actions disparado para todas as UFs.")
         except Exception as exc:
-            st.error(f"Falha ao retomar extração: {exc}")
+            st.error(f"Não consegui disparar o GitHub Actions: {exc}")
 
-    if col3.button("Cancelar extração", width="stretch", disabled=not rodando):
-        mf.cancelar_extracao_background()
-        st.warning("Cancelamento solicitado.")
-        st.rerun()
+    status_consolidado = mf.carregar_status_consolidado()
+    status_tabela = tabela_status_consolidado(status_consolidado)
+    if not status_tabela.empty:
+        st.markdown("<span class='pill-note'>Status do consolidado</span>", unsafe_allow_html=True)
+        st.dataframe(status_tabela, width="stretch", hide_index=True)
+
+    runs = gha.listar_execucoes_mercado_farma(5)
+    if runs:
+        st.markdown("<span class='pill-note'>Últimas execuções GitHub Actions</span>", unsafe_allow_html=True)
+        st.dataframe(
+            pd.DataFrame(
+                [
+                    {
+                        "Criada em": run.get("created_at", ""),
+                        "Status": run.get("status", ""),
+                        "Conclusão": run.get("conclusion", ""),
+                        "Branch": run.get("head_branch", ""),
+                    }
+                    for run in runs
+                ]
+            ),
+            width="stretch",
+            hide_index=True,
+        )
+
+    with st.expander("Extração local de apoio", expanded=False):
+        estado = mf.carregar_estado_extracao()
+        painel_status_extracao(estado)
+        headless = st.toggle("Rodar navegador oculto", value=True, key="mercado_headless")
+        rodando = estado.get("status") == "rodando" and estado.get("thread_alive")
+        pode_retomar = estado.get("status") in {"erro", "cancelado", "interrompido"}
+        col1, col2, col3 = st.columns(3)
+        if col1.button("Iniciar extração local", width="stretch", disabled=rodando or not bool(ufs_para_rodar)):
+            try:
+                mf.iniciar_extracao_background(
+                    credenciais,
+                    clientes,
+                    produtos_mercado,
+                    headless=headless,
+                    limite_eans=int(limite_eans) if limite_eans else None,
+                    retomar=False,
+                    ufs=ufs_para_rodar,
+                )
+                st.success("Extração local iniciada.")
+                st.rerun()
+            except Exception as exc:
+                st.error(f"Falha ao iniciar extração local: {exc}")
+
+        if col2.button("Retomar local", width="stretch", disabled=rodando or not pode_retomar):
+            try:
+                mf.iniciar_extracao_background(
+                    credenciais,
+                    clientes,
+                    produtos_mercado,
+                    headless=headless,
+                    limite_eans=int(limite_eans) if limite_eans else None,
+                    retomar=True,
+                    ufs=ufs_para_rodar,
+                )
+                st.success("Extração local retomada.")
+                st.rerun()
+            except Exception as exc:
+                st.error(f"Falha ao retomar extração local: {exc}")
+
+        if col3.button("Cancelar local", width="stretch", disabled=not rodando):
+            mf.cancelar_extracao_background()
+            st.warning("Cancelamento solicitado.")
+            st.rerun()
 
     upload = st.file_uploader("Importar planilha Mercado Farma", type=["xlsx"], key="upload_mercado_farma")
     if upload is not None:
@@ -208,7 +360,6 @@ with st.expander("Extração Mercado Farma", expanded=False):
         st.success("Planilha Mercado Farma salva.")
         st.rerun()
 
-mercado = mf.mercado_farma_atual()
 if mercado.empty:
     st.info("Ainda não existe base do Mercado Farma salva. Extraia pelo botão acima ou importe uma planilha.")
     st.stop()
@@ -217,16 +368,15 @@ preco_valido = pd.to_numeric(mercado["preco_sem_imposto"], errors="coerce").fill
 estoque_valido = pd.to_numeric(mercado["estoque"], errors="coerce").fillna(0) > 0
 mercado_valido = mercado[preco_valido & estoque_valido].copy()
 
-f1, f2, f3 = st.columns([1, 1, 1.4])
+configurar_desconto_adicional(mf.preparar_mercado_farma(mercado_original))
+
+f1, f2 = st.columns([1, 2.4])
 uf_sel = f1.multiselect("UF", sorted(mercado_valido["uf"].dropna().astype(str).unique().tolist()))
-consultor_sel = f2.multiselect("Consultor", sorted(mercado_valido["consultor"].dropna().astype(str).unique().tolist()))
-busca = f3.text_input("Buscar produto, EAN ou distribuidora")
+busca = f2.text_input("Buscar produto, EAN ou distribuidora")
 
 filtrado = mercado_valido.copy()
 if uf_sel:
     filtrado = filtrado[filtrado["uf"].isin(uf_sel)].copy()
-if consultor_sel:
-    filtrado = filtrado[filtrado["consultor"].isin(consultor_sel)].copy()
 if busca:
     termo = busca.strip().lower()
     mask = (
@@ -262,9 +412,9 @@ else:
 
 c1, c2 = st.columns(2)
 with c1:
-    botao_download_excel(mf.formatar_tabela_mercado(filtrado), "mercado_farma_por_uf.xlsx", "Extrair lista completa em Excel")
+    botao_download_excel(tabela_mercado_sem_consultor(filtrado), "mercado_farma_por_uf.xlsx", "Extrair lista completa em Excel")
 with c2:
-    botao_download_excel(mf.formatar_tabela_mercado(melhores), "mercado_farma_melhores_precos.xlsx", "Extrair melhores preços em Excel")
+    botao_download_excel(tabela_mercado_sem_consultor(melhores), "mercado_farma_melhores_precos.xlsx", "Extrair melhores preços em Excel")
 
 with st.expander("Tabela completa", expanded=False):
-    dataframe_com_download(mf.formatar_tabela_mercado(filtrado), "mercado_farma_completo", altura=420)
+    dataframe_com_download(tabela_mercado_sem_consultor(filtrado), "mercado_farma_completo", altura=420)
