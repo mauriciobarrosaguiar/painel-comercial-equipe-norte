@@ -5,7 +5,8 @@ import streamlit as st
 from src.calculos import formatar_tabela_metricas, gerar_resultado_produto
 from src.filtros import aplicar_filtros_globais, filtrar_busca
 from src.layout import dataframe_com_download, titulo_pagina
-from src.loader import carregar_dados_tratados
+from src.loader import carregar_dados_tratados, fonte_ativa
+from src.status_bases import formatar_ultima_atualizacao
 from src.tratamento import TIPO_SEM_CLASSIFICACAO
 
 
@@ -18,6 +19,11 @@ titulo_pagina(
     "Produtos / Mix",
     "Classificação dos produtos e desempenho por tipo de mix.",
 )
+
+c1, c2, c3 = st.columns(3)
+c1.caption(f"Fonte: {fonte_ativa('produtos_mix')}")
+c2.caption(f"Atualizado em: {formatar_ultima_atualizacao('produtos_mix')}")
+c3.caption(f"Produtos classificados: {len(produtos_mix)}")
 
 vendas_f, clientes_f, _ = aplicar_filtros_globais(vendas, clientes, chave="produtos")
 

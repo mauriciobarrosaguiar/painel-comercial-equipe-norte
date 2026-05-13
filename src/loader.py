@@ -6,6 +6,7 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
+from src.datas import agora_brasilia
 from src.persistencia import carregar_bytes, existe_persistido, salvar_bytes
 from src.tratamento import (
     COLUNAS_ACOES,
@@ -47,11 +48,23 @@ def _uploads_sessao() -> dict[str, dict[str, object]]:
     return st.session_state.setdefault("uploads_bases", {})
 
 
+def _versao_cache(chave: str) -> str:
+    return str(st.session_state.get(f"{chave}_updated_at", "") or "")
+
+
 def registrar_upload(chave: str, arquivo) -> None:
     if arquivo is None:
         return
     conteudo = arquivo.getvalue()
-    _uploads_sessao()[chave] = {"name": arquivo.name, "bytes": conteudo}
+    atualizado_em = agora_brasilia().isoformat()
+    st.session_state[f"{chave}_updated_at"] = atualizado_em
+    st.session_state[f"{chave}_uploaded_name"] = arquivo.name
+    _uploads_sessao()[chave] = {
+        "name": arquivo.name,
+        "bytes": conteudo,
+        "updated_at": atualizado_em,
+        "size": len(conteudo),
+    }
     salvar_bytes(chave, conteudo, f"Atualiza base {chave} pelo painel")
     st.cache_data.clear()
 
@@ -72,26 +85,28 @@ def fonte_ativa(chave: str) -> str:
 
 
 @st.cache_data(show_spinner=False)
-def _ler_excel_bytes(conteudo: bytes, sheet_name: str | int) -> pd.DataFrame:
+def _ler_excel_bytes(conteudo: bytes, sheet_name: str | int, versao_cache: str = "") -> pd.DataFrame:
     return pd.read_excel(BytesIO(conteudo), sheet_name=sheet_name, dtype=str, engine="openpyxl")
 
 
 @st.cache_data(show_spinner=False)
-def _ler_excel_caminho(caminho: str, sheet_name: str | int, mtime: float) -> pd.DataFrame:
+def _ler_excel_caminho(caminho: str, sheet_name: str | int, mtime: float, versao_cache: str = "") -> pd.DataFrame:
     return pd.read_excel(caminho, sheet_name=sheet_name, dtype=str, engine="openpyxl")
 
 
 def _carregar_excel(chave: str) -> pd.DataFrame:
-    persistido = carregar_bytes(chave)
-    if persistido:
-        return _ler_excel_bytes(persistido, ABAS_PADRAO[chave])
     upload = _uploads_sessao().get(chave)
     if upload and upload.get("bytes"):
-        return _ler_excel_bytes(upload["bytes"], ABAS_PADRAO[chave])
+        return _ler_excel_bytes(upload["bytes"], ABAS_PADRAO[chave], _versao_cache(chave))
+
+    persistido = carregar_bytes(chave)
+    if persistido:
+        return _ler_excel_bytes(persistido, ABAS_PADRAO[chave], _versao_cache(chave))
+
     caminho = ARQUIVOS_PADRAO[chave]
     if not caminho.exists():
         return pd.DataFrame()
-    return _ler_excel_caminho(str(caminho), ABAS_PADRAO[chave], caminho.stat().st_mtime)
+    return _ler_excel_caminho(str(caminho), ABAS_PADRAO[chave], caminho.stat().st_mtime, _versao_cache(chave))
 
 
 def carregar_bussola() -> pd.DataFrame:
