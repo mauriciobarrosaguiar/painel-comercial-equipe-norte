@@ -271,13 +271,13 @@ with st.expander("Extração Mercado Farma", expanded=False):
     limite_eans = st.number_input("Limite de EANs para teste (0 = todos)", min_value=0, step=10, value=0)
 
     col_git1, col_git2 = st.columns(2)
-    if col_git1.button("Atualizar UFs selecionadas pelo GitHub Actions", width="stretch", disabled=not bool(ufs_para_rodar)):
+    if col_git1.button("Atualizar UFs Selecionadas", width="stretch", disabled=not bool(ufs_para_rodar)):
         try:
             gha.disparar_mercado_farma(ufs_para_rodar, int(limite_eans or 0))
             st.success("GitHub Actions disparado. Acompanhe o status abaixo.")
         except Exception as exc:
             st.error(f"Não consegui disparar o GitHub Actions: {exc}")
-    if col_git2.button("Atualizar todas as UFs pelo GitHub Actions", width="stretch", disabled=not bool(ufs_alvos)):
+    if col_git2.button("Atualizar Todas as UFs", width="stretch", disabled=not bool(ufs_alvos)):
         try:
             gha.disparar_mercado_farma(ufs_alvos, int(limite_eans or 0))
             st.success("GitHub Actions disparado para todas as UFs.")

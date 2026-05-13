@@ -72,6 +72,11 @@ def persistencia_github_ativa() -> bool:
     return bool(cfg["token"] and cfg["repo"] and cfg["branch"] and cfg["key"])
 
 
+def persistencia_github_leitura_ativa() -> bool:
+    cfg = _github_config()
+    return bool(cfg["repo"] and cfg["branch"] and cfg["key"])
+
+
 def status_persistencia() -> dict[str, str]:
     cfg = _github_config()
     if persistencia_github_ativa():
@@ -79,6 +84,12 @@ def status_persistencia() -> dict[str, str]:
             "modo": "GitHub criptografado",
             "detalhe": f"{cfg['repo']} / {cfg['dir']} / branch {cfg['branch']}",
             "ok": "sim",
+        }
+    if persistencia_github_leitura_ativa():
+        return {
+            "modo": "GitHub somente leitura",
+            "detalhe": f"{cfg['repo']} / {cfg['dir']} / branch {cfg['branch']}",
+            "ok": "parcial",
         }
     faltantes = []
     if not cfg["token"]:
@@ -127,11 +138,13 @@ def _caminho_github(chave: str) -> str:
 
 def _headers() -> dict[str, str]:
     token = _github_config()["token"]
-    return {
+    headers = {
         "Accept": "application/vnd.github+json",
-        "Authorization": f"Bearer {token}",
         "X-GitHub-Api-Version": "2022-11-28",
     }
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    return headers
 
 
 def _github_get_ref(branch: str) -> dict[str, Any] | None:
@@ -227,7 +240,7 @@ def _github_write(chave: str, conteudo: bytes, mensagem: str) -> None:
 
 
 def carregar_bytes(chave: str) -> bytes | None:
-    if persistencia_github_ativa():
+    if persistencia_github_leitura_ativa():
         try:
             dados = _github_read(chave)
             if dados:
@@ -299,7 +312,7 @@ def salvar_json(chave: str, dados: Any, mensagem: str | None = None) -> None:
 
 
 def existe_persistido(chave: str) -> bool:
-    if persistencia_github_ativa():
+    if persistencia_github_leitura_ativa():
         try:
             return _github_get(_caminho_github(chave)) is not None
         except Exception:
@@ -321,7 +334,7 @@ def ultima_atualizacao(chave: str) -> object | None:
     if caminho_padrao and caminho_padrao.exists():
         return datetime_arquivo_brasilia(caminho_padrao)
 
-    if persistencia_github_ativa():
+    if persistencia_github_leitura_ativa():
         try:
             return _github_commit_at(_caminho_github(chave))
         except Exception:

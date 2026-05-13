@@ -203,10 +203,20 @@ def aplicar_filtros_base(df: pd.DataFrame, consultor: str, ufs: list[str], cidad
 def montar_mix_cliente(cliente: pd.Series, mix_foco: pd.DataFrame, compras: pd.DataFrame, por_uf: dict, por_ean: dict) -> tuple[list[dict], list[dict]]:
     cnpj = str(cliente.get("cnpj_limpo", ""))
     uf = str(cliente.get("uf", ""))
-    compras_cliente = compras[compras["cnpj_limpo"].astype(str).eq(cnpj)].copy() if not compras.empty else pd.DataFrame()
+    colunas_compras = ["cnpj_limpo", "ean_limpo", "produto", "tipo_mix", "valor_vendido", "unidades_vendidas"]
+    if compras is None or compras.empty:
+        compras_cliente = pd.DataFrame(columns=colunas_compras)
+    else:
+        base_compras = compras.copy()
+        for coluna in colunas_compras:
+            if coluna not in base_compras.columns:
+                base_compras[coluna] = 0 if coluna in {"valor_vendido", "unidades_vendidas"} else ""
+        compras_cliente = base_compras[base_compras["cnpj_limpo"].astype(str).eq(cnpj)].copy()
     comprados: list[dict] = []
     eans_comprados: set[str] = set()
-    for _, item in compras_cliente.sort_values(["tipo_mix", "valor_vendido"], ascending=[True, False]).iterrows():
+    if not compras_cliente.empty:
+        compras_cliente = compras_cliente.sort_values(["tipo_mix", "valor_vendido"], ascending=[True, False])
+    for _, item in compras_cliente.iterrows():
         ean = normalizar_ean(item.get("ean_limpo"))
         eans_comprados.add(ean)
         registro = item.to_dict()
@@ -227,7 +237,14 @@ def tabela_mix_clientes(clientes_resultado: pd.DataFrame, mix_foco: pd.DataFrame
     linhas: list[dict] = []
     if clientes_resultado.empty or mix_foco.empty:
         return pd.DataFrame()
-    compras_idx = compras.set_index(["cnpj_limpo", "ean_limpo"]) if not compras.empty else pd.DataFrame()
+    if compras is not None and not compras.empty:
+        compras_base = compras.copy()
+        for coluna in ["cnpj_limpo", "ean_limpo", "valor_vendido", "unidades_vendidas"]:
+            if coluna not in compras_base.columns:
+                compras_base[coluna] = 0 if coluna in {"valor_vendido", "unidades_vendidas"} else ""
+        compras_idx = compras_base.set_index(["cnpj_limpo", "ean_limpo"])
+    else:
+        compras_idx = pd.DataFrame()
     for _, cliente in clientes_resultado.iterrows():
         cnpj = str(cliente.get("cnpj_limpo", ""))
         uf = str(cliente.get("uf", ""))
