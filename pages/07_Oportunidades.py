@@ -166,24 +166,37 @@ def produto_html(item: dict, *, mostrar_vendido: bool) -> str:
     """
 
 
-def card_produtos(titulo: str, produtos: list[dict], *, mostrar_vendido: bool) -> None:
-    limite = 8
-    corpo = "".join(produto_html(item, mostrar_vendido=mostrar_vendido) for item in produtos[:limite])
-    if not corpo:
-        corpo = "<div class='mix-empty'>Nenhum produto nesta situação.</div>"
-    extra = ""
-    if len(produtos) > limite:
-        extra = f"<div class='mix-product-meta'>+ {len(produtos) - limite} produto(s) na exportação.</div>"
-    st.markdown(
-        f"""
-        <div class="mix-op-card">
-            <div class="mix-op-title">{escape(titulo)}</div>
-            {corpo}
-            {extra}
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+def tabela_produtos_cliente(produtos: list[dict], *, mostrar_vendido: bool) -> pd.DataFrame:
+    linhas: list[dict] = []
+    for item in produtos:
+        preco = item.get("preco") or {}
+        linha = {
+            "Produto": _texto(item.get("produto"), "Produto sem descrição"),
+            "Tipo": _tipo_display(item.get("tipo_mix")),
+            "EAN": _texto(item.get("ean_limpo")),
+            "Preço com desconto": formatar_moeda(_numero(preco.get("preco_sem_imposto", 0))),
+            "Estoque": _unidades(preco.get("estoque", 0)),
+        }
+        if mostrar_vendido:
+            linha = {
+                **linha,
+                "Vendido": formatar_moeda(item.get("valor_vendido", 0)),
+                "Unidades": _unidades(item.get("unidades_vendidas", 0)),
+            }
+            ordem = ["Produto", "Tipo", "EAN", "Vendido", "Unidades", "Preço com desconto", "Estoque"]
+            linha = {coluna: linha[coluna] for coluna in ordem}
+        linhas.append(linha)
+    return pd.DataFrame(linhas)
+
+
+def mostrar_tabela_produtos(titulo: str, produtos: list[dict], *, mostrar_vendido: bool) -> None:
+    st.markdown(f"**{titulo}**")
+    tabela = tabela_produtos_cliente(produtos, mostrar_vendido=mostrar_vendido)
+    if tabela.empty:
+        st.caption("Nenhum produto nesta situação.")
+        return
+    altura = min(380, 38 + (min(len(tabela), 8) * 36))
+    st.dataframe(tabela, width="stretch", hide_index=True, height=altura)
 
 
 def aplicar_filtros_base(df: pd.DataFrame, consultor: str, ufs: list[str], cidades: list[str]) -> pd.DataFrame:
@@ -217,6 +230,8 @@ def montar_mix_cliente(cliente: pd.Series, mix_foco: pd.DataFrame, compras: pd.D
     if not compras_cliente.empty:
         compras_cliente = compras_cliente.sort_values(["tipo_mix", "valor_vendido"], ascending=[True, False])
     for _, item in compras_cliente.iterrows():
+        if _numero(item.get("valor_vendido", 0)) <= 0 and _numero(item.get("unidades_vendidas", 0)) <= 0:
+            continue
         ean = normalizar_ean(item.get("ean_limpo"))
         eans_comprados.add(ean)
         registro = item.to_dict()
@@ -320,28 +335,6 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-if oportunidades.empty:
-    st.info("Sem oportunidades para os filtros atuais.")
-else:
-    for fatia in [oportunidades.head(12).iloc[i : i + 3] for i in range(0, min(len(oportunidades), 12), 3)]:
-        cols = st.columns(3)
-        for col, (_, item) in zip(cols, fatia.iterrows()):
-            with col:
-                st.markdown(
-                    f"""
-                    <div class="contact-card">
-                        <div class="contact-title">{escape(_texto(item.get('cliente')))}</div>
-                        <div class="contact-line"><b>Prioridade:</b> {escape(_texto(item.get('prioridade')))} | <b>Consultor:</b> {escape(_texto(item.get('consultor')))}</div>
-                        <div class="contact-line"><b>CNPJ:</b> {escape(_texto(item.get('cnpj')))}</div>
-                        <div class="contact-line"><b>Rede:</b> {escape(_texto(item.get('grupo_sip')))}</div>
-                        <div class="contact-line"><b>Motivo:</b> {escape(_texto(item.get('motivo_alerta')))}</div>
-                        <div class="contact-line"><b>Ação:</b> {escape(_texto(item.get('acao_sugerida')))}</div>
-                        <div class="pill-note">OL {formatar_moeda(item.get('ol_sem_combate', 0))}</div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
-
 st.subheader("Prioritários e Lançamentos por cliente")
 mix_foco = preparar_mix_foco(produtos_mix, vendas_f)
 compras_mix = compras_mix_por_cliente(vendas_f, mix_foco)
@@ -368,23 +361,19 @@ else:
 
     for _, cliente in clientes_cards.iterrows():
         comprados, faltantes = montar_mix_cliente(cliente, mix_foco, compras_mix, preco_por_uf, preco_por_ean)
-        st.markdown(
-            f"""
-            <div class="contact-card" style="min-height:auto; margin-top:1rem;">
+        with st.container(border=True):
+            st.markdown(
+                f"""
                 <div class="contact-title">{escape(_texto(cliente.get('nome_pdv')))}</div>
                 <div class="contact-line"><b>Consultor:</b> {escape(_texto(cliente.get('consultor')))} | <b>CNPJ:</b> {escape(_texto(cliente.get('cnpj_limpo')))}</div>
                 <div class="contact-line"><b>Cidade/UF:</b> {escape(_texto(cliente.get('cidade')))} / {escape(_texto(cliente.get('uf')))}</div>
                 <span class="pill-note">Comprados: {len(comprados)}</span>
                 <span class="pill-note">Falta comprar: {len(faltantes)}</span>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-        col_a, col_b = st.columns(2)
-        with col_a:
-            card_produtos("Produtos comprados", comprados, mostrar_vendido=True)
-        with col_b:
-            card_produtos("Produtos que faltam comprar", faltantes, mostrar_vendido=False)
+                """,
+                unsafe_allow_html=True,
+            )
+            mostrar_tabela_produtos("Comprados (Prioritários e Lançamentos)", comprados, mostrar_vendido=True)
+            mostrar_tabela_produtos("Não comprados (Prioritários e Lançamentos)", faltantes, mostrar_vendido=False)
 
 colunas = [
     "prioridade",
@@ -427,4 +416,9 @@ if not mix_export.empty:
         mix_export_formatado[coluna] = mix_export_formatado[coluna].apply(formatar_moeda)
     mix_export_formatado["Unidades vendidas"] = mix_export_formatado["Unidades vendidas"].apply(_unidades)
     mix_export_formatado["Estoque MF"] = mix_export_formatado["Estoque MF"].apply(_unidades)
-    botao_download_excel(mix_export_formatado, "mix_prioritarios_lancamentos_por_cliente.xlsx", "Baixar mix por cliente em Excel")
+    nao_comprados = mix_export_formatado[mix_export_formatado["Situação"].eq("Falta comprar")].copy()
+    c1, c2 = st.columns(2)
+    with c1:
+        botao_download_excel(nao_comprados, "produtos_prioritarios_lancamentos_nao_comprados.xlsx", "Baixar não comprados em Excel")
+    with c2:
+        botao_download_excel(mix_export_formatado, "mix_prioritarios_lancamentos_por_cliente.xlsx", "Baixar mix completo em Excel")
