@@ -37,6 +37,7 @@ PAGINAS = [
     ("Consultores", "pages/02_Consultores.py"),
     ("Clientes", "pages/03_Clientes.py"),
     ("SIP", "pages/04_SIP_Redes.py"),
+    ("Foco Semanal", "pages/12_Foco_Semanal.py"),
     ("Ações Promocionais", "pages/05_Acoes_Promocionais.py"),
     ("Produtos / Mix", "pages/06_Produtos_Mix.py"),
     ("Oportunidades", "pages/07_Oportunidades.py"),
