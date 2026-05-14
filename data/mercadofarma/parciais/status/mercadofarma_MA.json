@@ -1,0 +1,8 @@
+{
+  "uf": "MA",
+  "status": "erro",
+  "consultor_usado": "",
+  "cnpj_referencia": "",
+  "total_produtos": 0,
+  "erro": "Não encontrei consultor com login e CNPJ referência para UF MA."
+}
