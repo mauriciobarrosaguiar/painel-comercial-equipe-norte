@@ -4,7 +4,6 @@ from datetime import date, timedelta
 
 import pandas as pd
 
-from src.datas import hoje_brasilia
 from src.tratamento import formatar_moeda, formatar_percentual
 
 
@@ -63,11 +62,12 @@ def dias_uteis(inicio: object, fim: object, feriados_extra: set[date] | None = N
 
 
 def calcular_projecao(valor: float, meta: float, inicio: object, fim: object) -> dict[str, float]:
-    data_inicio = pd.Timestamp(inicio).date()
-    data_fim = pd.Timestamp(fim).date()
-    hoje = min(max(hoje_brasilia(), data_inicio), data_fim)
-    uteis_decorridos = dias_uteis(data_inicio, hoje)
-    uteis_periodo = dias_uteis(data_inicio, data_fim)
+    data_ref = pd.Timestamp(fim).date()
+    inicio_mes = date(data_ref.year, data_ref.month, 1)
+    fim_mes = (pd.Timestamp(inicio_mes) + pd.offsets.MonthEnd(0)).date()
+    data_realizado = min(max(data_ref, inicio_mes), fim_mes)
+    uteis_decorridos = dias_uteis(inicio_mes, data_realizado)
+    uteis_periodo = dias_uteis(inicio_mes, fim_mes)
     valor_float = float(valor or 0)
     meta_float = float(meta or 0)
     projetado = (valor_float / uteis_decorridos * uteis_periodo) if uteis_decorridos and uteis_periodo else valor_float

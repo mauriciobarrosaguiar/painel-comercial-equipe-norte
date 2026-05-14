@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+from html import escape
 
 import streamlit as st
 
@@ -14,15 +15,26 @@ from src.tratamento import formatar_moeda, formatar_percentual, formatar_data
 PAGE_SIZE = 20
 
 
-def contato_card(cliente) -> None:
-    st.markdown(
-        f"""
-        <div class="contact-card">
-            <div class="contact-title">{cliente.get('nome_pdv', '')}</div>
-            <div class="contact-line"><b>CNPJ:</b> {cliente.get('cnpj_limpo', '')}</div>
-            <div class="contact-line"><b>Rede:</b> {cliente.get('grupo_sip', '')}</div>
-            <div class="contact-line"><b>Consultor:</b> {cliente.get('consultor', '')}</div>
-            <div class="contact-line"><b>Cidade/UF:</b> {cliente.get('cidade', '')} / {cliente.get('uf', '')}</div>
+def _texto(valor, padrao: str = "-") -> str:
+    texto = "" if valor is None else str(valor).strip()
+    if texto.lower() in {"nan", "nat", "none"}:
+        texto = ""
+    return texto or padrao
+
+
+def _html(valor, padrao: str = "-") -> str:
+    return escape(_texto(valor, padrao))
+
+
+def contato_card_html(cliente) -> str:
+    return f"""
+    <div class="contact-card">
+        <div class="contact-content">
+            <div class="contact-title" title="{_html(cliente.get('nome_pdv'))}">{_html(cliente.get('nome_pdv'))}</div>
+            <div class="contact-line" title="{_html(cliente.get('cnpj_limpo'))}"><b>CNPJ:</b> {_html(cliente.get('cnpj_limpo'))}</div>
+            <div class="contact-line" title="{_html(cliente.get('grupo_sip'))}"><b>Rede:</b> {_html(cliente.get('grupo_sip'))}</div>
+            <div class="contact-line" title="{_html(cliente.get('consultor'))}"><b>Consultor:</b> {_html(cliente.get('consultor'))}</div>
+            <div class="contact-line" title="{_html(cliente.get('cidade'))} / {_html(cliente.get('uf'))}"><b>Cidade/UF:</b> {_html(cliente.get('cidade'))} / {_html(cliente.get('uf'))}</div>
             <div class="mini-grid">
                 <div class="mini-metric"><div class="mini-label">OL</div><div class="mini-value">{formatar_moeda(cliente.get('ol_sem_combate', 0))}</div></div>
                 <div class="mini-metric"><div class="mini-label">OL Prio</div><div class="mini-value">{formatar_moeda(cliente.get('ol_prioritarios', 0))}</div></div>
@@ -31,16 +43,15 @@ def contato_card(cliente) -> None:
                 <div class="mini-metric"><div class="mini-label">% Lanç.</div><div class="mini-value">{formatar_percentual(cliente.get('percentual_lancamentos', 0))}</div></div>
                 <div class="mini-metric"><div class="mini-label">Últ. compra</div><div class="mini-value">{formatar_data(cliente.get('ultima_compra'))}</div></div>
             </div>
-            <div class="contact-line"><b>Proprietário/Diretor:</b> {cliente.get('proprietario_diretor', '') or '-'}</div>
-            <div class="contact-line"><b>Comprador:</b> {cliente.get('comprador_gerente_de_compras', '') or '-'}</div>
-            <div class="contact-line"><b>Cargo:</b> {cliente.get('cargo', '') or '-'}</div>
-            <div class="contact-line"><b>Celular:</b> {cliente.get('celular', '') or '-'}</div>
-            <div class="contact-line"><b>Email:</b> {cliente.get('email', '') or '-'}</div>
-            <div class="pill-note">{cliente.get('status_comercial', '')}</div>
+            <div class="contact-line" title="{_html(cliente.get('proprietario_diretor'))}"><b>Proprietário/Diretor:</b> {_html(cliente.get('proprietario_diretor'))}</div>
+            <div class="contact-line" title="{_html(cliente.get('comprador_gerente_de_compras'))}"><b>Comprador:</b> {_html(cliente.get('comprador_gerente_de_compras'))}</div>
+            <div class="contact-line" title="{_html(cliente.get('cargo'))}"><b>Cargo:</b> {_html(cliente.get('cargo'))}</div>
+            <div class="contact-line" title="{_html(cliente.get('celular'))}"><b>Celular:</b> {_html(cliente.get('celular'))}</div>
+            <div class="contact-line" title="{_html(cliente.get('email'))}"><b>Email:</b> {_html(cliente.get('email'))}</div>
         </div>
-        """,
-        unsafe_allow_html=True,
-    )
+        <div class="contact-status"><span class="pill-note">{_html(cliente.get('status_comercial'))}</span></div>
+    </div>
+    """
 
 
 def base_exportacao_clientes(filtrado):
@@ -152,11 +163,8 @@ else:
 
     inicio = (st.session_state[chave_pagina] - 1) * PAGE_SIZE
     previews = filtrado.iloc[inicio : inicio + PAGE_SIZE]
-    for fatia in [previews.iloc[i : i + 2] for i in range(0, len(previews), 2)]:
-        cols = st.columns(2)
-        for col, (_, cliente) in zip(cols, fatia.iterrows()):
-            with col:
-                contato_card(cliente)
+    cards = "\n".join(contato_card_html(cliente) for _, cliente in previews.iterrows())
+    st.markdown(f'<div class="client-card-grid">{cards}</div>', unsafe_allow_html=True)
 
 with st.expander("Resultado completo por cliente", expanded=False):
     tabela = formatar_tabela_metricas(

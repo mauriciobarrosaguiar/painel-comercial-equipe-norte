@@ -343,8 +343,9 @@ else:
     pedidos_visual = pedidos_exportar.copy()
     pedidos_visual["Data pedido"] = pedidos_visual["Data pedido"].apply(formatar_data)
     pedidos_visual["Valor"] = pedidos_visual["Valor"].apply(formatar_moeda)
-    botao_download_excel(pedidos_visual, "pedidos_detalhados_sip.xlsx", "Extrair pedidos detalhados da SIP")
-    st.dataframe(pedidos_visual, width="stretch", height=360)
+    with st.expander(f"Pedidos detalhados — {len(faturados)} pedidos faturados | {len(cancelados)} cancelados", expanded=False):
+        botao_download_excel(pedidos_visual, "pedidos_detalhados_sip.xlsx", "Extrair pedidos detalhados da SIP")
+        st.dataframe(pedidos_visual, width="stretch", height=360)
 
     detalhe = formatar_tabela_metricas(
         membros_sip[
@@ -375,5 +376,6 @@ else:
             "status_comercial": "Status",
         }
     )
-    st.subheader("Vendas por CNPJ")
-    dataframe_com_download(detalhe, "sip_vendas_por_cnpj", altura=420)
+    cnpjs_com_venda = int((membros_sip["ol_sem_combate"] > 0).sum()) if not membros_sip.empty else 0
+    with st.expander(f"Vendas por CNPJ — {cnpjs_com_venda} CNPJs com venda", expanded=False):
+        dataframe_com_download(detalhe, "sip_vendas_por_cnpj", altura=420)

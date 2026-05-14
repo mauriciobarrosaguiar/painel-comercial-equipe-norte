@@ -193,10 +193,10 @@ pedidos_visual = pedidos.rename(
 )[["Categoria", "Pedido", "Nota fiscal", "Status", "CNPJ", "Cliente", "Cidade", "UF", "Data pedido", "Valor"]]
 pedidos_visual["Data pedido"] = pedidos_visual["Data pedido"].apply(formatar_data)
 pedidos_visual["Valor"] = pedidos_visual["Valor"].apply(formatar_moeda)
-botao_download_excel(pedidos_visual, f"pedidos_{grupo['id']}.xlsx", "Extrair pedidos detalhados")
-st.dataframe(pedidos_visual, width="stretch", height=320)
+with st.expander(f"Pedidos detalhados — {len(faturados)} pedidos faturados | {len(cancelados)} cancelados", expanded=False):
+    botao_download_excel(pedidos_visual, f"pedidos_{grupo['id']}.xlsx", "Extrair pedidos detalhados")
+    st.dataframe(pedidos_visual, width="stretch", height=320)
 
-st.subheader("Vendas por CNPJ")
 detalhe = formatar_tabela_metricas(
     membros_sip[
         ["cnpj_limpo", "nome_pdv", "consultor", "cidade", "uf", "ol_sem_combate", "ol_prioritarios", "ol_lancamentos", "ultima_compra", "status_comercial"]
@@ -215,36 +215,66 @@ detalhe = formatar_tabela_metricas(
         "status_comercial": "Status",
     }
 )
-dataframe_com_download(detalhe, f"vendas_cnpj_{grupo['id']}", altura=340)
+cnpjs_com_venda = int((membros_sip["ol_sem_combate"] > 0).sum()) if not membros_sip.empty else 0
+with st.expander(f"Vendas por CNPJ — {cnpjs_com_venda} CNPJs com venda", expanded=False):
+    dataframe_com_download(detalhe, f"vendas_cnpj_{grupo['id']}", altura=340)
 
-st.subheader("Produtos com preço e estoque")
 mercado = mercado_farma_atual()
 ufs_sip = sorted({str(uf).upper() for uf in membros_sip["uf"].dropna().astype(str)}) if not membros_sip.empty else []
 mercado_sip = mercado[mercado["uf"].isin(ufs_sip)].copy() if not mercado.empty else mercado
-if mercado_sip.empty:
-    st.info("Ainda não existe base de Mercado Farma para as UFs desta SIP.")
-else:
-    busca = st.text_input("Buscar produto, EAN ou distribuidora", key=f"pub_sip_busca_{sip_id}")
-    if busca:
-        termo = busca.strip().lower()
-        mercado_sip = mercado_sip[
-            mercado_sip["produto"].astype(str).str.lower().str.contains(termo, na=False, regex=False)
-            | mercado_sip["ean"].astype(str).str.lower().str.contains(termo, na=False, regex=False)
-            | mercado_sip["distribuidora"].astype(str).str.lower().str.contains(termo, na=False, regex=False)
-        ].copy()
+melhores_base = melhor_preco_por_ean(mercado_sip) if not mercado_sip.empty else pd.DataFrame()
+with st.expander(f"Produtos com preço e estoque — {len(melhores_base)} produtos disponíveis", expanded=False):
+    if mercado_sip.empty:
+        st.info("Ainda não existe base de Mercado Farma para as UFs desta SIP.")
+    else:
+        busca = st.text_input("Buscar produto, EAN ou distribuidora", key=f"pub_sip_busca_{sip_id}")
+        mercado_filtrado = mercado_sip.copy()
+        if busca:
+            termo = busca.strip().lower()
+            mercado_filtrado = mercado_filtrado[
+                mercado_filtrado["produto"].astype(str).str.lower().str.contains(termo, na=False, regex=False)
+                | mercado_filtrado["ean"].astype(str).str.lower().str.contains(termo, na=False, regex=False)
+                | mercado_filtrado["distribuidora"].astype(str).str.lower().str.contains(termo, na=False, regex=False)
+            ].copy()
 
-    melhores = melhor_preco_por_ean(mercado_sip)
-    for fatia in [melhores.iloc[i : i + 3] for i in range(0, min(len(melhores), 30), 3)]:
-        cols = st.columns(3)
-        for col, (_, item) in zip(cols, fatia.iterrows()):
-            with col:
-                produto_card(item)
+        melhores = melhor_preco_por_ean(mercado_filtrado)
+        for fatia in [melhores.iloc[i : i + 3] for i in range(0, min(len(melhores), 30), 3)]:
+            cols = st.columns(3)
+            for col, (_, item) in zip(cols, fatia.iterrows()):
+                with col:
+                    produto_card(item)
 
-    e1, e2 = st.columns(2)
-    with e1:
-        botao_download_excel(formatar_tabela_mercado(mercado_sip), f"produtos_preco_estoque_{grupo['id']}.xlsx", "Extrair produtos por UF")
-    with e2:
-        botao_download_excel(formatar_tabela_mercado(melhores), f"melhores_precos_{grupo['id']}.xlsx", "Extrair melhores preços")
+        e1, e2 = st.columns(2)
+        with e1:
+            botao_download_excel(formatar_tabela_mercado(mercado_filtrado), f"produtos_preco_estoque_{grupo['id']}.xlsx", "Extrair produtos por UF")
+        with e2:
+            botao_download_excel(formatar_tabela_mercado(melhores), f"melhores_precos_{grupo['id']}.xlsx", "Extrair melhores preços")
+
+with st.expander("Histórico de compras — produtos comprados no período", expanded=False):
+    if vendas_sip.empty:
+        st.info("Sem compras no período selecionado.")
+    else:
+        historico = (
+            vendas_sip.groupby(["ean_limpo", "produto", "tipo_mix"], dropna=False)
+            .agg(quantidade=("quantidade_base", "sum"), valor=("valor_vendido_sem_imposto", "sum"))
+            .reset_index()
+            .sort_values("valor", ascending=False)
+        )
+        historico_visual = historico.rename(
+            columns={"ean_limpo": "EAN", "produto": "Produto", "tipo_mix": "Tipo mix", "quantidade": "Quantidade", "valor": "Valor"}
+        )
+        historico_visual["Valor"] = historico_visual["Valor"].apply(formatar_moeda)
+        dataframe_com_download(historico_visual, f"historico_compras_{grupo['id']}", altura=320)
+
+with st.expander("Oportunidades / produtos sugeridos", expanded=False):
+    sem_compra = membros_sip[membros_sip["ol_sem_combate"] <= 0].copy() if not membros_sip.empty else pd.DataFrame()
+    if sem_compra.empty:
+        st.info("Nenhum CNPJ sem compra no período selecionado.")
+    else:
+        sugestoes = sem_compra[["cnpj_limpo", "nome_pdv", "cidade", "uf", "status_comercial"]].rename(
+            columns={"cnpj_limpo": "CNPJ", "nome_pdv": "Cliente", "cidade": "Cidade", "uf": "UF", "status_comercial": "Status"}
+        )
+        dataframe_com_download(sugestoes, f"oportunidades_{grupo['id']}", altura=260)
 
 recados = grupo.get("recados", [])
 if recados:

@@ -370,51 +370,67 @@ mercado_valido = mercado[preco_valido & estoque_valido].copy()
 
 configurar_desconto_adicional(mf.preparar_mercado_farma(mercado_original))
 
-f1, f2 = st.columns([1, 2.4])
-uf_sel = f1.multiselect("UF", sorted(mercado_valido["uf"].dropna().astype(str).unique().tolist()))
-busca = f2.text_input("Buscar produto, EAN ou distribuidora")
-
-filtrado = mercado_valido.copy()
-if uf_sel:
-    filtrado = filtrado[filtrado["uf"].isin(uf_sel)].copy()
-if busca:
-    termo = busca.strip().lower()
-    mask = (
-        filtrado["produto"].astype(str).str.lower().str.contains(termo, na=False, regex=False)
-        | filtrado["ean"].astype(str).str.lower().str.contains(termo, na=False, regex=False)
-        | filtrado["distribuidora"].astype(str).str.lower().str.contains(termo, na=False, regex=False)
-    )
-    filtrado = filtrado[mask].copy()
-
-melhores = mf.melhor_preco_por_ean(filtrado)
+mf_metricas = mercado_valido.copy()
 m1, m2, m3, m4 = st.columns(4)
 with m1:
-    card_metrica("Produtos com preço", str(int(filtrado["ean"].nunique())))
+    card_metrica("Produtos com preço", str(int(mf_metricas["ean"].nunique())))
 with m2:
-    card_metrica("UFs", str(int(filtrado["uf"].nunique())))
+    card_metrica("UFs", str(int(mf_metricas["uf"].nunique())))
 with m3:
-    card_metrica("Distribuidoras", str(int(filtrado["distribuidora"].nunique())))
+    card_metrica("Distribuidoras", str(int(mf_metricas["distribuidora"].nunique())))
 with m4:
-    estoque_total = int(pd.to_numeric(filtrado["estoque"], errors="coerce").fillna(0).sum())
+    estoque_total = int(pd.to_numeric(mf_metricas["estoque"], errors="coerce").fillna(0).sum())
     card_metrica("Estoque total", f"{estoque_total:,}".replace(",", "."))
 
-st.subheader("Melhores preços")
-if melhores.empty:
-    st.info("Sem produtos com preço e estoque para os filtros selecionados.")
-else:
-    limite_cards = min(len(melhores), 60)
-    for fatia in [melhores.iloc[i : i + 3] for i in range(0, limite_cards, 3)]:
-        cols = st.columns(3)
-        for col, (_, item) in zip(cols, fatia.iterrows()):
-            with col:
-                grupo = filtrado[(filtrado["uf"] == item["uf"]) & (filtrado["ean"] == item["ean"])].copy()
-                produto_card_distribuidora(grupo, f"dist_{item['uf']}_{item['ean']}_{int(item.name)}")
+total_melhores = len(mf.melhor_preco_por_ean(mercado_valido))
+with st.expander(f"Melhores preços — {total_melhores} produtos encontrados", expanded=False):
+    f1, f2, f3, f4 = st.columns([1.6, 0.8, 1.2, 0.7])
+    busca = f1.text_input("Buscar produto, EAN ou distribuidora", key="mf_busca_melhores")
+    uf_sel = f2.multiselect("UF", sorted(mercado_valido["uf"].dropna().astype(str).unique().tolist()), key="mf_uf_melhores")
+    distribuidora_sel = f3.multiselect(
+        "Distribuidora",
+        sorted(mercado_valido["distribuidora"].dropna().astype(str).unique().tolist()),
+        key="mf_dist_melhores",
+    )
+    buscar = f4.button("Buscar", width="stretch", key="mf_botao_buscar")
+    if buscar:
+        st.session_state["mf_mostrar_melhores"] = True
 
-c1, c2 = st.columns(2)
-with c1:
-    botao_download_excel(tabela_mercado_sem_consultor(filtrado), "mercado_farma_por_uf.xlsx", "Extrair lista completa em Excel")
-with c2:
-    botao_download_excel(tabela_mercado_sem_consultor(melhores), "mercado_farma_melhores_precos.xlsx", "Extrair melhores preços em Excel")
+    filtrado = mercado_valido.copy()
+    if uf_sel:
+        filtrado = filtrado[filtrado["uf"].isin(uf_sel)].copy()
+    if distribuidora_sel:
+        filtrado = filtrado[filtrado["distribuidora"].isin(distribuidora_sel)].copy()
+    if busca:
+        termo = busca.strip().lower()
+        mask = (
+            filtrado["produto"].astype(str).str.lower().str.contains(termo, na=False, regex=False)
+            | filtrado["ean"].astype(str).str.lower().str.contains(termo, na=False, regex=False)
+            | filtrado["distribuidora"].astype(str).str.lower().str.contains(termo, na=False, regex=False)
+        )
+        filtrado = filtrado[mask].copy()
 
-with st.expander("Tabela completa", expanded=False):
-    dataframe_com_download(tabela_mercado_sem_consultor(filtrado), "mercado_farma_completo", altura=420)
+    melhores = mf.melhor_preco_por_ean(filtrado)
+    deve_mostrar = bool(st.session_state.get("mf_mostrar_melhores")) or bool(busca or uf_sel or distribuidora_sel)
+    if not deve_mostrar:
+        st.info("Use a busca ou os filtros e clique em Buscar para carregar os cards de melhores preços.")
+    elif melhores.empty:
+        st.info("Sem produtos com preço e estoque para os filtros selecionados.")
+    else:
+        limite_cards = min(len(melhores), 60)
+        for fatia in [melhores.iloc[i : i + 3] for i in range(0, limite_cards, 3)]:
+            cols = st.columns(3)
+            for col, (_, item) in zip(cols, fatia.iterrows()):
+                with col:
+                    grupo = filtrado[(filtrado["uf"] == item["uf"]) & (filtrado["ean"] == item["ean"])].copy()
+                    produto_card_distribuidora(grupo, f"dist_{item['uf']}_{item['ean']}_{int(item.name)}")
+
+    if deve_mostrar:
+        c1, c2 = st.columns(2)
+        with c1:
+            botao_download_excel(tabela_mercado_sem_consultor(filtrado), "mercado_farma_por_uf.xlsx", "Extrair lista completa em Excel")
+        with c2:
+            botao_download_excel(tabela_mercado_sem_consultor(melhores), "mercado_farma_melhores_precos.xlsx", "Extrair melhores preços em Excel")
+
+        with st.expander("Tabela completa", expanded=False):
+            dataframe_com_download(tabela_mercado_sem_consultor(filtrado), "mercado_farma_completo", altura=420)

@@ -344,24 +344,64 @@ def aplicar_css() -> None:
             margin-top: .14rem;
             overflow-wrap: anywhere;
         }
+        .client-card-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 24px;
+            align-items: stretch;
+            margin-top: 1rem;
+        }
+        @media (max-width: 900px) {
+            .client-card-grid {
+                grid-template-columns: 1fr;
+            }
+        }
         .contact-card {
             background: rgba(255,255,255,.84);
             border: 1px solid var(--norte-border);
             border-radius: 18px;
             padding: 1rem;
             box-shadow: 0 10px 24px rgba(6,47,34,.05);
-            min-height: 210px;
+            min-height: 420px;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            box-sizing: border-box;
+            min-width: 0;
+        }
+        .contact-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: .34rem;
+            min-width: 0;
         }
         .contact-title {
             font-weight: 900;
             color: var(--norte-text);
             font-size: 1rem;
+            line-height: 1.25;
+            min-height: 2.5rem;
             margin-bottom: .25rem;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
         }
         .contact-line {
             font-size: .8rem;
             color: var(--norte-muted);
             margin: .16rem 0;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            min-width: 0;
+        }
+        .contact-status {
+            margin-top: auto;
+            padding-top: .65rem;
         }
         .mix-op-card {
             background: rgba(255,255,255,.9);
@@ -479,7 +519,11 @@ def aplicar_css() -> None:
             align-items: center;
             justify-content: center;
             gap: .42rem;
-            min-width: 78%;
+            min-width: 92%;
+            max-width: 100%;
+            font-size: .74rem;
+            line-height: 1.25;
+            white-space: normal;
         }
         .projection-dot {
             width: 15px;
