@@ -5,7 +5,7 @@ from datetime import date, timedelta
 import pandas as pd
 
 from src.datas import hoje_brasilia
-from src.tratamento import formatar_percentual
+from src.tratamento import formatar_moeda, formatar_percentual
 
 
 def _pascoa(ano: int) -> date:
@@ -92,8 +92,13 @@ def classe_projecao(percentual: float) -> tuple[str, str]:
     return "projection-red", ""
 
 
-def projecao_html(valor: float, meta: float, inicio: object, fim: object) -> str:
+def projecao_html(valor: float, meta: float, inicio: object, fim: object, moeda: bool = True) -> str:
     dados = calcular_projecao(valor, meta, inicio, fim)
     classe, estrela = classe_projecao(dados["percentual"])
     marcador = '<span class="projection-star">★</span>' if estrela else f'<span class="projection-dot {classe}"></span>'
-    return f'<div class="projection-pill">Projeção {formatar_percentual(dados["percentual"])} {marcador}</div>'
+    projetado = formatar_moeda(dados["projetado"]) if moeda else f"{int(round(dados['projetado']))}"
+    return (
+        f'<div class="pill-note projection-note" title="Atingimento projetado: {formatar_percentual(dados["percentual"])}">'
+        f'Projeção: {projetado} {marcador}'
+        f'</div>'
+    )

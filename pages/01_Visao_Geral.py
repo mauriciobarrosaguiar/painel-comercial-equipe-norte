@@ -18,16 +18,17 @@ def falta_para_meta(valor: float, meta: float, regra: float) -> float:
 
 def painel_meta(titulo: str, valor: float, meta: float, inicio, fim) -> None:
     atingimento = (valor / meta) if meta else 0
+    moeda = "Clientes" not in titulo
     st.markdown(
         f"""
         <div class="metric-card period-indicator">
             <div class="metric-label">{titulo}</div>
-            <div class="metric-value">{formatar_moeda(valor) if 'Clientes' not in titulo else int(valor)}</div>
-            <div class="metric-note">Meta: {formatar_moeda(meta) if 'Clientes' not in titulo else int(meta or 0)} | Atingimento: {formatar_percentual(atingimento)}</div>
-            <div class="pill-note">Falta 80%: {formatar_moeda(falta_para_meta(valor, meta, .8)) if 'Clientes' not in titulo else int(falta_para_meta(valor, meta, .8))}</div>
-            <div class="pill-note">Falta 90%: {formatar_moeda(falta_para_meta(valor, meta, .9)) if 'Clientes' not in titulo else int(falta_para_meta(valor, meta, .9))}</div>
-            <div class="pill-note">Falta 100%: {formatar_moeda(falta_para_meta(valor, meta, 1)) if 'Clientes' not in titulo else int(falta_para_meta(valor, meta, 1))}</div>
-            {projecao_html(valor, meta, inicio, fim)}
+            <div class="metric-value">{formatar_moeda(valor) if moeda else int(valor)}</div>
+            <div class="metric-note">Meta: {formatar_moeda(meta) if moeda else int(meta or 0)} | Atingimento: {formatar_percentual(atingimento)}</div>
+            <div class="pill-note">Falta 80%: {formatar_moeda(falta_para_meta(valor, meta, .8)) if moeda else int(falta_para_meta(valor, meta, .8))}</div>
+            <div class="pill-note">Falta 90%: {formatar_moeda(falta_para_meta(valor, meta, .9)) if moeda else int(falta_para_meta(valor, meta, .9))}</div>
+            <div class="pill-note">Falta 100%: {formatar_moeda(falta_para_meta(valor, meta, 1)) if moeda else int(falta_para_meta(valor, meta, 1))}</div>
+            {projecao_html(valor, meta, inicio, fim, moeda=moeda)}
         </div>
         """,
         unsafe_allow_html=True,

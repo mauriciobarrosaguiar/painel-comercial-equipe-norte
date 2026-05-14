@@ -128,6 +128,8 @@ def _nome_arquivo(chave: str) -> str:
         return ARQUIVOS_BINARIOS[chave]
     if chave in ARQUIVOS_JSON:
         return ARQUIVOS_JSON[chave]
+    if all(caractere.isalnum() or caractere in {"_", "-"} for caractere in str(chave)):
+        return f"{chave}.json"
     raise KeyError(f"Chave de persistência desconhecida: {chave}")
 
 

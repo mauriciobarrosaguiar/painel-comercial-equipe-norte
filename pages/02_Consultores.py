@@ -44,7 +44,7 @@ def card_consultor(item, metas: dict, vendas_operacionais, clientes_filtrados, f
             f'<div class="pill-note">Falta 80%: {falta80_fmt}</div>'
             f'<div class="pill-note">Falta 90%: {falta90_fmt}</div>'
             f'<div class="pill-note">Falta 100%: {falta100_fmt}</div>'
-            f'{projecao_html(valor, meta, filtros["inicio"], filtros["fim"])}'
+            f'{projecao_html(valor, meta, filtros["inicio"], filtros["fim"], moeda=moeda)}'
             f'</div>'
         )
 

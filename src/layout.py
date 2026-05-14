@@ -474,11 +474,19 @@ def aplicar_css() -> None:
             font-size: .82rem;
             margin-top: .28rem;
         }
+        .projection-note {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: .42rem;
+            min-width: 78%;
+        }
         .projection-dot {
-            width: 20px;
-            height: 20px;
+            width: 15px;
+            height: 15px;
             border-radius: 999px;
             display: inline-block;
+            box-shadow: inset 0 0 0 1px rgba(0,0,0,.08);
         }
         .projection-red { background: #F03434; }
         .projection-dark-red { background: #9B1C1C; }

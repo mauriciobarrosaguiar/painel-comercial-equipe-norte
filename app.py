@@ -1,35 +1,14 @@
 from __future__ import annotations
 
+import importlib
 from pathlib import Path
 import runpy
+import sys
 
 import streamlit as st
 
-from src.layout import configurar_pagina
 
-try:
-    from src.layout import ocultar_sidebar_publica
-except ImportError:
-    def ocultar_sidebar_publica() -> None:
-        st.markdown(
-            """
-            <style>
-            [data-testid="stSidebar"],
-            [data-testid="stSidebarCollapsedControl"],
-            [data-testid="stSidebarCollapseButton"],
-            [data-testid="stExpandSidebarButton"] {
-                display: none !important;
-            }
-            .stApp {
-                padding-left: 0 !important;
-            }
-            </style>
-            <div class="public-shell"></div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-
+APP_RUNTIME_VERSION = "2026-05-14-1535"
 ROOT = Path(__file__).resolve().parent
 
 PAGINAS = [
@@ -48,11 +27,26 @@ PAGINAS = [
 ]
 
 
+def _preparar_runtime() -> None:
+    if st.session_state.get("_painel_runtime_version") == APP_RUNTIME_VERSION:
+        return
+    for nome in list(sys.modules):
+        if nome.startswith("src."):
+            sys.modules.pop(nome, None)
+    st.session_state["_painel_runtime_version"] = APP_RUNTIME_VERSION
+
+
+def _layout():
+    return importlib.import_module("src.layout")
+
+
 def main() -> None:
-    configurar_pagina()
+    _preparar_runtime()
+    layout = _layout()
+    layout.configurar_pagina()
     sip_publico = str(st.query_params.get("sip", "") or "").strip()
     if sip_publico:
-        ocultar_sidebar_publica()
+        layout.ocultar_sidebar_publica()
         runpy.run_path(str(ROOT / "pages/11_Acesso_SIP.py"), run_name="__main__")
         return
 
