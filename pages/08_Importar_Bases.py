@@ -57,6 +57,10 @@ nome_gd = nomes_gd[nomes_gd.ne("")].iloc[0] if not nomes_gd[nomes_gd.ne("")].emp
 
 titulo_pagina("Importação")
 
+mensagem_upload = st.session_state.pop("mensagem_upload_salvo", "")
+if mensagem_upload:
+    st.success(mensagem_upload)
+
 tab_bussola, tab_metas, tab_arquivos = st.tabs(["Bússola Web", "Metas", "Arquivos"])
 
 with tab_bussola:
@@ -227,13 +231,24 @@ with tab_arquivos:
 
     c1, c2 = st.columns(2)
     if c1.button("Usar e salvar uploads", width="stretch"):
-        registrar_upload("bussola", up_bussola)
-        registrar_upload("painel", up_painel)
-        registrar_upload("acoes", up_acoes)
-        registrar_upload("produtos_mix", up_mix)
-        registrar_upload("mercado_farma", up_mercado)
-        registrar_upload("produtos_mercado_farma", up_produtos_mercado)
-        st.success("Uploads aplicados e salvos.")
+        salvos = []
+        if registrar_upload("bussola", up_bussola):
+            salvos.append("Bússola")
+        if registrar_upload("painel", up_painel):
+            salvos.append("Painel clientes")
+        if registrar_upload("acoes", up_acoes):
+            salvos.append("Ações promocionais")
+        if registrar_upload("produtos_mix", up_mix):
+            salvos.append("Produtos / mix")
+        if registrar_upload("mercado_farma", up_mercado):
+            salvos.append("Mercado Farma")
+        if registrar_upload("produtos_mercado_farma", up_produtos_mercado):
+            salvos.append("Produtos Mercado Farma")
+        st.session_state["mensagem_upload_salvo"] = (
+            "Uploads aplicados e salvos: " + ", ".join(salvos)
+            if salvos
+            else "Nenhum arquivo selecionado para salvar."
+        )
         st.rerun()
     if c2.button("Voltar para pasta data", width="stretch"):
         limpar_uploads()

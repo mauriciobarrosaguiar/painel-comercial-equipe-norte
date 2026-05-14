@@ -52,9 +52,9 @@ def _versao_cache(chave: str) -> str:
     return str(st.session_state.get(f"{chave}_updated_at", "") or "")
 
 
-def registrar_upload(chave: str, arquivo) -> None:
+def registrar_upload(chave: str, arquivo) -> bool:
     if arquivo is None:
-        return
+        return False
     conteudo = arquivo.getvalue()
     atualizado_em = agora_brasilia().isoformat()
     st.session_state[f"{chave}_updated_at"] = atualizado_em
@@ -67,6 +67,7 @@ def registrar_upload(chave: str, arquivo) -> None:
     }
     salvar_bytes(chave, conteudo, f"Atualiza base {chave} pelo painel")
     st.cache_data.clear()
+    return True
 
 
 def limpar_uploads() -> None:

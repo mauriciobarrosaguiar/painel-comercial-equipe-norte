@@ -27,7 +27,11 @@ c3.caption(f"Produtos classificados: {len(produtos_mix)}")
 
 vendas_f, clientes_f, _ = aplicar_filtros_globais(vendas, clientes, chave="produtos")
 
-sem_classificacao = vendas_f[vendas_f["tipo_mix"].eq(TIPO_SEM_CLASSIFICACAO)]["ean_limpo"].nunique()
+vendas_com_movimento = vendas_f[
+    vendas_f["valor_vendido_sem_imposto"].fillna(0).gt(0)
+    | vendas_f["quantidade_base"].fillna(0).gt(0)
+].copy()
+sem_classificacao = vendas_com_movimento[vendas_com_movimento["tipo_mix"].eq(TIPO_SEM_CLASSIFICACAO)]["ean_limpo"].nunique()
 if produtos_mix.empty:
     st.warning("Produtos ainda sem classificação. Cadastre o mix para liberar leituras confiáveis de prioritários e lançamentos.")
 elif sem_classificacao:
