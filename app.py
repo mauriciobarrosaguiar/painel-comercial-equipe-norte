@@ -8,7 +8,7 @@ import sys
 import streamlit as st
 
 
-APP_RUNTIME_VERSION = "2026-05-14-1535"
+APP_RUNTIME_VERSION = "2026-05-14-1645"
 ROOT = Path(__file__).resolve().parent
 
 PAGINAS = [
@@ -31,7 +31,7 @@ def _preparar_runtime() -> None:
     if st.session_state.get("_painel_runtime_version") == APP_RUNTIME_VERSION:
         return
     for nome in list(sys.modules):
-        if nome.startswith("src."):
+        if nome.startswith("src.") or nome == "bussola_extrator":
             sys.modules.pop(nome, None)
     st.session_state["_painel_runtime_version"] = APP_RUNTIME_VERSION
 

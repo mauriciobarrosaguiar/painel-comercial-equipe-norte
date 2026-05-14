@@ -9,8 +9,17 @@ from src.persistencia import salvar_bytes
 from src.tratamento import slug_coluna
 
 
+def _executar_extrator_bussola():
+    import importlib
+
+    import bussola_extrator
+
+    modulo = importlib.reload(bussola_extrator)
+    return modulo.executar
+
+
 def extrair_bussola_web(usuario: str, senha: str, headless: bool = False, log_fn=None) -> Path:
-    from bussola_extrator import executar
+    executar = _executar_extrator_bussola()
 
     downloads = Path(__file__).resolve().parents[1] / "downloads_bussola"
     executar(
@@ -35,7 +44,7 @@ def extrair_bussola_web(usuario: str, senha: str, headless: bool = False, log_fn
 
 
 def extrair_bussola_web_todos(credenciais: list[dict[str, str]], headless: bool = False, log_fn=None) -> Path:
-    from bussola_extrator import executar
+    executar = _executar_extrator_bussola()
 
     if not credenciais:
         raise ValueError("Nenhuma credencial de consultor cadastrada.")
@@ -115,7 +124,7 @@ def extrair_bussola_web_historico_todos(
     headless: bool = False,
     log_fn=None,
 ) -> Path:
-    from bussola_extrator import executar
+    executar = _executar_extrator_bussola()
 
     if not credenciais:
         raise ValueError("Nenhuma credencial cadastrada para extrair histórico.")

@@ -97,8 +97,9 @@ def projecao_html(valor: float, meta: float, inicio: object, fim: object, moeda:
     classe, estrela = classe_projecao(dados["percentual"])
     marcador = '<span class="projection-star">★</span>' if estrela else f'<span class="projection-dot {classe}"></span>'
     projetado = formatar_moeda(dados["projetado"]) if moeda else f"{int(round(dados['projetado']))}"
+    percentual = formatar_percentual(dados["percentual"])
     return (
         f'<div class="pill-note projection-note" title="Atingimento projetado: {formatar_percentual(dados["percentual"])}">'
-        f'Projeção: {projetado} {marcador}'
+        f'Projeção mês: {projetado} | {percentual} {marcador}'
         f'</div>'
     )
