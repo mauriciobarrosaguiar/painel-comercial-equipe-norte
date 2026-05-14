@@ -3,6 +3,7 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
+from src.acoes_store import adicionar_acoes_extra, carregar_acoes_extra, excluir_acao_extra
 from src.acoes import analisar_acoes_promocionais
 from src.calculos import formatar_tabela_metricas
 from src.datas import hoje_brasilia
@@ -16,10 +17,71 @@ dados = carregar_dados_tratados()
 vendas = dados["vendas"]
 clientes = dados["clientes"]
 acoes = dados["acoes"]
+acoes_extra = carregar_acoes_extra()
+if not acoes.empty:
+    acoes = acoes.copy()
+    acoes["id_acao"] = ""
+    acoes["origem_acao"] = "Base importada"
+if not acoes_extra.empty:
+    acoes = pd.concat([acoes, acoes_extra], ignore_index=True)
 
 titulo_pagina("Ações Promocionais")
 
 vendas_f, clientes_f, _ = aplicar_filtros_globais(vendas, clientes, chave="acoes", mostrar_tipo_mix=False)
+
+with st.expander("Cadastrar ou carregar ações", expanded=False):
+    st.markdown("#### Cadastro manual")
+    c_manual1, c_manual2 = st.columns(2)
+    campanha = c_manual1.text_input("Campanha")
+    produto = c_manual2.text_input("Produto")
+    c_manual3, c_manual4, c_manual5 = st.columns(3)
+    ean = c_manual3.text_input("EAN")
+    tipo_mix = c_manual4.selectbox("Tipo mix", ["PRIORITARIO", "LANCAMENTO", "LINHA", "COMBATE", "SEM CLASSIFICACAO"])
+    distribuidora = c_manual5.text_input("Distribuidora")
+    c_manual6, c_manual7, c_manual8 = st.columns(3)
+    desconto = c_manual6.number_input("Desconto", min_value=0.0, step=0.01, value=0.0)
+    data_inicio = c_manual7.date_input("Data início", value=hoje_brasilia(), format="DD/MM/YYYY", key="acao_manual_inicio")
+    data_fim = c_manual8.date_input("Data fim", value=hoje_brasilia(), format="DD/MM/YYYY", key="acao_manual_fim")
+    consultor = st.text_input("Consultor")
+    observacao = st.text_area("Observação")
+    status = st.selectbox("Status da ação", ["ATIVA", "CADASTRADA", "ENCERRADA"])
+
+    if st.button("Adicionar ação promocional", width="stretch"):
+        if not produto and not ean:
+            st.warning("Informe pelo menos produto ou EAN.")
+        else:
+            adicionadas = adicionar_acoes_extra(
+                pd.DataFrame(
+                    [
+                        {
+                            "campanha": campanha,
+                            "produto": produto,
+                            "ean": ean,
+                            "tipo_mix": tipo_mix,
+                            "distribuidora": distribuidora,
+                            "desconto": desconto,
+                            "data_inicio": data_inicio,
+                            "data_fim": data_fim,
+                            "consultor": consultor,
+                            "observacao": observacao,
+                            "status": status,
+                        }
+                    ]
+                )
+            )
+            st.success(f"{adicionadas} ação adicionada.")
+            st.rerun()
+
+    st.markdown("#### Upload incremental")
+    upload_acoes = st.file_uploader("Subir planilha de ações promocionais", type=["xlsx"], key="upload_acoes_incremental")
+    if st.button("Acrescentar ações da planilha", width="stretch"):
+        if upload_acoes is None:
+            st.warning("Selecione uma planilha.")
+        else:
+            df_upload = pd.read_excel(upload_acoes, dtype=str, engine="openpyxl")
+            adicionadas = adicionar_acoes_extra(df_upload)
+            st.success(f"{adicionadas} ações acrescentadas. As ações anteriores foram mantidas.")
+            st.rerun()
 
 c1, c2 = st.columns([1, 2])
 mes_ref = c1.date_input("Mês de referência", value=hoje_brasilia().replace(day=1), format="DD/MM/YYYY")
@@ -69,6 +131,11 @@ else:
                     """,
                     unsafe_allow_html=True,
                 )
+                if acao.get("id_acao"):
+                    if st.button("Excluir ação", width="stretch", key=f"excluir_acao_{acao.get('id_acao')}"):
+                        excluir_acao_extra(str(acao.get("id_acao")))
+                        st.success("Ação excluída.")
+                        st.rerun()
 
 with st.expander("Detalhes das ações", expanded=False):
     colunas = [

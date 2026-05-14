@@ -414,6 +414,82 @@ def aplicar_css() -> None:
             font-size: .78rem;
             margin: .16rem;
         }
+        .recado-card {
+            background: rgba(255,255,255,.9);
+            border: 1px solid var(--norte-border);
+            border-radius: 18px;
+            padding: 1rem;
+            box-shadow: 0 10px 24px rgba(6,47,34,.05);
+            margin-bottom: 1rem;
+        }
+        .recado-title {
+            color: var(--norte-text);
+            font-size: 1.08rem;
+            font-weight: 900;
+            margin-bottom: .25rem;
+        }
+        .recado-status {
+            display: inline-block;
+            border-radius: 999px;
+            padding: .2rem .65rem;
+            font-size: .76rem;
+            font-weight: 900;
+            margin-bottom: .5rem;
+            background: #EEF5EA;
+            color: var(--norte-text);
+            border: 1px solid #D7E5D5;
+        }
+        .recado-status-pendente {
+            background: #FFF3D6;
+            color: #8A5A00;
+            border-color: #E9C977;
+        }
+        .recado-status-em-andamento {
+            background: #E5F1FF;
+            color: #00619A;
+            border-color: #A8CDEE;
+        }
+        .recado-status-concluido {
+            background: #E6F6EA;
+            color: #0F6A35;
+            border-color: #ABD7B5;
+        }
+        .recado-comment {
+            color: var(--norte-muted);
+            font-size: .9rem;
+            margin: .55rem 0 .2rem 0;
+            white-space: pre-wrap;
+        }
+        .projection-pill {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: .45rem;
+            background: #EEF5EA;
+            border: 1px solid #D7E5D5;
+            border-radius: 999px;
+            padding: .28rem .75rem;
+            color: var(--norte-text);
+            font-weight: 900;
+            font-size: .82rem;
+            margin-top: .28rem;
+        }
+        .projection-dot {
+            width: 20px;
+            height: 20px;
+            border-radius: 999px;
+            display: inline-block;
+        }
+        .projection-red { background: #F03434; }
+        .projection-dark-red { background: #9B1C1C; }
+        .projection-orange { background: #F59E0B; }
+        .projection-blue { background: #64B5F6; }
+        .projection-green { background: #0F7A3B; }
+        .projection-star {
+            color: #D4A11E;
+            font-size: 1.25rem;
+            line-height: 1;
+        }
         .stTabs [data-baseweb="tab-list"] {
             gap: 0.4rem;
         }

@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import base64
 import json
 from pathlib import Path
+from uuid import uuid4
 
 import pandas as pd
 
+from src.datas import agora_brasilia
 from src.persistencia import carregar_json, existe_persistido, salvar_json
 from src.tratamento import normalizar_cnpj, slug_coluna
 
@@ -38,6 +41,9 @@ def normalizar_grupo_sip(grupo: dict) -> dict:
     cnpjs = [normalizar_cnpj(cnpj) for cnpj in grupo.get("cnpjs", [])]
     cnpjs = sorted({cnpj for cnpj in cnpjs if cnpj})
     redes = sorted({str(rede).strip() for rede in grupo.get("redes", []) if str(rede).strip()})
+    recados = grupo.get("recados", [])
+    if not isinstance(recados, list):
+        recados = []
     return {
         "id": gid,
         "nome": nome,
@@ -45,6 +51,7 @@ def normalizar_grupo_sip(grupo: dict) -> dict:
         "cnpjs": cnpjs,
         "meta_mes": float(grupo.get("meta_mes", 0) or 0),
         "pagamento_percentual": float(grupo.get("pagamento_percentual", 80) or 80),
+        "recados": [recado for recado in recados if isinstance(recado, dict)],
     }
 
 
@@ -115,6 +122,7 @@ def gerar_resumo_sips_manuais(clientes_resultado: pd.DataFrame) -> pd.DataFrame:
 def adicionar_sip(nome: str, redes: list[str], cnpjs: list[str], meta_mes: float, pagamento_percentual: float, sip_id: str | None = None) -> None:
     grupos = [normalizar_grupo_sip(grupo) for grupo in carregar_sips()]
     gid = sip_id or slug_coluna(nome)
+    existente = next((grupo for grupo in grupos if grupo.get("id") == gid), {})
     novo = normalizar_grupo_sip(
         {
             "id": gid,
@@ -123,6 +131,7 @@ def adicionar_sip(nome: str, redes: list[str], cnpjs: list[str], meta_mes: float
             "cnpjs": cnpjs,
             "meta_mes": meta_mes,
             "pagamento_percentual": pagamento_percentual,
+            "recados": existente.get("recados", []),
         }
     )
     grupos = [grupo for grupo in grupos if grupo.get("id") != gid]
@@ -133,3 +142,47 @@ def adicionar_sip(nome: str, redes: list[str], cnpjs: list[str], meta_mes: float
 def excluir_sip(sip_id: str) -> None:
     grupos = [normalizar_grupo_sip(grupo) for grupo in carregar_sips()]
     salvar_sips([grupo for grupo in grupos if grupo.get("id") != sip_id])
+
+
+def adicionar_recado_sip(sip_id: str, titulo: str, comentario: str, status: str, arquivo) -> None:
+    grupos = [normalizar_grupo_sip(grupo) for grupo in carregar_sips()]
+    if arquivo is None:
+        raise ValueError("Selecione uma imagem para anexar.")
+    conteudo = arquivo.getvalue()
+    recado = {
+        "id": str(uuid4()),
+        "titulo": str(titulo or "").strip() or "Recado",
+        "comentario": str(comentario or "").strip(),
+        "status": status if status in {"Pendente", "Em andamento", "Concluído"} else "Pendente",
+        "imagem_nome": getattr(arquivo, "name", "imagem"),
+        "imagem_tipo": getattr(arquivo, "type", "") or "image/png",
+        "imagem_base64": base64.b64encode(conteudo).decode("ascii"),
+        "criado_em": agora_brasilia().isoformat(),
+    }
+    for grupo in grupos:
+        if grupo.get("id") == sip_id:
+            grupo.setdefault("recados", []).append(recado)
+            salvar_sips(grupos)
+            return
+    raise KeyError("SIP não encontrada.")
+
+
+def atualizar_status_recado_sip(sip_id: str, recado_id: str, status: str) -> None:
+    grupos = [normalizar_grupo_sip(grupo) for grupo in carregar_sips()]
+    for grupo in grupos:
+        if grupo.get("id") != sip_id:
+            continue
+        for recado in grupo.get("recados", []):
+            if recado.get("id") == recado_id:
+                recado["status"] = status if status in {"Pendente", "Em andamento", "Concluído"} else recado.get("status", "Pendente")
+                salvar_sips(grupos)
+                return
+
+
+def excluir_recado_sip(sip_id: str, recado_id: str) -> None:
+    grupos = [normalizar_grupo_sip(grupo) for grupo in carregar_sips()]
+    for grupo in grupos:
+        if grupo.get("id") == sip_id:
+            grupo["recados"] = [recado for recado in grupo.get("recados", []) if recado.get("id") != recado_id]
+            salvar_sips(grupos)
+            return

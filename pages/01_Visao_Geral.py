@@ -7,6 +7,7 @@ from src.configuracoes import carregar_metas
 from src.filtros import aplicar_filtros_globais, filtrar_vendas_operacionais
 from src.layout import mostrar_status_periodo, titulo_pagina
 from src.loader import carregar_dados_tratados
+from src.projecao import projecao_html
 from src.status_bases import formatar_ultima_atualizacao
 from src.tratamento import formatar_moeda, formatar_percentual
 
@@ -15,7 +16,7 @@ def falta_para_meta(valor: float, meta: float, regra: float) -> float:
     return max((float(meta or 0) * regra) - float(valor or 0), 0)
 
 
-def painel_meta(titulo: str, valor: float, meta: float) -> None:
+def painel_meta(titulo: str, valor: float, meta: float, inicio, fim) -> None:
     atingimento = (valor / meta) if meta else 0
     st.markdown(
         f"""
@@ -26,6 +27,7 @@ def painel_meta(titulo: str, valor: float, meta: float) -> None:
             <div class="pill-note">Falta 80%: {formatar_moeda(falta_para_meta(valor, meta, .8)) if 'Clientes' not in titulo else int(falta_para_meta(valor, meta, .8))}</div>
             <div class="pill-note">Falta 90%: {formatar_moeda(falta_para_meta(valor, meta, .9)) if 'Clientes' not in titulo else int(falta_para_meta(valor, meta, .9))}</div>
             <div class="pill-note">Falta 100%: {formatar_moeda(falta_para_meta(valor, meta, 1)) if 'Clientes' not in titulo else int(falta_para_meta(valor, meta, 1))}</div>
+            {projecao_html(valor, meta, inicio, fim)}
         </div>
         """,
         unsafe_allow_html=True,
@@ -75,12 +77,12 @@ with st.expander("Últimas atualizações", expanded=False):
 st.markdown(f"### {nome_gd(clientes_f)}")
 c1, c2, c3, c4 = st.columns(4)
 with c1:
-    painel_meta("OL sem combate", indicadores["ol_sem_combate"], meta_gt.get("ol_sem_combate", 0))
+    painel_meta("OL sem combate", indicadores["ol_sem_combate"], meta_gt.get("ol_sem_combate", 0), filtros["inicio"], filtros["fim"])
 with c2:
-    painel_meta("OL prioritários", indicadores["ol_prioritarios"], meta_gt.get("ol_prioritarios", 0))
+    painel_meta("OL prioritários", indicadores["ol_prioritarios"], meta_gt.get("ol_prioritarios", 0), filtros["inicio"], filtros["fim"])
 with c3:
-    painel_meta("OL lançamentos", indicadores["ol_lancamentos"], meta_gt.get("ol_lancamentos", 0))
+    painel_meta("OL lançamentos", indicadores["ol_lancamentos"], meta_gt.get("ol_lancamentos", 0), filtros["inicio"], filtros["fim"])
 with c4:
-    painel_meta("Clientes com venda", indicadores["clientes_positivados"], meta_gt.get("clientes_positivados", 0))
+    painel_meta("Clientes com venda", indicadores["clientes_positivados"], meta_gt.get("clientes_positivados", 0), filtros["inicio"], filtros["fim"])
 
 mostrar_status_periodo(resumo_operacional, titulo=True)

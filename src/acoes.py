@@ -24,6 +24,8 @@ COLUNAS_ANALISE_ACOES = [
     "clientes_compradores",
     "consultor_destaque",
     "distribuidora_destaque",
+    "id_acao",
+    "origem_acao",
 ]
 
 
@@ -87,6 +89,8 @@ def analisar_acoes_promocionais(acoes: pd.DataFrame, vendas: pd.DataFrame) -> pd
                 "clientes_compradores": clientes,
                 "consultor_destaque": consultor_destaque,
                 "distribuidora_destaque": distribuidora_destaque,
+                "id_acao": acao.get("id_acao", ""),
+                "origem_acao": acao.get("origem_acao", ""),
             }
         )
     return pd.DataFrame(linhas, columns=COLUNAS_ANALISE_ACOES)

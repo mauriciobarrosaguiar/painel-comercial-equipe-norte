@@ -9,14 +9,36 @@ from src.filtros import aplicar_filtros_globais
 from src.layout import botao_download_excel, card_metrica, dataframe_com_download, titulo_pagina
 from src.loader import carregar_dados_tratados
 from src.sip_store import (
+    adicionar_recado_sip,
     adicionar_sip,
+    atualizar_status_recado_sip,
     carregar_sips,
+    excluir_recado_sip,
     excluir_sip,
     gerar_resumo_sips_manuais,
     normalizar_grupo_sip,
     opcoes_clientes_para_sip,
 )
 from src.tratamento import STATUS_CANCELADO, STATUS_FATURADOS, formatar_data, formatar_moeda, formatar_percentual
+
+
+STATUS_RECADOS = ["Pendente", "Em andamento", "Concluído"]
+
+
+def classe_status_recado(status: str) -> str:
+    return {
+        "Pendente": "recado-status-pendente",
+        "Em andamento": "recado-status-em-andamento",
+        "Concluído": "recado-status-concluido",
+    }.get(status, "")
+
+
+def imagem_recado_html(recado: dict) -> str:
+    mime = str(recado.get("imagem_tipo") or "image/png")
+    imagem = str(recado.get("imagem_base64") or "")
+    if not imagem:
+        return ""
+    return f'<img src="data:{mime};base64,{imagem}" style="width:100%; border-radius:12px; border:1px solid #D7E5D5;" />'
 
 
 def falta_regra(valor: float, meta: float, pagamento: float) -> float:
@@ -189,6 +211,54 @@ else:
         unsafe_allow_html=True,
     )
     st.link_button("Abrir visão do cliente SIP", link_sip, width="stretch")
+
+    st.subheader("Recados e alinhamentos da SIP")
+    with st.expander("Adicionar recado com imagem", expanded=False):
+        r1, r2 = st.columns([1.4, 0.6])
+        titulo_recado = r1.text_input("Título do recado", placeholder="Ex.: Campanha Copa do Mundo", key=f"recado_titulo_{grupo['id']}")
+        status_recado = r2.selectbox("Status", STATUS_RECADOS, key=f"recado_status_{grupo['id']}")
+        comentario_recado = st.text_area("Comentário", placeholder="Escreva o alinhamento que o cliente SIP deve visualizar.", key=f"recado_comentario_{grupo['id']}")
+        imagem_recado = st.file_uploader("Imagem do recado", type=["png", "jpg", "jpeg", "webp"], key=f"recado_imagem_{grupo['id']}")
+        if st.button("Salvar recado da SIP", width="stretch", key=f"salvar_recado_{grupo['id']}"):
+            try:
+                adicionar_recado_sip(grupo["id"], titulo_recado, comentario_recado, status_recado, imagem_recado)
+                st.success("Recado salvo para esta SIP.")
+                st.rerun()
+            except Exception as exc:
+                st.warning(f"Não consegui salvar o recado: {exc}")
+
+    recados = grupo.get("recados", [])
+    if not recados:
+        st.info("Nenhum recado cadastrado para esta SIP.")
+    else:
+        for recado in recados:
+            st.markdown(
+                f"""
+                <div class="recado-card">
+                    <div class="recado-title">{recado.get('titulo', 'Recado')}</div>
+                    <span class="recado-status {classe_status_recado(str(recado.get('status', 'Pendente')))}">{recado.get('status', 'Pendente')}</span>
+                    {imagem_recado_html(recado)}
+                    <div class="recado-comment">{recado.get('comentario', '')}</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+            rc1, rc2 = st.columns([1, 1])
+            status_atual = recado.get("status", "Pendente")
+            novo_status = rc1.selectbox(
+                "Status do recado",
+                STATUS_RECADOS,
+                index=STATUS_RECADOS.index(status_atual) if status_atual in STATUS_RECADOS else 0,
+                key=f"status_recado_{grupo['id']}_{recado.get('id')}",
+            )
+            if novo_status != status_atual:
+                atualizar_status_recado_sip(grupo["id"], str(recado.get("id")), novo_status)
+                st.rerun()
+            if rc2.button("Excluir recado", width="stretch", key=f"excluir_recado_{grupo['id']}_{recado.get('id')}"):
+                excluir_recado_sip(grupo["id"], str(recado.get("id")))
+                st.success("Recado excluído.")
+                st.rerun()
+
     membros_sip = clientes_resultado[clientes_resultado["cnpj_limpo"].astype(str).isin(grupo["cnpjs"])].copy()
     ol = float(membros_sip["ol_sem_combate"].sum()) if not membros_sip.empty else 0
     prio = float(membros_sip["ol_prioritarios"].sum()) if not membros_sip.empty else 0

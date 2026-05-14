@@ -7,6 +7,7 @@ from src.configuracoes import carregar_metas
 from src.filtros import aplicar_filtros_globais, filtrar_busca, filtrar_vendas_operacionais
 from src.layout import dataframe_com_download, status_periodo_html, titulo_pagina
 from src.loader import carregar_dados_tratados
+from src.projecao import projecao_html
 from src.tratamento import formatar_moeda, formatar_percentual
 
 
@@ -18,7 +19,7 @@ def falta_para_meta(valor: float, meta: float, regra: float) -> float:
     return max((float(meta or 0) * regra) - float(valor or 0), 0)
 
 
-def card_consultor(item, metas: dict, vendas_operacionais, clientes_filtrados) -> None:
+def card_consultor(item, metas: dict, vendas_operacionais, clientes_filtrados, filtros: dict) -> None:
     nome = str(item["consultor"])
     meta_ol = meta_consultor(metas, nome, "ol_sem_combate")
     meta_prio = meta_consultor(metas, nome, "ol_prioritarios")
@@ -43,6 +44,7 @@ def card_consultor(item, metas: dict, vendas_operacionais, clientes_filtrados) -
             f'<div class="pill-note">Falta 80%: {falta80_fmt}</div>'
             f'<div class="pill-note">Falta 90%: {falta90_fmt}</div>'
             f'<div class="pill-note">Falta 100%: {falta100_fmt}</div>'
+            f'{projecao_html(valor, meta, filtros["inicio"], filtros["fim"])}'
             f'</div>'
         )
 
@@ -85,7 +87,7 @@ if resultado_busca.empty:
     st.info("Nenhum consultor encontrado para os filtros atuais.")
 else:
     for _, item in resultado_busca.iterrows():
-        card_consultor(item, metas, vendas_operacionais, clientes_f)
+        card_consultor(item, metas, vendas_operacionais, clientes_f, filtros)
 
 with st.expander("Carteira por consultor", expanded=False):
     consultores = resultado["consultor"].dropna().astype(str).sort_values().tolist()

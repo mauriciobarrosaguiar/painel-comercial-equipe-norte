@@ -12,6 +12,22 @@ from src.sip_store import carregar_sips, normalizar_grupo_sip
 from src.tratamento import STATUS_CANCELADO, STATUS_FATURADOS, formatar_data, formatar_moeda, formatar_percentual
 
 
+def classe_status_recado(status: str) -> str:
+    return {
+        "Pendente": "recado-status-pendente",
+        "Em andamento": "recado-status-em-andamento",
+        "Concluído": "recado-status-concluido",
+    }.get(status, "")
+
+
+def imagem_recado_html(recado: dict) -> str:
+    mime = str(recado.get("imagem_tipo") or "image/png")
+    imagem = str(recado.get("imagem_base64") or "")
+    if not imagem:
+        return ""
+    return f'<img src="data:{mime};base64,{imagem}" style="width:100%; border-radius:12px; border:1px solid #D7E5D5;" />'
+
+
 def falta_regra(valor: float, meta: float, pagamento: float) -> float:
     return max(float(meta or 0) * (float(pagamento or 0) / 100) - float(valor or 0), 0)
 
@@ -229,3 +245,19 @@ else:
         botao_download_excel(formatar_tabela_mercado(mercado_sip), f"produtos_preco_estoque_{grupo['id']}.xlsx", "Extrair produtos por UF")
     with e2:
         botao_download_excel(formatar_tabela_mercado(melhores), f"melhores_precos_{grupo['id']}.xlsx", "Extrair melhores preços")
+
+recados = grupo.get("recados", [])
+if recados:
+    st.subheader("Recados e alinhamentos")
+    for recado in recados:
+        st.markdown(
+            f"""
+            <div class="recado-card">
+                <div class="recado-title">{recado.get('titulo', 'Recado')}</div>
+                <span class="recado-status {classe_status_recado(str(recado.get('status', 'Pendente')))}">{recado.get('status', 'Pendente')}</span>
+                {imagem_recado_html(recado)}
+                <div class="recado-comment">{recado.get('comentario', '')}</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )

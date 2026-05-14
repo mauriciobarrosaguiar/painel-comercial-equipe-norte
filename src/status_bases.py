@@ -23,6 +23,7 @@ ARQUIVOS = {
     "produtos_mix": "template_produtos_mix.xlsx",
     "mercado_farma": "mercado_farma.xlsx",
     "produtos_mercado_farma": "produtos.xlsx",
+    "bussola_historico": "bussola_historico.xlsx",
 }
 
 ARQUIVOS_PADRAO = {
@@ -32,6 +33,7 @@ ARQUIVOS_PADRAO = {
     "produtos_mix": DATA_DIR / "template_produtos_mix.xlsx",
     "mercado_farma": DATA_DIR / "mercado_farma.xlsx",
     "produtos_mercado_farma": DATA_DIR / "produtos.xlsx",
+    "bussola_historico": DATA_DIR / "bussola_historico.xlsx",
 }
 MERCADO_FARMA_CONSOLIDADO = DATA_DIR / "mercadofarma" / "mercadofarma_consolidado.csv"
 

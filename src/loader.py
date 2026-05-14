@@ -32,6 +32,7 @@ ARQUIVOS_PADRAO = {
     "produtos_mix": DATA_DIR / "template_produtos_mix.xlsx",
     "mercado_farma": DATA_DIR / "mercado_farma.xlsx",
     "produtos_mercado_farma": DATA_DIR / "produtos.xlsx",
+    "bussola_historico": DATA_DIR / "bussola_historico.xlsx",
 }
 
 ABAS_PADRAO = {
@@ -41,6 +42,7 @@ ABAS_PADRAO = {
     "produtos_mix": 0,
     "mercado_farma": 0,
     "produtos_mercado_farma": 0,
+    "bussola_historico": "Pedidos",
 }
 
 
@@ -112,6 +114,10 @@ def _carregar_excel(chave: str) -> pd.DataFrame:
 
 def carregar_bussola() -> pd.DataFrame:
     return _carregar_excel("bussola")
+
+
+def carregar_bussola_historico() -> pd.DataFrame:
+    return _carregar_excel("bussola_historico")
 
 
 def carregar_painel_equipe() -> pd.DataFrame:

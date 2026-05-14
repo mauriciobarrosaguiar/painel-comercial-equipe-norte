@@ -158,8 +158,9 @@ def periodo_90_dias():
     return inicio.strftime("%d/%m/%Y"), hoje.strftime("%d/%m/%Y")
 
 
-def abrir_analise_com_periodo(driver):
-    data_inicial, data_final = periodo_90_dias()
+def abrir_analise_com_periodo(driver, data_inicial: str | None = None, data_final: str | None = None):
+    if not data_inicial or not data_final:
+        data_inicial, data_final = periodo_90_dias()
     url = f"{BUSSOLA_ANALISE_URL}?page=1&from={quote(data_inicial)}&to={quote(data_final)}"
     log(f"Abrindo análise direto com período: {data_inicial} até {data_final}")
     driver.get(url)
@@ -256,7 +257,16 @@ def normalizar_csv(csv_path: Path, saida_dir: Path):
     return csv_dest, xlsx_dest
 
 
-def executar(usuario: str, senha: str, saida: str = "data", downloads: Optional[str] = None, headless: bool = False, log_fn=None):
+def executar(
+    usuario: str,
+    senha: str,
+    saida: str = "data",
+    downloads: Optional[str] = None,
+    headless: bool = False,
+    log_fn=None,
+    data_inicial: str | None = None,
+    data_final: str | None = None,
+):
     global LOG_CALLBACK
     saida_dir = Path(saida)
     download_dir = Path(downloads) if downloads else (Path.cwd() / "downloads_bussola")
@@ -266,7 +276,7 @@ def executar(usuario: str, senha: str, saida: str = "data", downloads: Optional[
     driver = build_driver(download_dir, headless=headless)
     try:
         entrar_bussola(driver, usuario, senha)
-        abrir_analise_com_periodo(driver)
+        abrir_analise_com_periodo(driver, data_inicial=data_inicial, data_final=data_final)
         selecionar_csv(driver)
         arquivo = esperar_download(download_dir)
         normalizar_csv(arquivo, saida_dir)
@@ -286,6 +296,8 @@ def main():
     parser.add_argument("--saida", default="data")
     parser.add_argument("--downloads", default=None)
     parser.add_argument("--headless", action="store_true")
+    parser.add_argument("--data-inicial", default=None)
+    parser.add_argument("--data-final", default=None)
     args = parser.parse_args()
 
     executar(
@@ -294,6 +306,8 @@ def main():
         saida=args.saida,
         downloads=args.downloads,
         headless=args.headless,
+        data_inicial=args.data_inicial,
+        data_final=args.data_final,
     )
 
 

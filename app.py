@@ -43,6 +43,7 @@ PAGINAS = [
     ("Oportunidades", "pages/07_Oportunidades.py"),
     ("Mercado Farma / UF", "pages/10_Mercado_Farma_UF.py"),
     ("Desafio de Gigantes", "pages/09_Desafio_Gigantes.py"),
+    ("Histórico", "pages/13_Historico.py"),
     ("Importação", "pages/08_Importar_Bases.py"),
 ]
 

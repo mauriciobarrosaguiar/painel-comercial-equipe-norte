@@ -206,6 +206,7 @@ with tab_arquivos:
         ("Produtos / mix", "produtos_mix"),
         ("Mercado Farma", "mercado_farma"),
         ("Produtos Mercado Farma", "produtos_mercado_farma"),
+        ("Histórico Bússola", "bussola_historico"),
     ]
     cols = st.columns(2)
     for idx, (nome, chave) in enumerate(bases):
@@ -228,6 +229,7 @@ with tab_arquivos:
     up_mix = st.file_uploader("template_produtos_mix.xlsx", type=["xlsx"], key="file_mix")
     up_mercado = st.file_uploader("mercado_farma.xlsx", type=["xlsx"], key="file_mercado_farma")
     up_produtos_mercado = st.file_uploader("produtos.xlsx - EANs Mercado Farma", type=["xlsx"], key="file_produtos_mercado")
+    up_historico = st.file_uploader("bussola_historico.xlsx", type=["xlsx"], key="file_bussola_historico")
 
     c1, c2 = st.columns(2)
     if c1.button("Usar e salvar uploads", width="stretch"):
@@ -244,6 +246,8 @@ with tab_arquivos:
             salvos.append("Mercado Farma")
         if registrar_upload("produtos_mercado_farma", up_produtos_mercado):
             salvos.append("Produtos Mercado Farma")
+        if registrar_upload("bussola_historico", up_historico):
+            salvos.append("Histórico Bússola")
         st.session_state["mensagem_upload_salvo"] = (
             "Uploads aplicados e salvos: " + ", ".join(salvos)
             if salvos

@@ -25,6 +25,7 @@ ARQUIVOS_BINARIOS = {
     "produtos_mix": "template_produtos_mix.xlsx",
     "mercado_farma": "mercado_farma.xlsx",
     "produtos_mercado_farma": "produtos.xlsx",
+    "bussola_historico": "bussola_historico.xlsx",
 }
 
 ARQUIVOS_JSON = {
@@ -34,6 +35,8 @@ ARQUIVOS_JSON = {
     "metadata": "metadata.json",
     "desafio": "desafio_gigantes.json",
     "foco_semanal": "foco_semanal.json",
+    "acoes_promocionais_extra": "acoes_promocionais_extra.json",
+    "metas_historico": "metas_historico.json",
     "mercado_farma_job": "mercado_farma_job.json",
     "mercado_farma_descontos": "mercado_farma_descontos.json",
 }
@@ -45,6 +48,7 @@ ARQUIVOS_PADRAO_DATA = {
     "produtos_mix": DATA_DIR / "template_produtos_mix.xlsx",
     "mercado_farma": DATA_DIR / "mercado_farma.xlsx",
     "produtos_mercado_farma": DATA_DIR / "produtos.xlsx",
+    "bussola_historico": DATA_DIR / "bussola_historico.xlsx",
 }
 
 
