@@ -517,6 +517,21 @@ def _linha_erro(alvo: dict[str, str], ean: str, erro: Exception | str) -> dict:
     }
 
 
+def _salvar_debug_driver(driver, debug_dir: Path | str | None, nome: str) -> None:
+    if driver is None or debug_dir is None:
+        return
+    pasta = Path(debug_dir)
+    pasta.mkdir(parents=True, exist_ok=True)
+    try:
+        driver.save_screenshot(str(pasta / f"{nome}.png"))
+    except Exception:
+        pass
+    try:
+        (pasta / "debug_html.html").write_text(driver.page_source or "", encoding="utf-8")
+    except Exception:
+        pass
+
+
 def _extrair_alvo(
     alvo: dict[str, str],
     eans: list[str],
@@ -526,6 +541,7 @@ def _extrair_alvo(
     start_index: int = 0,
     estado: dict | None = None,
     resultados: list[dict] | None = None,
+    debug_dir: Path | str | None = None,
 ) -> list[dict]:
     saida = resultados if resultados is not None else []
     driver = None
@@ -534,12 +550,16 @@ def _extrair_alvo(
     cnpj = normalizar_cnpj(alvo.get("cnpj"))
     usuario = _texto(alvo.get("usuario"))
     senha = _texto(alvo.get("senha"))
+    etapa = "abrir_navegador"
     try:
         if callable(log_fn):
             log_fn(f"{consultor} / {uf}: abrindo Mercado Farma")
         driver = criar_driver(headless=headless)
+        etapa = "login"
         login_mercadofarma(driver, usuario, senha, log_fn=log_fn)
+        etapa = "catalogo"
         selecionar_cnpj_catalogo(driver, cnpj, log_fn=log_fn)
+        etapa = "extracao"
         for idx in range(start_index, len(eans)):
             ean = eans[idx]
             if estado is not None and estado.get("cancelar"):
@@ -558,6 +578,8 @@ def _extrair_alvo(
                 linhas = processar_ean_catalogo(driver, ean)
                 saida.extend(converter_linhas_extrator(linhas, consultor, uf, cnpj))
             except Exception as exc:
+                if debug_dir is not None and idx == start_index:
+                    _salvar_debug_driver(driver, debug_dir, "erro_busca")
                 saida.append(_linha_erro(alvo, ean, exc))
             if estado is not None:
                 estado["ean_index"] = idx + 1
@@ -566,6 +588,15 @@ def _extrair_alvo(
                 _salvar_parcial(pd.DataFrame(saida))
                 _salvar_estado_extracao(estado)
         return saida
+    except Exception as exc:
+        nome_debug = {
+            "login": "erro_login",
+            "catalogo": "erro_catalogo",
+            "extracao": "erro_extracao",
+            "abrir_navegador": "erro_navegador",
+        }.get(etapa, "erro_extracao")
+        _salvar_debug_driver(driver, debug_dir, nome_debug)
+        raise RuntimeError(f"{etapa}: {exc}") from exc
     finally:
         if driver is not None:
             driver.quit()

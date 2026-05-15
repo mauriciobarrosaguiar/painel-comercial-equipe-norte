@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
+import traceback
 from pathlib import Path
 
 import pandas as pd
@@ -12,6 +14,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from src.configuracoes import carregar_login_bussola, consultores_unicos
+from src.datas import agora_brasilia
 from src.loader import carregar_dados_tratados
 from src.mercado_farma import (
     _extrair_alvo,
@@ -68,23 +71,46 @@ def _csv_saida(df: pd.DataFrame) -> pd.DataFrame:
     return saida[list(COLUNAS_CSV.values())]
 
 
+def _rodando_no_actions_sem_persistencia() -> bool:
+    return os.environ.get("GITHUB_ACTIONS", "").lower() == "true" and not os.environ.get("PERSISTENCE_KEY")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Extrai Mercado Farma para uma UF.")
-    parser.add_argument("--uf", required=True, help="UF que será extraída, ex.: MA")
+    parser.add_argument("--uf", required=True, help="UF que sera extraida, ex.: MA")
     parser.add_argument("--saida", default="data/mercadofarma/parciais", help="Pasta dos arquivos parciais")
     parser.add_argument("--limite-eans", type=int, default=0, help="Limite para teste. 0 consulta todos.")
-    parser.add_argument("--visivel", action="store_true", help="Executa navegador visível.")
+    parser.add_argument("--visivel", action="store_true", help="Executa navegador visivel.")
     args = parser.parse_args()
 
     uf = args.uf.strip().upper()
     saida_dir = ROOT / args.saida
     status_dir = ROOT / "data" / "mercadofarma" / "status"
+    debug_dir = ROOT / "data" / "mercadofarma" / "debug" / uf
     csv_path = saida_dir / f"mercadofarma_{uf}.csv"
     status_path = status_dir / f"mercadofarma_{uf}.json"
-    status = {"uf": uf, "status": "erro", "consultor_usado": "", "cnpj_referencia": "", "total_produtos": 0, "erro": ""}
+    status = {
+        "uf": uf,
+        "status": "erro",
+        "consultor_usado": "",
+        "cnpj_referencia": "",
+        "total_produtos": 0,
+        "erro": "",
+        "etapa": "inicio",
+        "traceback": "",
+        "iniciado_em": agora_brasilia().isoformat(),
+        "finalizado_em": "",
+    }
 
     try:
-        _log(f"Iniciando extração Mercado Farma para UF {uf}")
+        _log(f"Iniciando extracao Mercado Farma para UF {uf}")
+        if _rodando_no_actions_sem_persistencia():
+            raise RuntimeError(
+                "PERSISTENCE_KEY nao esta configurado nos Secrets do GitHub Actions. "
+                "Sem essa chave o robo nao consegue ler os logins salvos no painel."
+            )
+
+        status["etapa"] = "carregar_bases"
         dados = carregar_dados_tratados()
         clientes = dados["clientes"]
         produtos_mercado = dados["produtos_mercado_farma"]
@@ -92,13 +118,14 @@ def main() -> int:
         credenciais = _credenciais_por_consultor(login, consultores_unicos(clientes))
         alvos = [alvo for alvo in alvos_unicos_por_uf(clientes, credenciais, exigir_login=True) if alvo.get("uf") == uf]
         if not alvos:
-            raise RuntimeError(f"Não encontrei consultor com login e CNPJ referência para UF {uf}.")
+            raise RuntimeError(f"Nao encontrei consultor com login e CNPJ referencia para UF {uf}.")
         alvo = alvos[0]
         status["consultor_usado"] = alvo.get("consultor", "")
         status["cnpj_referencia"] = alvo.get("cnpj", "")
         _log(f"Consultor usado: {status['consultor_usado']}")
-        _log(f"CNPJ referência: {status['cnpj_referencia']}")
+        _log(f"CNPJ referencia: {status['cnpj_referencia']}")
 
+        status["etapa"] = "carregar_eans"
         eans = obter_eans_para_consulta(produtos_mercado)
         if args.limite_eans:
             eans = eans[: args.limite_eans]
@@ -106,19 +133,25 @@ def main() -> int:
             raise RuntimeError("Nenhum EAN encontrado na planilha produtos.xlsx.")
 
         resultados: list[dict] = []
-        _extrair_alvo(alvo, eans, headless=not args.visivel, resultados=resultados, log_fn=_log)
+        status["etapa"] = "extracao_mercado_farma"
+        _extrair_alvo(alvo, eans, headless=not args.visivel, resultados=resultados, log_fn=_log, debug_dir=debug_dir)
+        status["etapa"] = "salvar_arquivo"
         df = _csv_saida(pd.DataFrame(resultados))
         saida_dir.mkdir(parents=True, exist_ok=True)
         df.to_csv(csv_path, index=False, encoding="utf-8-sig")
         total = int(df["EAN"].dropna().astype(str).nunique()) if "EAN" in df.columns else len(df)
-        status.update({"status": "sucesso", "total_produtos": total, "arquivo": str(csv_path.relative_to(ROOT))})
-        _log(f"Total de produtos extraídos: {total}")
+        status.update({"status": "sucesso", "total_produtos": total, "arquivo": str(csv_path.relative_to(ROOT)), "etapa": "concluido"})
+        _log(f"Total de produtos extraidos: {total}")
         _log("Arquivo parcial salvo com sucesso")
+        status["finalizado_em"] = agora_brasilia().isoformat()
         _salvar_status(status_path, status)
         return 0
     except Exception as exc:
         status["erro"] = str(exc)
-        _log(f"Erro na extração Mercado Farma UF {uf}: {exc}")
+        status["traceback"] = traceback.format_exc(limit=8)
+        status["finalizado_em"] = agora_brasilia().isoformat()
+        _log(f"Erro na extracao Mercado Farma UF {uf}: {exc}")
+        _log(status["traceback"])
         _salvar_status(status_path, status)
         return 1
 

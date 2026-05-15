@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 from html import escape
+from textwrap import dedent
 
 import streamlit as st
 
@@ -27,7 +28,7 @@ def _html(valor, padrao: str = "-") -> str:
 
 
 def contato_card_html(cliente) -> str:
-    return f"""
+    return dedent(f"""
     <div class="contact-card">
         <div class="contact-content">
             <div class="contact-title" title="{_html(cliente.get('nome_pdv'))}">{_html(cliente.get('nome_pdv'))}</div>
@@ -51,7 +52,7 @@ def contato_card_html(cliente) -> str:
         </div>
         <div class="contact-status"><span class="pill-note">{_html(cliente.get('status_comercial'))}</span></div>
     </div>
-    """
+    """).strip()
 
 
 def base_exportacao_clientes(filtrado):

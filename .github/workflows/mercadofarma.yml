@@ -1,20 +1,33 @@
 name: Mercado Farma por UF
+run-name: Mercado Farma / ${{ inputs.acao }} / ${{ inputs.ufs || inputs.uf || 'todas' }}
 
 on:
   workflow_dispatch:
     inputs:
       acao:
-        description: "Ação solicitada pelo painel"
+        description: "Acao solicitada pelo painel"
         required: true
         default: "atualizar_mercadofarma_paralelo"
       ufs:
-        description: "UFs separadas por vírgula. Vazio executa todas."
+        description: "UFs separadas por virgula. Vazio executa todas."
         required: false
         default: "MA,MT,PA,PI"
+      uf:
+        description: "Compatibilidade: UF ou UFs separadas por virgula."
+        required: false
+        default: ""
       limite_eans:
         description: "Limite de EANs para teste. 0 executa todos."
         required: false
         default: "0"
+      command_id:
+        description: "Identificador do disparo pelo painel"
+        required: false
+        default: ""
+      headless:
+        description: "Rodar navegador oculto"
+        required: false
+        default: "true"
 
 permissions:
   contents: write
@@ -28,7 +41,7 @@ jobs:
       fail-fast: false
       max-parallel: 2
       matrix:
-        uf: [MA, MT, PA, PI]
+        uf: [MA, MT, PA, PI, TO]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -42,13 +55,13 @@ jobs:
         id: setup-chrome
         uses: browser-actions/setup-chrome@v1
 
-      - name: Instalar dependências
+      - name: Instalar dependencias
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
       - name: Extrair UF ${{ matrix.uf }}
-        if: ${{ inputs.ufs == '' || contains(format(',{0},', inputs.ufs), format(',{0},', matrix.uf)) }}
+        if: ${{ (inputs.ufs == '' && inputs.uf == '') || contains(format(',{0},', inputs.ufs), format(',{0},', matrix.uf)) || contains(format(',{0},', inputs.uf), format(',{0},', matrix.uf)) }}
         env:
           GITHUB_TOKEN: ${{ github.token }}
           GITHUB_REPO: ${{ github.repository }}
@@ -57,8 +70,12 @@ jobs:
           PERSISTENCE_KEY: ${{ secrets.PERSISTENCE_KEY }}
           CHROME_BIN: ${{ steps.setup-chrome.outputs.chrome-path }}
         run: |
-          echo "Iniciando extração Mercado Farma para UF ${{ matrix.uf }}"
-          python automacoes/mercadofarma.py --uf "${{ matrix.uf }}" --limite-eans "${{ inputs.limite_eans }}"
+          echo "Iniciando extracao Mercado Farma para UF ${{ matrix.uf }}"
+          EXTRA_ARGS=""
+          if [ "${{ inputs.headless }}" = "false" ]; then
+            EXTRA_ARGS="--visivel"
+          fi
+          python automacoes/mercadofarma.py --uf "${{ matrix.uf }}" --limite-eans "${{ inputs.limite_eans }}" $EXTRA_ARGS
 
       - name: Publicar artifact da UF ${{ matrix.uf }}
         if: always()
@@ -69,6 +86,7 @@ jobs:
           path: |
             data/mercadofarma/parciais/mercadofarma_${{ matrix.uf }}.csv
             data/mercadofarma/status/mercadofarma_${{ matrix.uf }}.json
+            data/mercadofarma/debug/${{ matrix.uf }}/**
 
   consolidar_mercadofarma:
     if: ${{ always() && inputs.acao == 'atualizar_mercadofarma_paralelo' }}
@@ -99,13 +117,13 @@ jobs:
       - name: Consolidar Mercado Farma
         run: python scripts/consolidar_mercadofarma.py
 
-      - name: Salvar consolidado no repositório
+      - name: Salvar consolidado no repositorio
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add -A data/mercadofarma
           if git diff --staged --quiet; then
-            echo "Nenhuma alteração para publicar."
+            echo "Nenhuma alteracao para publicar."
           else
             git commit -m "Atualiza Mercado Farma consolidado"
             git push

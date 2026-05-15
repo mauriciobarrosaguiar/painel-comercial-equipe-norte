@@ -165,6 +165,58 @@ def tabela_status_consolidado(status: dict) -> pd.DataFrame:
     return pd.DataFrame(linhas)
 
 
+def renderizar_execucoes_actions(runs: list[dict]) -> None:
+    if not runs:
+        return
+    st.markdown("<span class='pill-note'>Últimas execuções</span>", unsafe_allow_html=True)
+    for run in runs:
+        falhou = run.get("conclusao") == "failure" or bool(run.get("ufs_com_erro"))
+        with st.container(border=True):
+            c1, c2, c3, c4 = st.columns(4)
+            c1.caption("Criada em")
+            c1.markdown(f"**{run.get('criada_em', '-')}**")
+            c2.caption("Status")
+            c2.markdown(f"**{run.get('status_pt', '-')}**")
+            c3.caption("Resultado")
+            c3.markdown(f"**{run.get('conclusao_pt', '-')}**")
+            c4.caption("UF")
+            c4.markdown(f"**{run.get('uf', '-')}**")
+
+            d1, d2 = st.columns(2)
+            d1.caption(f"Branch: {run.get('branch', '-')}")
+            d2.caption(f"Ação executada: {run.get('acao', '-')}")
+
+            links = []
+            if run.get("url"):
+                links.append(f"[Abrir execução]({run['url']})")
+            if run.get("jobs_url"):
+                links.append(f"[API dos jobs]({run['jobs_url']})")
+            if links:
+                st.markdown(" | ".join(links))
+
+            if falhou:
+                chave = f"mf_ver_erro_{run.get('id')}"
+                if st.button("Ver detalhes do erro" if not st.session_state.get(chave) else "Ocultar detalhes do erro", key=f"btn_{chave}", width="stretch"):
+                    st.session_state[chave] = not bool(st.session_state.get(chave))
+                if st.session_state.get(chave):
+                    jobs_falhos = [job for job in run.get("jobs", []) if job.get("conclusao") == "failure"]
+                    if jobs_falhos:
+                        for job in jobs_falhos:
+                            st.markdown(
+                                f"**{job.get('nome', 'Job')}** | Status: **{job.get('status_pt', '-')}** | Resultado: **{job.get('conclusao_pt', '-')}**"
+                            )
+                            if job.get("html_url"):
+                                st.markdown(f"[Abrir logs da UF {job.get('uf', '-')}]({job['html_url']})")
+                            if job.get("logs_url"):
+                                st.caption(f"logs_url: {job['logs_url']}")
+                            if job.get("erro_resumo"):
+                                st.code(job["erro_resumo"], language="text")
+                    elif run.get("erro_resumo"):
+                        st.code(run["erro_resumo"], language="text")
+                    else:
+                        st.info("A execução falhou, mas o GitHub ainda não liberou detalhes de log pela API.")
+
+
 def configurar_desconto_adicional(mercado_base: pd.DataFrame) -> dict:
     config = mf.carregar_descontos_adicionais()
     with st.expander("Desconto adicional por distribuidora", expanded=False):
@@ -274,15 +326,15 @@ with st.expander("Extração Mercado Farma", expanded=False):
     if col_git1.button("Atualizar UFs Selecionadas", width="stretch", disabled=not bool(ufs_para_rodar)):
         try:
             gha.disparar_mercado_farma(ufs_para_rodar, int(limite_eans or 0))
-            st.success("GitHub Actions disparado. Acompanhe o status abaixo.")
+            st.success("Atualização iniciada. Acompanhe o status abaixo.")
         except Exception as exc:
-            st.error(f"Não consegui disparar o GitHub Actions: {exc}")
+            st.error(f"Não consegui iniciar a atualização: {exc}")
     if col_git2.button("Atualizar Todas as UFs", width="stretch", disabled=not bool(ufs_alvos)):
         try:
             gha.disparar_mercado_farma(ufs_alvos, int(limite_eans or 0))
-            st.success("GitHub Actions disparado para todas as UFs.")
+            st.success("Atualização iniciada para todas as UFs.")
         except Exception as exc:
-            st.error(f"Não consegui disparar o GitHub Actions: {exc}")
+            st.error(f"Não consegui iniciar a atualização: {exc}")
 
     status_consolidado = mf.carregar_status_consolidado()
     status_tabela = tabela_status_consolidado(status_consolidado)
@@ -292,22 +344,7 @@ with st.expander("Extração Mercado Farma", expanded=False):
 
     runs = gha.listar_execucoes_mercado_farma(5)
     if runs:
-        st.markdown("<span class='pill-note'>Últimas execuções GitHub Actions</span>", unsafe_allow_html=True)
-        st.dataframe(
-            pd.DataFrame(
-                [
-                    {
-                        "Criada em": run.get("created_at", ""),
-                        "Status": run.get("status", ""),
-                        "Conclusão": run.get("conclusion", ""),
-                        "Branch": run.get("head_branch", ""),
-                    }
-                    for run in runs
-                ]
-            ),
-            width="stretch",
-            hide_index=True,
-        )
+        renderizar_execucoes_actions(runs)
 
     with st.expander("Extração local de apoio", expanded=False):
         estado = mf.carregar_estado_extracao()
