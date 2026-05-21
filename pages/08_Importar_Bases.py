@@ -14,6 +14,7 @@ from src.configuracoes import (
 from src.layout import botao_download_excel, titulo_pagina
 from src.loader import carregar_dados_tratados, fonte_ativa, limpar_uploads, modelo_acoes, modelo_produtos_mix, registrar_upload
 from src.status_bases import formatar_ultima_atualizacao
+from src.tratamento import formatar_moeda, slug_coluna
 
 
 def credenciais_dataframe(consultores: list[str], login_salvo: dict) -> pd.DataFrame:
@@ -47,6 +48,16 @@ def metas_dataframe(consultores: list[str], metas: dict) -> pd.DataFrame:
             }
         )
     return pd.DataFrame(linhas)
+
+
+def _cartao_meta_resumo(titulo: str, valor: str, detalhe: str) -> str:
+    return f"""
+    <div class="small-update">
+        <div class="small-update-title">{titulo}</div>
+        <div class="small-update-value">{valor}</div>
+        <div class="metric-note">{detalhe}</div>
+    </div>
+    """
 
 
 dados = carregar_dados_tratados()
@@ -137,55 +148,117 @@ with tab_bussola:
                 st.error(f"Extração interrompida: {exc}")
 
 with tab_metas:
-    st.subheader("Metas do gerente territorial")
+    st.subheader("Ajustes de metas")
     metas = carregar_metas()
     gerente = metas.get("gerente_territorial", {})
+    st.caption("As metas salvas aqui alimentam a Visão Geral e a página Consultores. Use este ajuste para o mês atual.")
+
+    st.markdown(f"<div class='consultor-name'>GD - {nome_gd}</div>", unsafe_allow_html=True)
     g1, g2, g3, g4 = st.columns(4)
-    meta_ol = g1.number_input("OL sem combate", min_value=0.0, step=1000.0, value=float(gerente.get("ol_sem_combate", 0) or 0))
-    meta_prio = g2.number_input("OL prioritários", min_value=0.0, step=1000.0, value=float(gerente.get("ol_prioritarios", 0) or 0))
-    meta_lanc = g3.number_input("OL lançamentos", min_value=0.0, step=1000.0, value=float(gerente.get("ol_lancamentos", 0) or 0))
-    meta_cli = g4.number_input("Clientes com venda", min_value=0.0, step=1.0, value=float(gerente.get("clientes_positivados", 0) or 0))
+    meta_ol = g1.number_input("Meta OL sem combate", min_value=0.0, step=1000.0, value=float(gerente.get("ol_sem_combate", 0) or 0), key="meta_gd_ol")
+    meta_prio = g2.number_input("Meta OL prioritários", min_value=0.0, step=1000.0, value=float(gerente.get("ol_prioritarios", 0) or 0), key="meta_gd_prio")
+    meta_lanc = g3.number_input("Meta OL lançamentos", min_value=0.0, step=1000.0, value=float(gerente.get("ol_lancamentos", 0) or 0), key="meta_gd_lanc")
+    meta_cli = g4.number_input("Meta clientes com venda", min_value=0.0, step=1.0, value=float(gerente.get("clientes_positivados", 0) or 0), key="meta_gd_cli")
 
     st.subheader("Metas dos consultores")
-    metas_editadas = {}
     metas_consultores = metas.get("consultores", {})
+    busca_meta = st.text_input("Buscar consultor para ajustar meta", placeholder="Digite parte do nome", key="buscar_meta_consultor")
+    consultores_visiveis = [
+        consultor
+        for consultor in consultores
+        if not busca_meta.strip() or busca_meta.strip().upper() in consultor.upper()
+    ]
+    metas_editadas = {consultor: dict(metas_consultores.get(consultor, {})) for consultor in consultores}
+    if not consultores_visiveis:
+        st.info("Nenhum consultor encontrado para a busca.")
+
     for idx, consultor in enumerate(consultores):
+        if consultor not in consultores_visiveis:
+            continue
         atual = metas_consultores.get(consultor, {})
         st.markdown(f"<div class='consultor-name'>{consultor}</div>", unsafe_allow_html=True)
         c1, c2, c3, c4 = st.columns(4)
+        chave_consultor = f"{idx}_{slug_coluna(consultor)}"
         metas_editadas[consultor] = {
             "ol_sem_combate": c1.number_input(
                 "OL sem combate",
                 min_value=0.0,
                 step=1000.0,
                 value=float(atual.get("ol_sem_combate", 0) or 0),
-                key=f"meta_ol_{idx}",
+                key=f"meta_ol_{chave_consultor}",
             ),
             "ol_prioritarios": c2.number_input(
                 "OL prioritários",
                 min_value=0.0,
                 step=1000.0,
                 value=float(atual.get("ol_prioritarios", 0) or 0),
-                key=f"meta_prio_{idx}",
+                key=f"meta_prio_{chave_consultor}",
             ),
             "ol_lancamentos": c3.number_input(
                 "OL lançamentos",
                 min_value=0.0,
                 step=1000.0,
                 value=float(atual.get("ol_lancamentos", 0) or 0),
-                key=f"meta_lanc_{idx}",
+                key=f"meta_lanc_{chave_consultor}",
             ),
             "clientes_positivados": c4.number_input(
                 "Clientes com venda",
                 min_value=0.0,
                 step=1.0,
                 value=float(atual.get("clientes_positivados", 0) or 0),
-                key=f"meta_cli_{idx}",
+                key=f"meta_cli_{chave_consultor}",
             ),
         }
         st.divider()
 
-    if st.button("Salvar metas", width="stretch"):
+    metas_preview = {"consultores": metas_editadas}
+    df_metas = metas_dataframe(consultores, metas_preview)
+    soma_ol = float(df_metas["ol_sem_combate"].sum()) if not df_metas.empty else 0.0
+    soma_prio = float(df_metas["ol_prioritarios"].sum()) if not df_metas.empty else 0.0
+    soma_lanc = float(df_metas["ol_lancamentos"].sum()) if not df_metas.empty else 0.0
+    soma_cli = float(df_metas["clientes_positivados"].sum()) if not df_metas.empty else 0.0
+
+    st.subheader("Conferência das metas")
+    r1, r2 = st.columns(2)
+    with r1:
+        st.markdown(
+            _cartao_meta_resumo("Meta GD OL", formatar_moeda(meta_ol), f"Soma consultores: {formatar_moeda(soma_ol)}"),
+            unsafe_allow_html=True,
+        )
+        st.markdown(
+            _cartao_meta_resumo("Meta GD prioritários", formatar_moeda(meta_prio), f"Soma consultores: {formatar_moeda(soma_prio)}"),
+            unsafe_allow_html=True,
+        )
+    with r2:
+        st.markdown(
+            _cartao_meta_resumo("Meta GD lançamentos", formatar_moeda(meta_lanc), f"Soma consultores: {formatar_moeda(soma_lanc)}"),
+            unsafe_allow_html=True,
+        )
+        st.markdown(
+            _cartao_meta_resumo("Meta GD clientes", str(int(meta_cli or 0)), f"Soma consultores: {int(soma_cli or 0)}"),
+            unsafe_allow_html=True,
+        )
+
+    conferencia = pd.DataFrame(
+        [
+            {"Indicador": "OL sem combate", "Meta GD": meta_ol, "Soma consultores": soma_ol, "Diferença": meta_ol - soma_ol},
+            {"Indicador": "OL prioritários", "Meta GD": meta_prio, "Soma consultores": soma_prio, "Diferença": meta_prio - soma_prio},
+            {"Indicador": "OL lançamentos", "Meta GD": meta_lanc, "Soma consultores": soma_lanc, "Diferença": meta_lanc - soma_lanc},
+            {"Indicador": "Clientes com venda", "Meta GD": meta_cli, "Soma consultores": soma_cli, "Diferença": meta_cli - soma_cli},
+        ]
+    )
+    conferencia_formatada = conferencia.copy()
+    for idx, linha in conferencia_formatada.iterrows():
+        if linha["Indicador"] == "Clientes com venda":
+            for coluna in ["Meta GD", "Soma consultores", "Diferença"]:
+                conferencia_formatada.loc[idx, coluna] = int(float(linha[coluna] or 0))
+        else:
+            for coluna in ["Meta GD", "Soma consultores", "Diferença"]:
+                conferencia_formatada.loc[idx, coluna] = formatar_moeda(float(linha[coluna] or 0))
+    st.dataframe(conferencia_formatada, width="stretch", hide_index=True)
+
+    b1, b2 = st.columns([1.4, 0.8])
+    if b1.button("Salvar ajustes de metas", width="stretch"):
         metas["gerente_territorial"] = {
             "ol_sem_combate": meta_ol,
             "ol_prioritarios": meta_prio,
@@ -194,8 +267,35 @@ with tab_metas:
         }
         metas["consultores"] = metas_editadas
         salvar_metas(metas)
-        st.success("Metas salvas.")
+        st.success("Metas salvas e fixadas.")
         st.rerun()
+
+    with b2:
+        confirmar_zerar = st.checkbox("Zerar metas atuais", key="confirmar_zerar_metas")
+        if st.button("Zerar metas", width="stretch", disabled=not confirmar_zerar):
+            salvar_metas(
+                {
+                    "gerente_territorial": {
+                        "ol_sem_combate": 0.0,
+                        "ol_prioritarios": 0.0,
+                        "ol_lancamentos": 0.0,
+                        "clientes_positivados": 0.0,
+                    },
+                    "consultores": {
+                        consultor: {
+                            "ol_sem_combate": 0.0,
+                            "ol_prioritarios": 0.0,
+                            "ol_lancamentos": 0.0,
+                            "clientes_positivados": 0.0,
+                        }
+                        for consultor in consultores
+                    },
+                }
+            )
+            st.success("Metas zeradas.")
+            st.rerun()
+
+    botao_download_excel(df_metas, "metas_comerciais.xlsx", "Baixar metas dos consultores")
 
 with tab_arquivos:
     st.subheader("Bases salvas")
