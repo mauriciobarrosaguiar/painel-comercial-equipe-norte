@@ -39,6 +39,7 @@ ARQUIVOS_JSON = {
     "metas_historico": "metas_historico.json",
     "mercado_farma_job": "mercado_farma_job.json",
     "mercado_farma_descontos": "mercado_farma_descontos.json",
+    "ajustes_vendedores": "ajustes_vendedores.json",
 }
 
 ARQUIVOS_PADRAO_DATA = {

@@ -5,9 +5,11 @@ import streamlit as st
 
 from src.bussola_web import extrair_bussola_web_todos
 from src.configuracoes import (
+    carregar_ajustes_vendedores,
     carregar_login_bussola,
     carregar_metas,
     consultores_unicos,
+    salvar_ajustes_vendedores,
     salvar_login_bussola,
     salvar_metas,
 )
@@ -72,7 +74,7 @@ mensagem_upload = st.session_state.pop("mensagem_upload_salvo", "")
 if mensagem_upload:
     st.success(mensagem_upload)
 
-tab_bussola, tab_metas, tab_arquivos = st.tabs(["Bússola Web", "Metas", "Arquivos"])
+tab_bussola, tab_vendedores, tab_metas, tab_arquivos = st.tabs(["Bússola Web", "Vendedores", "Metas", "Arquivos"])
 
 with tab_bussola:
     st.subheader("Acesso ao Bússola Web")
@@ -146,6 +148,116 @@ with tab_bussola:
                 st.cache_data.clear()
             except Exception as exc:
                 st.error(f"Extração interrompida: {exc}")
+
+with tab_vendedores:
+    st.subheader("Ajustar vendedores do painel")
+    st.caption("Use esta tela para trocar nomes como VAGO por vendedor contratado, sem alterar a planilha original enviada.")
+
+    ajustes = carregar_ajustes_vendedores()
+    base_vendedores = clientes.copy()
+    if "nome_rep_original" not in base_vendedores.columns:
+        base_vendedores["nome_rep_original"] = base_vendedores.get("nome_rep", "").fillna("").astype(str)
+    if "setor_rep" not in base_vendedores.columns:
+        base_vendedores["setor_rep"] = ""
+
+    opcoes_setor = (
+        base_vendedores[["setor_rep", "nome_rep_original", "nome_rep"]]
+        .fillna("")
+        .astype(str)
+        .drop_duplicates()
+        .sort_values(["setor_rep", "nome_rep_original"])
+        .reset_index(drop=True)
+    )
+    opcoes_setor["label"] = opcoes_setor.apply(
+        lambda linha: f"{linha['setor_rep'] or 'Sem setor'} | {linha['nome_rep_original'] or linha['nome_rep']}",
+        axis=1,
+    )
+    mapa_setor = {linha["label"]: linha for _, linha in opcoes_setor.iterrows()}
+
+    st.markdown("#### Novo ajuste")
+    a1, a2 = st.columns([1.2, 1.0])
+    escolha_setor = a1.selectbox(
+        "Setor / nome atual no painel",
+        ["Selecione"] + list(mapa_setor.keys()),
+        key="novo_ajuste_vendedor_setor",
+    )
+    info_setor = mapa_setor.get(escolha_setor)
+    nome_sugerido = str(info_setor.get("nome_rep") if info_setor is not None else "") if info_setor is not None else ""
+    novo_nome = a2.text_input("Novo nome do vendedor", value="" if nome_sugerido.startswith("VAGO") else "", key="novo_ajuste_vendedor_nome")
+
+    if st.button("Salvar novo ajuste de vendedor", width="stretch", disabled=info_setor is None or not novo_nome.strip()):
+        setor = str(info_setor.get("setor_rep", "") or "").strip()
+        nome_atual = str(info_setor.get("nome_rep_original", "") or info_setor.get("nome_rep", "") or "").strip()
+        ajuste_id = slug_coluna(f"{setor}-{nome_atual}")
+        ajustes = [ajuste for ajuste in ajustes if str(ajuste.get("id")) != ajuste_id]
+        ajustes.append(
+            {
+                "id": ajuste_id,
+                "setor_rep": setor,
+                "nome_atual": nome_atual,
+                "nome_novo": novo_nome.strip().upper(),
+                "ativo": True,
+            }
+        )
+        salvar_ajustes_vendedores(ajustes)
+        st.cache_data.clear()
+        st.success("Ajuste salvo. O vendedor já passa a aparecer com o novo nome no painel.")
+        st.rerun()
+
+    st.markdown("#### Ajustes cadastrados")
+    if not ajustes:
+        st.info("Nenhum ajuste de vendedor cadastrado.")
+    else:
+        for idx, ajuste in enumerate(ajustes):
+            ajuste_id = str(ajuste.get("id", idx))
+            st.markdown(f"<div class='consultor-name'>{ajuste.get('setor_rep') or 'Sem setor'} - {ajuste.get('nome_atual', '')}</div>", unsafe_allow_html=True)
+            e1, e2, e3, e4 = st.columns([0.9, 1.2, 1.2, 0.5])
+            setor_edit = e1.text_input("Setor", value=str(ajuste.get("setor_rep", "") or ""), key=f"ajuste_setor_{ajuste_id}")
+            atual_edit = e2.text_input("Nome atual", value=str(ajuste.get("nome_atual", "") or ""), key=f"ajuste_atual_{ajuste_id}")
+            novo_edit = e3.text_input("Nome ajustado", value=str(ajuste.get("nome_novo", "") or ""), key=f"ajuste_novo_{ajuste_id}")
+            ativo_edit = e4.checkbox("Ativo", value=bool(ajuste.get("ativo", True)), key=f"ajuste_ativo_{ajuste_id}")
+
+            b1, b2 = st.columns([1.2, 0.8])
+            if b1.button("Salvar alteração", width="stretch", key=f"salvar_ajuste_vendedor_{ajuste_id}", disabled=not novo_edit.strip()):
+                ajustes[idx] = {
+                    "id": ajuste_id,
+                    "setor_rep": setor_edit.strip(),
+                    "nome_atual": atual_edit.strip(),
+                    "nome_novo": novo_edit.strip().upper(),
+                    "ativo": ativo_edit,
+                }
+                salvar_ajustes_vendedores(ajustes)
+                st.cache_data.clear()
+                st.success("Ajuste atualizado.")
+                st.rerun()
+
+            confirmar_exclusao = b2.checkbox("Excluir", key=f"confirmar_excluir_ajuste_{ajuste_id}")
+            if b2.button("Excluir ajuste", width="stretch", key=f"excluir_ajuste_vendedor_{ajuste_id}", disabled=not confirmar_exclusao):
+                salvar_ajustes_vendedores([item for item in ajustes if str(item.get("id")) != ajuste_id])
+                st.cache_data.clear()
+                st.success("Ajuste removido.")
+                st.rerun()
+            st.divider()
+
+    if ajustes:
+        st.caption("Prévia dos CNPJs afetados pelos ajustes ativos.")
+        previa = base_vendedores[base_vendedores.get("vendedor_ajustado", False).astype(bool)].copy() if "vendedor_ajustado" in base_vendedores.columns else pd.DataFrame()
+        if previa.empty:
+            st.info("Nenhum cliente está sendo alterado pelos ajustes ativos neste momento.")
+        else:
+            st.dataframe(
+                previa[["setor_rep", "nome_rep_original", "nome_rep", "cnpj_limpo", "nome_pdv"]].rename(
+                    columns={
+                        "setor_rep": "Setor",
+                        "nome_rep_original": "Nome original",
+                        "nome_rep": "Nome ajustado",
+                        "cnpj_limpo": "CNPJ",
+                        "nome_pdv": "Cliente",
+                    }
+                ),
+                width="stretch",
+                hide_index=True,
+            )
 
 with tab_metas:
     st.subheader("Ajustes de metas")

@@ -6,6 +6,7 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
+from src.configuracoes import aplicar_ajustes_vendedores
 from src.datas import agora_brasilia
 from src.persistencia import carregar_bytes, existe_persistido, salvar_bytes
 from src.tratamento import (
@@ -162,7 +163,7 @@ def carregar_dados_tratados() -> dict[str, pd.DataFrame | list[str]]:
     if not acoes_raw.empty:
         avisos.extend(validar_colunas_esperadas(acoes_raw, COLUNAS_ACOES, "template_acoes_promocionais.xlsx"))
 
-    clientes = preparar_painel_equipe(painel_raw)
+    clientes = aplicar_ajustes_vendedores(preparar_painel_equipe(painel_raw))
     produtos_mix = preparar_produtos_mix(produtos_raw)
     acoes = preparar_acoes(acoes_raw)
     vendas = preparar_base_vendas(bussola_raw, clientes, produtos_mix)
