@@ -62,6 +62,14 @@ def _cartao_meta_resumo(titulo: str, valor: str, detalhe: str) -> str:
     """
 
 
+def _numero_seguro(valor: object) -> float:
+    try:
+        numero = float(valor)
+    except (TypeError, ValueError):
+        return 0.0
+    return numero if pd.notna(numero) else 0.0
+
+
 dados = carregar_dados_tratados()
 clientes = dados["clientes"]
 consultores = consultores_unicos(clientes)
@@ -363,10 +371,10 @@ with tab_metas:
     for idx, linha in conferencia_formatada.iterrows():
         if linha["Indicador"] == "Clientes com venda":
             for coluna in ["Meta GD", "Soma consultores", "Diferença"]:
-                conferencia_formatada.loc[idx, coluna] = int(float(linha[coluna] or 0))
+                conferencia_formatada.loc[idx, coluna] = int(_numero_seguro(linha[coluna]))
         else:
             for coluna in ["Meta GD", "Soma consultores", "Diferença"]:
-                conferencia_formatada.loc[idx, coluna] = formatar_moeda(float(linha[coluna] or 0))
+                conferencia_formatada.loc[idx, coluna] = formatar_moeda(_numero_seguro(linha[coluna]))
     st.dataframe(conferencia_formatada, width="stretch", hide_index=True)
 
     b1, b2 = st.columns([1.4, 0.8])
