@@ -14,6 +14,7 @@ from src.tratamento import normalizar_cnpj, slug_coluna
 
 DATA_DIR = Path(__file__).resolve().parents[1] / "data"
 SIP_FILE = DATA_DIR / "sip_grupos.json"
+STATUS_RECADOS_VALIDOS = {"Pendente", "Em andamento", "Concluído"}
 
 
 def carregar_sips() -> list[dict]:
@@ -153,7 +154,7 @@ def adicionar_recado_sip(sip_id: str, titulo: str, comentario: str, status: str,
         "id": str(uuid4()),
         "titulo": str(titulo or "").strip() or "Recado",
         "comentario": str(comentario or "").strip(),
-        "status": status if status in {"Pendente", "Em andamento", "Concluído"} else "Pendente",
+        "status": status if status in STATUS_RECADOS_VALIDOS else "Pendente",
         "imagem_nome": getattr(arquivo, "name", "imagem"),
         "imagem_tipo": getattr(arquivo, "type", "") or "image/png",
         "imagem_base64": base64.b64encode(conteudo).decode("ascii"),
@@ -174,9 +175,31 @@ def atualizar_status_recado_sip(sip_id: str, recado_id: str, status: str) -> Non
             continue
         for recado in grupo.get("recados", []):
             if recado.get("id") == recado_id:
-                recado["status"] = status if status in {"Pendente", "Em andamento", "Concluído"} else recado.get("status", "Pendente")
+                recado["status"] = status if status in STATUS_RECADOS_VALIDOS else recado.get("status", "Pendente")
                 salvar_sips(grupos)
                 return
+
+
+def atualizar_recado_sip(sip_id: str, recado_id: str, titulo: str, comentario: str, status: str, arquivo=None) -> None:
+    grupos = [normalizar_grupo_sip(grupo) for grupo in carregar_sips()]
+    for grupo in grupos:
+        if grupo.get("id") != sip_id:
+            continue
+        for recado in grupo.get("recados", []):
+            if recado.get("id") != recado_id:
+                continue
+            recado["titulo"] = str(titulo or "").strip() or "Recado"
+            recado["comentario"] = str(comentario or "").strip()
+            recado["status"] = status if status in STATUS_RECADOS_VALIDOS else recado.get("status", "Pendente")
+            recado["atualizado_em"] = agora_brasilia().isoformat()
+            if arquivo is not None:
+                conteudo = arquivo.getvalue()
+                recado["imagem_nome"] = getattr(arquivo, "name", "imagem")
+                recado["imagem_tipo"] = getattr(arquivo, "type", "") or "image/png"
+                recado["imagem_base64"] = base64.b64encode(conteudo).decode("ascii")
+            salvar_sips(grupos)
+            return
+    raise KeyError("SIP ou recado não encontrado.")
 
 
 def excluir_recado_sip(sip_id: str, recado_id: str) -> None:

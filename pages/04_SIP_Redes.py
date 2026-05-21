@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pandas as pd
 import streamlit as st
+from html import escape
 
 from src.calculos import formatar_tabela_metricas, gerar_resultado_cliente
 from src.datas import hoje_brasilia
@@ -11,7 +12,7 @@ from src.loader import carregar_dados_tratados
 from src.sip_store import (
     adicionar_recado_sip,
     adicionar_sip,
-    atualizar_status_recado_sip,
+    atualizar_recado_sip,
     carregar_sips,
     excluir_recado_sip,
     excluir_sip,
@@ -144,17 +145,45 @@ valor_atual = st.session_state.get("sip_cadastro_nome", "Novo cadastro")
 indice_atual = nomes.index(valor_atual) if valor_atual in nomes else 0
 escolha = st.selectbox("SIP cadastrada para editar", nomes, index=indice_atual, key="sip_cadastro_nome")
 editando = next((grupo for grupo in grupos if grupo["nome"] == escolha), None) if escolha != "Novo cadastro" else None
+form_key = str(editando["id"] if editando else "novo")
+
+st.markdown(
+    f"<span class='pill-note'>{'Editando SIP existente' if editando else 'Novo cadastro de SIP'}</span>",
+    unsafe_allow_html=True,
+)
 
 opcoes_clientes = opcoes_clientes_para_sip(clientes_resultado)
 redes_disponiveis = sorted(opcoes_clientes["rede"].dropna().astype(str).unique().tolist()) if not opcoes_clientes.empty else []
 
 c1, c2, c3 = st.columns([1.8, 1.0, 1.0])
-nome = c1.text_input("Nome do SIP (opcional)", value=editando["nome"] if editando else "")
-meta_mes = c2.number_input("Meta do mês", min_value=0.0, step=100.0, value=float(editando["meta_mes"]) if editando else 0.0)
-pagamento = c3.number_input("Pagamento a partir de (%)", min_value=0.0, max_value=100.0, step=1.0, value=float(editando["pagamento_percentual"]) if editando else 80.0)
+nome = c1.text_input(
+    "Nome do SIP (opcional)",
+    value=editando["nome"] if editando else "",
+    key=f"sip_nome_{form_key}",
+)
+meta_mes = c2.number_input(
+    "Meta do mês",
+    min_value=0.0,
+    step=100.0,
+    value=float(editando["meta_mes"]) if editando else 0.0,
+    key=f"sip_meta_{form_key}",
+)
+pagamento = c3.number_input(
+    "Pagamento a partir de (%)",
+    min_value=0.0,
+    max_value=100.0,
+    step=1.0,
+    value=float(editando["pagamento_percentual"]) if editando else 80.0,
+    key=f"sip_pagamento_{form_key}",
+)
 
 redes_default = [rede for rede in (editando["redes"] if editando else []) if rede in redes_disponiveis]
-redes_sel = st.multiselect("Rede / grupo econômico", redes_disponiveis, default=redes_default)
+redes_sel = st.multiselect(
+    "Rede / grupo econômico",
+    redes_disponiveis,
+    default=redes_default,
+    key=f"sip_redes_{form_key}",
+)
 
 clientes_opcoes = opcoes_clientes.copy()
 if redes_sel:
@@ -168,12 +197,14 @@ membros = st.multiselect(
     "CNPJs da SIP",
     clientes_opcoes["label"].tolist() if not clientes_opcoes.empty else [],
     default=labels_edicao,
+    key=f"sip_membros_{form_key}",
 )
 cnpjs = [label_to_cnpj[label] for label in membros if label in label_to_cnpj]
 nome_final = nome.strip() or (redes_sel[0] if redes_sel else "")
 
-s1, s2 = st.columns(2)
-if s1.button("Salvar SIP", width="stretch", disabled=not nome_final or not cnpjs):
+s1, s2 = st.columns([1.2, 0.8])
+rotulo_salvar = "Salvar alterações da SIP" if editando else "Cadastrar SIP"
+if s1.button(rotulo_salvar, width="stretch", disabled=not nome_final or not cnpjs, key=f"salvar_sip_{form_key}"):
     adicionar_sip(
         nome=nome_final,
         redes=redes_sel,
@@ -182,15 +213,23 @@ if s1.button("Salvar SIP", width="stretch", disabled=not nome_final or not cnpjs
         pagamento_percentual=pagamento,
         sip_id=editando["id"] if editando else None,
     )
-    st.success("SIP salva.")
+    st.success("SIP salva com sucesso.")
     st.rerun()
 
 if editando:
-    confirmar = st.checkbox("Confirmo que desejo excluir este SIP")
-    if s2.button("Excluir SIP", width="stretch", disabled=not confirmar):
-        excluir_sip(editando["id"])
-        st.success("SIP removido.")
-        st.rerun()
+    s2.caption("Para criar outra SIP, escolha Novo cadastro na lista acima.")
+    with st.expander("Excluir SIP selecionada", expanded=False):
+        st.warning("A exclusão remove a SIP, os CNPJs vinculados e os recados cadastrados para ela.")
+        confirmar = st.text_input("Digite EXCLUIR para confirmar", key=f"confirmar_excluir_sip_{form_key}")
+        if st.button(
+            "Excluir definitivamente esta SIP",
+            width="stretch",
+            disabled=confirmar.strip().upper() != "EXCLUIR",
+            key=f"excluir_sip_{form_key}",
+        ):
+            excluir_sip(editando["id"])
+            st.success("SIP removida.")
+            st.rerun()
 
 st.subheader("Painel SIP")
 if not grupos:
@@ -232,32 +271,59 @@ else:
         st.info("Nenhum recado cadastrado para esta SIP.")
     else:
         for recado in recados:
+            recado_id = str(recado.get("id", ""))
+            status_atual = str(recado.get("status", "Pendente"))
+            titulo_atual = str(recado.get("titulo", "Recado"))
+            comentario_atual = str(recado.get("comentario", ""))
             st.markdown(
                 f"""
                 <div class="recado-card">
-                    <div class="recado-title">{recado.get('titulo', 'Recado')}</div>
-                    <span class="recado-status {classe_status_recado(str(recado.get('status', 'Pendente')))}">{recado.get('status', 'Pendente')}</span>
+                    <div class="recado-title">{escape(titulo_atual)}</div>
+                    <span class="recado-status {classe_status_recado(status_atual)}">{escape(status_atual)}</span>
                     {imagem_recado_html(recado)}
-                    <div class="recado-comment">{recado.get('comentario', '')}</div>
+                    <div class="recado-comment">{escape(comentario_atual)}</div>
                 </div>
                 """,
                 unsafe_allow_html=True,
             )
-            rc1, rc2 = st.columns([1, 1])
-            status_atual = recado.get("status", "Pendente")
-            novo_status = rc1.selectbox(
-                "Status do recado",
-                STATUS_RECADOS,
-                index=STATUS_RECADOS.index(status_atual) if status_atual in STATUS_RECADOS else 0,
-                key=f"status_recado_{grupo['id']}_{recado.get('id')}",
-            )
-            if novo_status != status_atual:
-                atualizar_status_recado_sip(grupo["id"], str(recado.get("id")), novo_status)
-                st.rerun()
-            if rc2.button("Excluir recado", width="stretch", key=f"excluir_recado_{grupo['id']}_{recado.get('id')}"):
-                excluir_recado_sip(grupo["id"], str(recado.get("id")))
-                st.success("Recado excluído.")
-                st.rerun()
+            with st.expander(f"Editar recado — {titulo_atual}", expanded=False):
+                e1, e2 = st.columns([1.4, 0.6])
+                titulo_editado = e1.text_input(
+                    "Título",
+                    value=titulo_atual,
+                    key=f"editar_titulo_recado_{grupo['id']}_{recado_id}",
+                )
+                status_editado = e2.selectbox(
+                    "Status",
+                    STATUS_RECADOS,
+                    index=STATUS_RECADOS.index(status_atual) if status_atual in STATUS_RECADOS else 0,
+                    key=f"editar_status_recado_{grupo['id']}_{recado_id}",
+                )
+                comentario_editado = st.text_area(
+                    "Comentário",
+                    value=comentario_atual,
+                    key=f"editar_comentario_recado_{grupo['id']}_{recado_id}",
+                )
+                nova_imagem = st.file_uploader(
+                    "Trocar imagem (opcional)",
+                    type=["png", "jpg", "jpeg", "webp"],
+                    key=f"editar_imagem_recado_{grupo['id']}_{recado_id}",
+                )
+                b1, b2 = st.columns([1.2, 0.8])
+                if b1.button("Salvar ajustes do recado", width="stretch", key=f"salvar_ajuste_recado_{grupo['id']}_{recado_id}"):
+                    atualizar_recado_sip(grupo["id"], recado_id, titulo_editado, comentario_editado, status_editado, nova_imagem)
+                    st.success("Recado atualizado.")
+                    st.rerun()
+                confirmar_recado = b2.checkbox("Confirmar exclusão", key=f"confirmar_excluir_recado_{grupo['id']}_{recado_id}")
+                if b2.button(
+                    "Excluir recado",
+                    width="stretch",
+                    disabled=not confirmar_recado,
+                    key=f"excluir_recado_{grupo['id']}_{recado_id}",
+                ):
+                    excluir_recado_sip(grupo["id"], recado_id)
+                    st.success("Recado excluído.")
+                    st.rerun()
 
     membros_sip = clientes_resultado[clientes_resultado["cnpj_limpo"].astype(str).isin(grupo["cnpjs"])].copy()
     ol = float(membros_sip["ol_sem_combate"].sum()) if not membros_sip.empty else 0
