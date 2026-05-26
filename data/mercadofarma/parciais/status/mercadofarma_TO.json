@@ -1,5 +1,5 @@
 {
-  "uf": "MT",
+  "uf": "TO",
   "status": "erro",
   "consultor_usado": "",
   "cnpj_referencia": "",
@@ -7,6 +7,6 @@
   "erro": "PERSISTENCE_KEY nao esta configurado nos Secrets do GitHub Actions. Sem essa chave o robo nao consegue ler os logins salvos no painel.",
   "etapa": "inicio",
   "traceback": "Traceback (most recent call last):\n  File \"/home/runner/work/painel-comercial-equipe-norte/painel-comercial-equipe-norte/automacoes/mercadofarma.py\", line 108, in main\n    raise RuntimeError(\nRuntimeError: PERSISTENCE_KEY nao esta configurado nos Secrets do GitHub Actions. Sem essa chave o robo nao consegue ler os logins salvos no painel.\n",
-  "iniciado_em": "2026-05-26T13:58:38.569608-03:00",
-  "finalizado_em": "2026-05-26T13:58:38.569994-03:00"
+  "iniciado_em": "2026-05-26T14:00:02.758499-03:00",
+  "finalizado_em": "2026-05-26T14:00:02.758879-03:00"
 }
