@@ -20,18 +20,26 @@ LOCAL_STORE_DIR = DATA_DIR / "_persistencia_local"
 
 ARQUIVOS_BINARIOS = {
     "bussola": "bussola.xlsx",
+    "bussola_backup": "bussola_backup.xlsx",
     "painel": "painel_clientes.xlsx",
+    "painel_backup": "painel_clientes_backup.xlsx",
     "acoes": "template_acoes_promocionais.xlsx",
+    "acoes_backup": "template_acoes_promocionais_backup.xlsx",
     "produtos_mix": "template_produtos_mix.xlsx",
+    "produtos_mix_backup": "template_produtos_mix_backup.xlsx",
     "mercado_farma": "mercado_farma.xlsx",
+    "mercado_farma_backup": "mercado_farma_backup.xlsx",
     "produtos_mercado_farma": "produtos.xlsx",
+    "produtos_mercado_farma_backup": "produtos_backup.xlsx",
     "bussola_historico": "bussola_historico.xlsx",
+    "bussola_historico_backup": "bussola_historico_backup.xlsx",
 }
 
 ARQUIVOS_JSON = {
     "metas": "metas_comerciais.json",
     "login_bussola": "bussola_login.json",
     "sip": "sip_grupos.json",
+    "sip_backup": "sip_grupos_backup.json",
     "metadata": "metadata.json",
     "desafio": "desafio_gigantes.json",
     "foco_semanal": "foco_semanal.json",
@@ -40,6 +48,7 @@ ARQUIVOS_JSON = {
     "mercado_farma_job": "mercado_farma_job.json",
     "mercado_farma_descontos": "mercado_farma_descontos.json",
     "ajustes_vendedores": "ajustes_vendedores.json",
+    "persistence_healthcheck": "persistence_healthcheck.json",
 }
 
 ARQUIVOS_PADRAO_DATA = {
@@ -50,6 +59,7 @@ ARQUIVOS_PADRAO_DATA = {
     "mercado_farma": DATA_DIR / "mercado_farma.xlsx",
     "produtos_mercado_farma": DATA_DIR / "produtos.xlsx",
     "bussola_historico": DATA_DIR / "bussola_historico.xlsx",
+    "sip": DATA_DIR / "sip_grupos.json",
 }
 
 
@@ -196,6 +206,17 @@ def _github_get(path: str) -> dict[str, Any] | None:
     return dados if isinstance(dados, dict) else None
 
 
+def _github_list_dir(path: str) -> list[dict[str, Any]]:
+    cfg = _github_config()
+    url = f"https://api.github.com/repos/{cfg['repo']}/contents/{path.strip('/')}"
+    resp = requests.get(url, headers=_headers(), params={"ref": cfg["branch"]}, timeout=30)
+    if resp.status_code == 404:
+        return []
+    resp.raise_for_status()
+    dados = resp.json()
+    return dados if isinstance(dados, list) else []
+
+
 def _github_commit_at(path: str) -> str | None:
     cfg = _github_config()
     url = f"https://api.github.com/repos/{cfg['repo']}/commits"
@@ -304,6 +325,33 @@ def salvar_bytes(chave: str, conteudo: bytes, mensagem: str | None = None) -> No
     _registrar_atualizacao(chave, mensagem_final)
 
 
+def criar_backup(chave: str, mensagem: str | None = None) -> bool:
+    """Salva a versão atual de uma base crítica antes de substituí-la."""
+    chave_backup = f"{chave}_backup"
+    if chave_backup not in ARQUIVOS_BINARIOS and chave_backup not in ARQUIVOS_JSON:
+        return False
+
+    conteudo = carregar_bytes(chave)
+    if not conteudo:
+        caminho_padrao = ARQUIVOS_PADRAO_DATA.get(chave)
+        if caminho_padrao and caminho_padrao.exists():
+            conteudo = caminho_padrao.read_bytes()
+    if not conteudo:
+        return False
+
+    salvar_bytes(chave_backup, conteudo, mensagem or f"Backup automatico de {chave}")
+    return True
+
+
+def restaurar_backup(chave: str) -> bool:
+    chave_backup = f"{chave}_backup"
+    conteudo = carregar_bytes(chave_backup)
+    if not conteudo:
+        return False
+    salvar_bytes(chave, conteudo, f"Restaura ultimo backup de {chave}")
+    return True
+
+
 def carregar_json(chave: str, padrao: Any) -> Any:
     dados = carregar_bytes(chave)
     if not dados:
@@ -352,3 +400,106 @@ def ultima_atualizacao(chave: str) -> object | None:
 
 def formatar_ultima_atualizacao(chave: str) -> str:
     return formatar_datahora_brasil(ultima_atualizacao(chave))
+
+
+def _resumo_erro(exc: Exception) -> str:
+    mensagem = str(exc).strip()
+    return mensagem[:240] if mensagem else exc.__class__.__name__
+
+
+def diagnosticar_persistencia(chaves: list[str] | None = None) -> dict[str, Any]:
+    """Retorna um diagnóstico seguro, sem expor valores de secrets."""
+    cfg = _github_config()
+    status = status_persistencia()
+    resultado: dict[str, Any] = {
+        "modo": status.get("modo", ""),
+        "detalhe": status.get("detalhe", ""),
+        "repo": cfg["repo"],
+        "branch": cfg["branch"],
+        "diretorio": cfg["dir"],
+        "github_token_configurado": bool(cfg["token"]),
+        "persistence_key_configurada": bool(cfg["key"]),
+        "branch_ok": False,
+        "diretorio_ok": False,
+        "healthcheck_ok": False,
+        "healthcheck_erro": "",
+        "arquivos": [],
+        "erro": "",
+    }
+
+    if cfg["repo"] and cfg["branch"]:
+        try:
+            resultado["branch_ok"] = _github_get_ref(cfg["branch"]) is not None
+        except Exception as exc:
+            resultado["erro"] = _resumo_erro(exc)
+
+    if cfg["repo"] and cfg["branch"]:
+        try:
+            resultado["diretorio_ok"] = len(_github_list_dir(cfg["dir"])) > 0
+        except Exception as exc:
+            if not resultado["erro"]:
+                resultado["erro"] = _resumo_erro(exc)
+
+    if cfg["key"]:
+        try:
+            if not existe_persistido("persistence_healthcheck"):
+                salvar_json(
+                    "persistence_healthcheck",
+                    {"valor": "painel-equipe-norte-ok"},
+                    "Cria teste de saude da persistencia",
+                )
+            health = carregar_json("persistence_healthcheck", {})
+            resultado["healthcheck_ok"] = isinstance(health, dict) and health.get("valor") == "painel-equipe-norte-ok"
+            if not resultado["healthcheck_ok"]:
+                resultado["healthcheck_erro"] = "O teste de leitura nao retornou o valor esperado."
+        except Exception as exc:
+            resultado["healthcheck_erro"] = _resumo_erro(exc)
+    else:
+        resultado["healthcheck_erro"] = "PERSISTENCE_KEY ausente."
+
+    chaves_padrao = [
+        "metadata",
+        "produtos_mix",
+        "sip",
+        "login_bussola",
+        "bussola",
+        "bussola_historico",
+        "mercado_farma",
+        "produtos_mercado_farma",
+    ]
+    for chave in chaves or chaves_padrao:
+        item = {
+            "chave": chave,
+            "arquivo": "",
+            "existe": False,
+            "leitura_ok": False,
+            "erro": "",
+            "ultima_atualizacao": "",
+        }
+        try:
+            item["arquivo"] = _nome_arquivo(chave)
+        except Exception as exc:
+            item["erro"] = _resumo_erro(exc)
+            resultado["arquivos"].append(item)
+            continue
+
+        try:
+            item["existe"] = existe_persistido(chave) or _caminho_local(chave).exists()
+            if ARQUIVOS_PADRAO_DATA.get(chave):
+                item["existe"] = bool(item["existe"] or ARQUIVOS_PADRAO_DATA[chave].exists())
+        except Exception as exc:
+            item["erro"] = _resumo_erro(exc)
+
+        try:
+            dados = carregar_bytes(chave)
+            item["leitura_ok"] = dados is not None
+        except Exception as exc:
+            item["erro"] = _resumo_erro(exc)
+
+        try:
+            item["ultima_atualizacao"] = formatar_ultima_atualizacao(chave)
+        except Exception:
+            item["ultima_atualizacao"] = "-"
+        resultado["arquivos"].append(item)
+
+    return resultado

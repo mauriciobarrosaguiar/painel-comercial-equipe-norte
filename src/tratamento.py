@@ -326,7 +326,12 @@ def preparar_produtos_mix(df: pd.DataFrame) -> pd.DataFrame:
         "produto": ["PRODUTO", "PRINCIPIO ATIVO", "NOME DO PRODUTO", "DESCRICAO"],
         "tipo_mix": [
             "TIPO MIX",
+            "TIPO",
+            "TIPO_MIX",
             "MIX",
+            "CLASSIFICACAO",
+            "CLASSIFICAÇÃO",
+            "CATEGORIA",
             "MIX LANCAMENTOS",
             "LINHA/COMBATE/PRIORITARIOS/LANCAMENTOS",
             "LINHA COMBATE PRIORITARIOS LANCAMENTOS",
@@ -490,6 +495,26 @@ def preparar_base_vendas(
     produtos = garantir_colunas(produtos, ["ean_limpo", "produto", "tipo_mix"])
     produtos = produtos.rename(columns={"produto": "produto_mix"})
     vendas = vendas.merge(produtos[["ean_limpo", "produto_mix", "tipo_mix"]].drop_duplicates("ean_limpo"), on="ean_limpo", how="left")
+
+    if not produtos.empty:
+        produtos_nome = produtos.copy()
+        produtos_nome["produto_chave"] = produtos_nome["produto_mix"].apply(normalizar_texto_alto)
+        produtos_nome["tipo_mix_nome"] = produtos_nome["tipo_mix"].apply(normalizar_tipo_mix)
+        produtos_nome = produtos_nome[
+            produtos_nome["produto_chave"].ne("")
+            & produtos_nome["tipo_mix_nome"].ne(TIPO_SEM_CLASSIFICACAO)
+        ].copy()
+        contagem_nome = produtos_nome.groupby("produto_chave")["tipo_mix_nome"].nunique()
+        nomes_unicos = set(contagem_nome[contagem_nome.eq(1)].index)
+        mapa_tipo_nome = (
+            produtos_nome[produtos_nome["produto_chave"].isin(nomes_unicos)]
+            .drop_duplicates("produto_chave")
+            .set_index("produto_chave")["tipo_mix_nome"]
+            .to_dict()
+        )
+        vendas["produto_chave"] = vendas["produto"].apply(normalizar_texto_alto)
+        sem_mix = vendas["tipo_mix"].isna() | vendas["tipo_mix"].astype(str).str.strip().eq("")
+        vendas.loc[sem_mix, "tipo_mix"] = vendas.loc[sem_mix, "produto_chave"].map(mapa_tipo_nome)
 
     vendas["tipo_mix"] = vendas["tipo_mix"].fillna(TIPO_SEM_CLASSIFICACAO).apply(normalizar_tipo_mix)
     vendas["produto"] = vendas["produto"].where(vendas["produto"].ne(""), vendas["produto_mix"].fillna(""))

@@ -297,6 +297,59 @@ def gerar_resultado_produto(vendas: pd.DataFrame, produtos_mix: pd.DataFrame) ->
     return resultado[colunas_resultado].drop_duplicates("ean")
 
 
+def auditar_produtos_mix(produtos_mix: pd.DataFrame, vendas: pd.DataFrame) -> dict[str, object]:
+    produtos = produtos_mix.copy() if produtos_mix is not None else pd.DataFrame()
+    if "ean_limpo" not in produtos.columns:
+        produtos["ean_limpo"] = produtos.get("ean", pd.Series(dtype=str)).fillna("").astype(str)
+    if "tipo_mix" not in produtos.columns:
+        produtos["tipo_mix"] = TIPO_SEM_CLASSIFICACAO
+
+    produtos["ean_limpo"] = produtos["ean_limpo"].fillna("").astype(str).str.strip()
+    produtos["tipo_mix"] = produtos["tipo_mix"].fillna(TIPO_SEM_CLASSIFICACAO).astype(str)
+    template_eans = set(produtos.loc[produtos["ean_limpo"].ne(""), "ean_limpo"])
+    classificados_template = produtos[
+        produtos["ean_limpo"].ne("")
+        & produtos["tipo_mix"].ne(TIPO_SEM_CLASSIFICACAO)
+    ]
+
+    if vendas is None or vendas.empty or "ean_limpo" not in vendas.columns:
+        vendas_eans: set[str] = set()
+        vendas_classificados: set[str] = set()
+    else:
+        validas = _vendas_validas(vendas)
+        vendas_eans = set(validas["ean_limpo"].dropna().astype(str).str.strip())
+        vendas_eans.discard("")
+        venda_tipo = validas[["ean_limpo", "tipo_mix"]].copy() if "tipo_mix" in validas.columns else pd.DataFrame(columns=["ean_limpo", "tipo_mix"])
+        venda_tipo["ean_limpo"] = venda_tipo["ean_limpo"].fillna("").astype(str).str.strip()
+        venda_tipo["tipo_mix"] = venda_tipo["tipo_mix"].fillna(TIPO_SEM_CLASSIFICACAO).astype(str)
+        vendas_classificados = set(
+            venda_tipo.loc[
+                venda_tipo["ean_limpo"].ne("")
+                & venda_tipo["tipo_mix"].ne(TIPO_SEM_CLASSIFICACAO),
+                "ean_limpo",
+            ]
+        )
+
+    vendas_sem_classificacao = vendas_eans - vendas_classificados
+    vendas_fora_template = vendas_eans - template_eans
+    vendas_total = len(vendas_eans)
+    percentual_classificado = (len(vendas_classificados) / vendas_total) if vendas_total else 0.0
+    taxa_sem_classificacao = (len(vendas_sem_classificacao) / vendas_total) if vendas_total else 0.0
+
+    return {
+        "total_template": int(len(template_eans)),
+        "classificados_template": int(classificados_template["ean_limpo"].nunique()),
+        "sem_classificacao_template": int(max(len(template_eans) - classificados_template["ean_limpo"].nunique(), 0)),
+        "vendas_total_eans": int(vendas_total),
+        "vendas_eans_classificados": int(len(vendas_classificados)),
+        "vendas_eans_sem_classificacao": int(len(vendas_sem_classificacao)),
+        "vendas_eans_fora_template": int(len(vendas_fora_template)),
+        "percentual_classificado": float(percentual_classificado),
+        "alerta_critico": bool((vendas_total > 0 and taxa_sem_classificacao > 0.30) or (len(template_eans) > 0 and classificados_template.empty)),
+        "tipos_mix_contagem": produtos["tipo_mix"].value_counts().to_dict(),
+    }
+
+
 def formatar_tabela_metricas(df: pd.DataFrame) -> pd.DataFrame:
     base = df.copy()
     for coluna in ["ol_sem_combate", "ol_prioritarios", "ol_lancamentos", "ticket_medio", "ol_total", "ol_antes_acao", "ol_durante_acao", "meta_mes"]:

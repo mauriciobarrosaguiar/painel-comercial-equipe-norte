@@ -4,6 +4,7 @@ import pandas as pd
 import streamlit as st
 
 from src.bussola_web import extrair_bussola_web_todos
+from src.calculos import auditar_produtos_mix
 from src.configuracoes import (
     carregar_ajustes_vendedores,
     carregar_login_bussola,
@@ -14,7 +15,18 @@ from src.configuracoes import (
     salvar_metas,
 )
 from src.layout import botao_download_excel, titulo_pagina
-from src.loader import carregar_dados_tratados, fonte_ativa, limpar_uploads, modelo_acoes, modelo_produtos_mix, registrar_upload
+from src.loader import (
+    carregar_dados_tratados,
+    fonte_ativa,
+    limpar_uploads,
+    modelo_acoes,
+    modelo_produtos_mix,
+    registrar_upload,
+    registrar_upload_produtos_mercado_farma,
+    registrar_upload_produtos_mix,
+    restaurar_backup_produtos_mix,
+)
+from src.persistencia import diagnosticar_persistencia, restaurar_backup, status_persistencia
 from src.status_bases import formatar_ultima_atualizacao
 from src.tratamento import formatar_moeda, slug_coluna
 
@@ -367,7 +379,7 @@ with tab_metas:
             {"Indicador": "Clientes com venda", "Meta GD": meta_cli, "Soma consultores": soma_cli, "Diferença": meta_cli - soma_cli},
         ]
     )
-    conferencia_formatada = conferencia.copy()
+    conferencia_formatada = conferencia.copy().astype(object)
     for idx, linha in conferencia_formatada.iterrows():
         if linha["Indicador"] == "Clientes com venda":
             for coluna in ["Meta GD", "Soma consultores", "Diferença"]:
@@ -442,6 +454,49 @@ with tab_arquivos:
                 unsafe_allow_html=True,
             )
 
+    with st.expander("Diagnóstico da persistência", expanded=True):
+        diag = diagnosticar_persistencia()
+        st.markdown(
+            " ".join(
+                [
+                    f"<span class='pill-note'>Modo: <b>{diag.get('modo', '-')}</b></span>",
+                    f"<span class='pill-note'>Repo: <b>{diag.get('repo', '-')}</b></span>",
+                    f"<span class='pill-note'>Branch: <b>{diag.get('branch', '-')}</b></span>",
+                    f"<span class='pill-note'>Token: <b>{'configurado' if diag.get('github_token_configurado') else 'ausente'}</b></span>",
+                    f"<span class='pill-note'>PERSISTENCE_KEY: <b>{'configurada' if diag.get('persistence_key_configurada') else 'ausente'}</b></span>",
+                    f"<span class='pill-note'>Leitura: <b>{'ok' if diag.get('healthcheck_ok') else 'verificar'}</b></span>",
+                ]
+            ),
+            unsafe_allow_html=True,
+        )
+        if not diag.get("persistence_key_configurada") or not diag.get("healthcheck_ok"):
+            st.warning(
+                "Não foi possível confirmar a leitura da persistência. "
+                "Verifique os Secrets do Streamlit, principalmente PERSISTENCE_KEY."
+            )
+            if diag.get("healthcheck_erro"):
+                with st.expander("Ver detalhe técnico da persistência", expanded=False):
+                    st.code(str(diag.get("healthcheck_erro")))
+        arquivos_diag = pd.DataFrame(diag.get("arquivos", []))
+        if not arquivos_diag.empty:
+            st.dataframe(arquivos_diag, width="stretch", hide_index=True)
+
+    auditoria_mix = auditar_produtos_mix(dados["produtos_mix"], dados["vendas"])
+    with st.expander("Diagnóstico Produtos / Mix", expanded=False):
+        st.markdown(
+            " ".join(
+                [
+                    f"<span class='pill-note'>Template: <b>{auditoria_mix['total_template']}</b></span>",
+                    f"<span class='pill-note'>Classificados: <b>{auditoria_mix['classificados_template']}</b></span>",
+                    f"<span class='pill-note'>Sem classificação: <b>{auditoria_mix['sem_classificacao_template']}</b></span>",
+                    f"<span class='pill-note'>EANs vendidos: <b>{auditoria_mix['vendas_total_eans']}</b></span>",
+                    f"<span class='pill-note'>Fora do template: <b>{auditoria_mix['vendas_eans_fora_template']}</b></span>",
+                ]
+            ),
+            unsafe_allow_html=True,
+        )
+        st.json(auditoria_mix["tipos_mix_contagem"])
+
     st.subheader("Uploads manuais")
     up_bussola = st.file_uploader("bussola.xlsx", type=["xlsx"], key="file_bussola")
     up_painel = st.file_uploader("Base de clientes / painel distrital", type=["xlsx"], key="file_painel")
@@ -460,11 +515,11 @@ with tab_arquivos:
             salvos.append("Painel clientes")
         if registrar_upload("acoes", up_acoes):
             salvos.append("Ações promocionais")
-        if registrar_upload("produtos_mix", up_mix):
+        if registrar_upload_produtos_mix(up_mix):
             salvos.append("Produtos / mix")
         if registrar_upload("mercado_farma", up_mercado):
             salvos.append("Mercado Farma")
-        if registrar_upload("produtos_mercado_farma", up_produtos_mercado):
+        if registrar_upload_produtos_mercado_farma(up_produtos_mercado):
             salvos.append("Produtos Mercado Farma")
         if registrar_upload("bussola_historico", up_historico):
             salvos.append("Histórico Bússola")
@@ -474,9 +529,52 @@ with tab_arquivos:
             else "Nenhum arquivo selecionado para salvar."
         )
         st.rerun()
-    if c2.button("Voltar para pasta data", width="stretch"):
+    if c2.button("Limpar uploads da sessão", width="stretch"):
         limpar_uploads()
         st.success("Uploads removidos.")
+        st.rerun()
+
+    st.subheader("Backup Produtos / Mix")
+    confirmar_restore_mix = st.checkbox("Confirmo que quero restaurar o último backup do Produtos / Mix")
+    if st.button(
+        "Restaurar último backup do Produtos / Mix",
+        width="stretch",
+        disabled=not confirmar_restore_mix,
+    ):
+        if restaurar_backup_produtos_mix():
+            st.success("Backup do Produtos / Mix restaurado. Recarregando o painel.")
+            st.rerun()
+        else:
+            st.warning("Nenhum backup de Produtos / Mix foi encontrado para restaurar.")
+
+    st.subheader("Recuperação de bases")
+    st.caption("Use somente quando uma base salva sumir ou uma atualização inválida substituir uma base boa.")
+    confirmar_recuperacao = st.checkbox("Confirmo que desejo restaurar backups ou limpar cache", key="confirmar_recuperacao_bases")
+    recuperacoes = [
+        ("Produtos / Mix", "produtos_mix"),
+        ("SIP", "sip"),
+        ("Bússola histórico", "bussola_historico"),
+        ("Produtos Mercado Farma", "produtos_mercado_farma"),
+        ("Mercado Farma", "mercado_farma"),
+    ]
+    cols_rec = st.columns(2)
+    for idx, (rotulo, chave) in enumerate(recuperacoes):
+        with cols_rec[idx % 2]:
+            if st.button(f"Restaurar último backup {rotulo}", key=f"restore_{chave}", disabled=not confirmar_recuperacao, width="stretch"):
+                if restaurar_backup(chave):
+                    st.cache_data.clear()
+                    st.success(f"Backup de {rotulo} restaurado.")
+                    st.rerun()
+                else:
+                    st.warning(f"Nenhum backup de {rotulo} foi encontrado.")
+
+    r1, r2 = st.columns(2)
+    if r1.button("Recarregar persistência", disabled=not confirmar_recuperacao, width="stretch"):
+        st.cache_data.clear()
+        st.rerun()
+    if r2.button("Limpar cache do Streamlit", disabled=not confirmar_recuperacao, width="stretch"):
+        st.cache_data.clear()
+        st.success("Cache limpo.")
         st.rerun()
 
     st.subheader("Modelos")

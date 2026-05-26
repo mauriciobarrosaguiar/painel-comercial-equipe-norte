@@ -8,12 +8,15 @@ import streamlit as st
 
 from src.configuracoes import aplicar_ajustes_vendedores
 from src.datas import agora_brasilia
-from src.persistencia import carregar_bytes, existe_persistido, salvar_bytes
+from src.persistencia import carregar_bytes, criar_backup, existe_persistido, restaurar_backup, salvar_bytes
 from src.tratamento import (
     COLUNAS_ACOES,
     COLUNAS_BUSSOLA,
     COLUNAS_PAINEL,
     COLUNAS_PRODUTOS_MIX,
+    TIPO_SEM_CLASSIFICACAO,
+    normalizar_ean,
+    padronizar_colunas,
     preparar_acoes,
     preparar_base_vendas,
     preparar_painel_equipe,
@@ -55,11 +58,113 @@ def _versao_cache(chave: str) -> str:
     return str(st.session_state.get(f"{chave}_updated_at", "") or "")
 
 
-def registrar_upload(chave: str, arquivo) -> bool:
-    if arquivo is None:
+def _ler_excel_upload(conteudo: bytes, sheet_name: str | int = 0) -> pd.DataFrame:
+    if not conteudo:
+        return pd.DataFrame()
+    return pd.read_excel(BytesIO(conteudo), sheet_name=sheet_name, dtype=str, engine="openpyxl")
+
+
+def _tem_coluna(df: pd.DataFrame, nomes: list[str]) -> bool:
+    if df is None or df.empty:
         return False
-    conteudo = arquivo.getvalue()
+    colunas = set(padronizar_colunas(df).columns)
+    return any(nome in colunas for nome in nomes)
+
+
+def _validar_upload_produtos_mix(conteudo: bytes) -> tuple[bool, str]:
+    try:
+        bruto = _ler_excel_upload(conteudo, ABAS_PADRAO["produtos_mix"])
+    except Exception as exc:
+        return False, f"Nao consegui ler o arquivo: {exc}"
+
+    if bruto.empty:
+        return False, "O arquivo esta vazio."
+    if not _tem_coluna(bruto, ["ean"]):
+        return False, "A coluna EAN nao foi encontrada."
+    if not _tem_coluna(bruto, ["produto", "principio_ativo", "nome_do_produto", "descricao"]):
+        return False, "A coluna Produto nao foi encontrada."
+    if not _tem_coluna(bruto, ["tipo_mix", "tipo", "mix", "classificacao", "categoria"]):
+        return False, "A coluna Tipo Mix nao foi encontrada."
+
+    tratado = preparar_produtos_mix(bruto)
+    eans_validos = int(tratado["ean_limpo"].dropna().astype(str).str.strip().ne("").sum()) if "ean_limpo" in tratado else 0
+    classificados = tratado[tratado["tipo_mix"].ne(TIPO_SEM_CLASSIFICACAO)] if "tipo_mix" in tratado else pd.DataFrame()
+    if eans_validos < 10:
+        return False, "A planilha precisa ter pelo menos 10 EANs validos."
+    if classificados.empty:
+        return False, "Todos os produtos ficaram SEM CLASSIFICACAO."
+    return True, ""
+
+
+def _validar_upload_produtos_mercado_farma(conteudo: bytes) -> tuple[bool, str]:
+    try:
+        bruto = _ler_excel_upload(conteudo, ABAS_PADRAO["produtos_mercado_farma"])
+    except Exception as exc:
+        return False, f"Nao consegui ler a planilha produtos.xlsx: {exc}"
+    if bruto.empty:
+        return False, "A planilha produtos.xlsx esta vazia."
+    base = padronizar_colunas(bruto)
+    coluna = "ean" if "ean" in base.columns else base.columns[0] if len(base.columns) else ""
+    eans = base[coluna].dropna().astype(str).map(normalizar_ean) if coluna else pd.Series(dtype=str)
+    total = int(eans[eans.ne("")].nunique())
+    if total <= 0:
+        return False, "A planilha precisa conter EANs validos."
+    return True, f"{total} EANs validos encontrados."
+
+
+def _validar_upload_generico(chave: str, conteudo: bytes) -> tuple[bool, str]:
+    if chave == "produtos_mix":
+        return _validar_upload_produtos_mix(conteudo)
+    if chave == "produtos_mercado_farma":
+        return _validar_upload_produtos_mercado_farma(conteudo)
+    try:
+        bruto = _ler_excel_upload(conteudo, ABAS_PADRAO.get(chave, 0))
+    except Exception as exc:
+        return False, f"Nao consegui ler o arquivo enviado: {exc}"
+    if bruto.empty:
+        return False, "O arquivo enviado esta vazio."
+
+    if chave == "bussola":
+        minimas = ["cnpj_pdv", "ean", "produto", "status_pedido", "pedido_id", "data_do_pedido", "preco_unitario_sem_imposto"]
+        faltantes = [coluna for coluna in minimas if not _tem_coluna(bruto, [coluna])]
+        if faltantes:
+            return False, "A base Bussola precisa conter: " + ", ".join(minimas)
+        if not (_tem_coluna(bruto, ["quantidade_atendida"]) or _tem_coluna(bruto, ["quantidade_faturada"])):
+            return False, "A base Bussola precisa conter quantidade_atendida ou quantidade_faturada."
+    elif chave == "painel":
+        if not _tem_coluna(bruto, ["cnpj"]):
+            return False, "A base de clientes precisa conter CNPJ."
+        if not _tem_coluna(bruto, ["nome_pdv", "cliente", "razao_social", "nome"]):
+            return False, "A base de clientes precisa conter Nome PDV."
+        if not _tem_coluna(bruto, ["cidade"]):
+            return False, "A base de clientes precisa conter Cidade."
+        if not _tem_coluna(bruto, ["uf"]):
+            return False, "A base de clientes precisa conter UF."
+        if not _tem_coluna(bruto, ["nome_rep", "consultor", "representante"]):
+            return False, "A base de clientes precisa conter Nome REP ou Consultor."
+    elif chave == "acoes":
+        if not _tem_coluna(bruto, ["campanha", "nome_acao", "tipo_acao"]):
+            return False, "A base de acoes precisa conter campanha."
+        if not (_tem_coluna(bruto, ["produto"]) or _tem_coluna(bruto, ["ean"])):
+            return False, "A base de acoes precisa conter Produto ou EAN."
+        if not (_tem_coluna(bruto, ["desconto"]) or _tem_coluna(bruto, ["data_inicio"]) or _tem_coluna(bruto, ["data_fim"])):
+            return False, "A base de acoes precisa conter desconto ou validade."
+    elif chave == "mercado_farma":
+        if not _tem_coluna(bruto, ["ean"]):
+            return False, "A base Mercado Farma precisa conter EAN."
+        if not _tem_coluna(bruto, ["produto", "nome_do_produto"]):
+            return False, "A base Mercado Farma precisa conter Produto."
+        if not _tem_coluna(bruto, ["distribuidora"]):
+            return False, "A base Mercado Farma precisa conter Distribuidora."
+        if not _tem_coluna(bruto, ["preco_sem_imposto", "preco_final", "preco_final_r", "estoque"]):
+            return False, "A base Mercado Farma precisa conter preco ou estoque."
+    return True, ""
+
+
+def _salvar_upload(chave: str, arquivo, conteudo: bytes, mensagem_backup: str | None = None) -> bool:
     atualizado_em = agora_brasilia().isoformat()
+    if chave in {"produtos_mix", "produtos_mercado_farma", "bussola", "painel", "mercado_farma", "bussola_historico", "acoes"}:
+        criar_backup(chave, mensagem_backup or f"Backup automatico antes de atualizar {chave}")
     st.session_state[f"{chave}_updated_at"] = atualizado_em
     st.session_state[f"{chave}_uploaded_name"] = arquivo.name
     _uploads_sessao()[chave] = {
@@ -73,6 +178,56 @@ def registrar_upload(chave: str, arquivo) -> bool:
     return True
 
 
+def registrar_upload(chave: str, arquivo) -> bool:
+    if arquivo is None:
+        return False
+    conteudo = arquivo.getvalue()
+    valido, mensagem = _validar_upload_generico(chave, conteudo)
+    if not valido:
+        st.error(f"Arquivo invalido para {chave}. A base anterior foi preservada. {mensagem}")
+        return False
+    if mensagem:
+        st.info(mensagem)
+    return _salvar_upload(chave, arquivo, conteudo)
+
+
+def registrar_upload_produtos_mix(arquivo) -> bool:
+    if arquivo is None:
+        return False
+    conteudo = arquivo.getvalue()
+    valido, mensagem = _validar_upload_produtos_mix(conteudo)
+    if not valido:
+        st.error(
+            "Arquivo de Produtos / Mix invalido. A base anterior foi preservada. "
+            "Envie a planilha correta com EAN, Produto e Tipo Mix. "
+            f"Detalhe: {mensagem}"
+        )
+        return False
+    return _salvar_upload("produtos_mix", arquivo, conteudo, "Backup automatico de Produtos / Mix")
+
+
+def registrar_upload_produtos_mercado_farma(arquivo) -> bool:
+    if arquivo is None:
+        return False
+    conteudo = arquivo.getvalue()
+    valido, mensagem = _validar_upload_produtos_mercado_farma(conteudo)
+    if not valido:
+        st.error(f"Arquivo produtos.xlsx invalido. A lista anterior foi preservada. {mensagem}")
+        return False
+    st.info(mensagem)
+    return _salvar_upload("produtos_mercado_farma", arquivo, conteudo, "Backup automatico de produtos Mercado Farma")
+
+
+def restaurar_backup_produtos_mix() -> bool:
+    ok = restaurar_backup("produtos_mix")
+    if ok:
+        _uploads_sessao().pop("produtos_mix", None)
+        st.session_state.pop("produtos_mix_updated_at", None)
+        st.session_state.pop("produtos_mix_uploaded_name", None)
+        st.cache_data.clear()
+    return ok
+
+
 def limpar_uploads() -> None:
     st.session_state["uploads_bases"] = {}
     st.cache_data.clear()
@@ -84,6 +239,8 @@ def fonte_ativa(chave: str) -> str:
         return f"Upload salvo: {upload.get('name', '')}"
     if existe_persistido(chave):
         return "Base salva"
+    if chave == "mercado_farma" and MERCADO_FARMA_CONSOLIDADO.exists():
+        return "Consolidado GitHub Actions"
     caminho = ARQUIVOS_PADRAO[chave]
     return f"Pasta data: {caminho.name}" if caminho.exists() else "Arquivo não encontrado"
 
@@ -134,8 +291,17 @@ def carregar_produtos_mix() -> pd.DataFrame:
 
 
 def carregar_mercado_farma() -> pd.DataFrame:
+    upload = _uploads_sessao().get("mercado_farma")
+    if upload and upload.get("bytes"):
+        return _ler_excel_bytes(upload["bytes"], ABAS_PADRAO["mercado_farma"], _versao_cache("mercado_farma"))
+
+    persistido = carregar_bytes("mercado_farma")
+    if persistido:
+        return _ler_excel_bytes(persistido, ABAS_PADRAO["mercado_farma"], _versao_cache("mercado_farma"))
+
     if MERCADO_FARMA_CONSOLIDADO.exists():
         return pd.read_csv(MERCADO_FARMA_CONSOLIDADO, dtype=str, sep=None, engine="python")
+
     return _carregar_excel("mercado_farma")
 
 
