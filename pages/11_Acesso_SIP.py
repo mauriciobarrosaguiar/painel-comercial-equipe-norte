@@ -3,12 +3,13 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
-from src.calculos import formatar_tabela_metricas, gerar_resultado_cliente
+from src.calculos import formatar_tabela_metricas
 from src.datas import hoje_brasilia
 from src.layout import botao_download_excel, card_metrica, dataframe_com_download, titulo_pagina
 from src.loader import carregar_dados_tratados
 from src.mercado_farma import formatar_tabela_mercado, mercado_farma_atual, melhor_preco_por_ean
-from src.sip_store import carregar_sips, normalizar_grupo_sip
+from src.sip_calculos import calcular_indicadores_sip
+from src.sip_store import carregar_sips, normalizar_chave_sip, normalizar_grupo_sip
 from src.tratamento import STATUS_CANCELADO, STATUS_FATURADOS, formatar_data, formatar_moeda, formatar_percentual
 
 
@@ -109,8 +110,9 @@ dados = carregar_dados_tratados()
 vendas = dados["vendas"]
 clientes = dados["clientes"]
 sip_id = str(st.query_params.get("sip", "") or "").strip()
+sip_chave = normalizar_chave_sip(sip_id)
 grupos = [normalizar_grupo_sip(grupo) for grupo in carregar_sips()]
-grupo = next((item for item in grupos if item.get("id") == sip_id), None)
+grupo = next((item for item in grupos if normalizar_chave_sip(item.get("id") or item.get("nome")) == sip_chave), None)
 
 if not grupo:
     titulo_pagina("Painel SIP")
@@ -122,53 +124,41 @@ titulo_pagina(f"Painel SIP - {grupo['nome']}")
 hoje = hoje_brasilia()
 inicio_padrao = hoje.replace(day=1)
 p1, p2, p3 = st.columns(3)
-data_inicial = p1.date_input("Data inicial", value=inicio_padrao, format="DD/MM/YYYY", key=f"pub_sip_inicio_{sip_id}")
-data_final = p2.date_input("Data final", value=hoje, format="DD/MM/YYYY", key=f"pub_sip_fim_{sip_id}")
-status_sel = p3.selectbox("Status do pedido", ["Todos", "Faturados", "Sem nota", "Cancelados"], key=f"pub_sip_status_{sip_id}")
+data_inicial = p1.date_input("Data inicial", value=inicio_padrao, format="DD/MM/YYYY", key=f"pub_sip_inicio_{sip_chave}")
+data_final = p2.date_input("Data final", value=hoje, format="DD/MM/YYYY", key=f"pub_sip_fim_{sip_chave}")
+status_sel = p3.selectbox("Status do pedido", ["Todos", "Faturados", "Sem nota", "Cancelados"], key=f"pub_sip_status_{sip_chave}")
 
-vendas_sip_total = vendas[vendas["cnpj_limpo"].astype(str).isin(grupo["cnpjs"])].copy()
-vendas_sip = filtrar_periodo(vendas_sip_total, data_inicial, data_final)
-clientes_resultado = gerar_resultado_cliente(vendas_sip, clientes)
-membros_sip = clientes_resultado[clientes_resultado["cnpj_limpo"].astype(str).isin(grupo["cnpjs"])].copy()
-
-ol = float(membros_sip["ol_sem_combate"].sum()) if not membros_sip.empty else 0
-prio = float(membros_sip["ol_prioritarios"].sum()) if not membros_sip.empty else 0
-lanc = float(membros_sip["ol_lancamentos"].sum()) if not membros_sip.empty else 0
-meta = float(grupo.get("meta_mes", 0) or 0)
-pagamento = float(grupo.get("pagamento_percentual", 80) or 80)
+resultado_sip = calcular_indicadores_sip(vendas, clientes, grupo, data_inicial, data_final, status_sel)
+grupo = resultado_sip["grupo"]
+vendas_sip = resultado_sip["vendas_periodo"]
+membros_sip = resultado_sip["membros_sip"]
+pedidos = resultado_sip["pedidos"]
+faturados = resultado_sip["faturados"]
+sem_nota = resultado_sip["sem_nota"]
+cancelados = resultado_sip["cancelados"]
+pagamento = resultado_sip["pagamento_percentual"]
 
 c1, c2, c3 = st.columns(3)
 with c1:
-    card_metrica("CNPJs", str(len(grupo["cnpjs"])))
+    card_metrica("CNPJs", str(resultado_sip["cnpjs"]))
 with c2:
-    card_metrica("Meta", formatar_moeda(meta))
+    card_metrica("Meta", formatar_moeda(resultado_sip["meta"]))
 with c3:
-    card_metrica("Faturado", formatar_moeda(ol))
+    card_metrica("Faturado", formatar_moeda(resultado_sip["faturado"]))
 c4, c5, c6 = st.columns(3)
 with c4:
-    card_metrica("OL prioritários", formatar_moeda(prio))
+    card_metrica("OL prioritários", formatar_moeda(resultado_sip["ol_prioritarios"]))
 with c5:
-    card_metrica("OL lançamentos", formatar_moeda(lanc))
+    card_metrica("OL lançamentos", formatar_moeda(resultado_sip["ol_lancamentos"]))
 with c6:
-    card_metrica("Falta regra", formatar_moeda(falta_regra(ol, meta, pagamento)))
+    card_metrica("Falta regra", formatar_moeda(resultado_sip["falta_regra"]))
 st.markdown(
-    f"<span class='pill-note'>Atingimento: {formatar_percentual(ol / meta if meta else 0)}</span>"
+    f"<span class='pill-note'>Atingimento: {formatar_percentual(resultado_sip['atingimento'])}</span>"
     f"<span class='pill-note'>Pagamento a partir de {pagamento:.0f}%</span>",
     unsafe_allow_html=True,
 )
 
 st.subheader("Pedidos e notas da SIP")
-pedidos = preparar_pedidos_sip(vendas_sip)
-if status_sel == "Faturados":
-    pedidos = pedidos[pedidos["categoria"].eq("Faturado / nota gerada")].copy()
-elif status_sel == "Sem nota":
-    pedidos = pedidos[pedidos["categoria"].eq("Ainda não gerou nota")].copy()
-elif status_sel == "Cancelados":
-    pedidos = pedidos[pedidos["categoria"].eq("Cancelado")].copy()
-
-faturados = pedidos[pedidos["categoria"].eq("Faturado / nota gerada")]
-sem_nota = pedidos[pedidos["categoria"].eq("Ainda não gerou nota")]
-cancelados = pedidos[pedidos["categoria"].eq("Cancelado")]
 m1, m2, m3 = st.columns(3)
 with m1:
     card_metrica("Pedidos faturados", str(len(faturados)), f"{formatar_moeda(faturados['valor_vendido_sem_imposto'].sum())} faturado")

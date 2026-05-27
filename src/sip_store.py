@@ -14,6 +14,12 @@ from src.tratamento import normalizar_cnpj, slug_coluna
 
 DATA_DIR = Path(__file__).resolve().parents[1] / "data"
 SIP_FILE = DATA_DIR / "sip_grupos.json"
+
+
+def normalizar_chave_sip(texto: object) -> str:
+    return slug_coluna(texto)
+
+
 STATUS_RECADOS_VALIDOS = {"Pendente", "Em andamento", "Concluído"}
 
 
@@ -38,7 +44,7 @@ def salvar_sips(grupos: list[dict]) -> None:
 
 def normalizar_grupo_sip(grupo: dict) -> dict:
     nome = str(grupo.get("nome", "")).strip()
-    gid = str(grupo.get("id", "")).strip() or slug_coluna(nome)
+    gid = normalizar_chave_sip(grupo.get("id") or nome)
     cnpjs = [normalizar_cnpj(cnpj) for cnpj in grupo.get("cnpjs", [])]
     cnpjs = sorted({cnpj for cnpj in cnpjs if cnpj})
     redes = sorted({str(rede).strip() for rede in grupo.get("redes", []) if str(rede).strip()})
@@ -122,7 +128,7 @@ def gerar_resumo_sips_manuais(clientes_resultado: pd.DataFrame) -> pd.DataFrame:
 
 def adicionar_sip(nome: str, redes: list[str], cnpjs: list[str], meta_mes: float, pagamento_percentual: float, sip_id: str | None = None) -> None:
     grupos = [normalizar_grupo_sip(grupo) for grupo in carregar_sips()]
-    gid = sip_id or slug_coluna(nome)
+    gid = normalizar_chave_sip(sip_id or nome)
     existente = next((grupo for grupo in grupos if grupo.get("id") == gid), {})
     novo = normalizar_grupo_sip(
         {
@@ -142,7 +148,8 @@ def adicionar_sip(nome: str, redes: list[str], cnpjs: list[str], meta_mes: float
 
 def excluir_sip(sip_id: str) -> None:
     grupos = [normalizar_grupo_sip(grupo) for grupo in carregar_sips()]
-    salvar_sips([grupo for grupo in grupos if grupo.get("id") != sip_id])
+    sip_id_norm = normalizar_chave_sip(sip_id)
+    salvar_sips([grupo for grupo in grupos if grupo.get("id") != sip_id_norm])
 
 
 def adicionar_recado_sip(sip_id: str, titulo: str, comentario: str, status: str, arquivo) -> None:

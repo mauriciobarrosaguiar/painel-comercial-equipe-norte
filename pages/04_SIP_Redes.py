@@ -8,7 +8,8 @@ from src.calculos import formatar_tabela_metricas, gerar_resultado_cliente
 from src.datas import hoje_brasilia
 from src.filtros import aplicar_filtros_globais
 from src.layout import botao_download_excel, card_metrica, dataframe_com_download, titulo_pagina
-from src.loader import carregar_dados_tratados
+from src.loader import carregar_dados_tratados, fonte_ativa
+from src.sip_calculos import calcular_indicadores_sip
 from src.sip_store import (
     adicionar_recado_sip,
     adicionar_sip,
@@ -20,6 +21,7 @@ from src.sip_store import (
     normalizar_grupo_sip,
     opcoes_clientes_para_sip,
 )
+from src.status_bases import formatar_ultima_atualizacao
 from src.tratamento import STATUS_CANCELADO, STATUS_FATURADOS, formatar_data, formatar_moeda, formatar_percentual
 
 
@@ -151,7 +153,6 @@ st.markdown(
     f"<span class='pill-note'>{'Editando SIP existente' if editando else 'Novo cadastro de SIP'}</span>",
     unsafe_allow_html=True,
 )
-
 opcoes_clientes = opcoes_clientes_para_sip(clientes_resultado)
 redes_disponiveis = sorted(opcoes_clientes["rede"].dropna().astype(str).unique().tolist()) if not opcoes_clientes.empty else []
 
@@ -325,63 +326,41 @@ else:
                     st.success("Recado excluído.")
                     st.rerun()
 
-    membros_sip = clientes_resultado[clientes_resultado["cnpj_limpo"].astype(str).isin(grupo["cnpjs"])].copy()
-    ol = float(membros_sip["ol_sem_combate"].sum()) if not membros_sip.empty else 0
-    prio = float(membros_sip["ol_prioritarios"].sum()) if not membros_sip.empty else 0
-    lanc = float(membros_sip["ol_lancamentos"].sum()) if not membros_sip.empty else 0
-    meta = float(grupo["meta_mes"] or 0)
-    pagamento_minimo = float(grupo["pagamento_percentual"] or 80)
-
-    c1, c2, c3 = st.columns(3)
-    with c1:
-        card_metrica("CNPJs", str(len(grupo["cnpjs"])))
-    with c2:
-        card_metrica("Meta", formatar_moeda(meta))
-    with c3:
-        card_metrica("Faturado", formatar_moeda(ol))
-    c4, c5, c6 = st.columns(3)
-    with c4:
-        card_metrica("OL prioritários", formatar_moeda(prio))
-    with c5:
-        card_metrica("OL lançamentos", formatar_moeda(lanc))
-    with c6:
-        card_metrica("Falta regra", formatar_moeda(falta_regra(ol, meta, pagamento_minimo)))
-    st.markdown(
-        f"<span class='pill-note'>Atingimento: {formatar_percentual(ol / meta if meta else 0)}</span>"
-        f"<span class='pill-note'>Pagamento a partir de {pagamento_minimo:.0f}%</span>",
-        unsafe_allow_html=True,
-    )
-
     st.subheader("Pedidos e notas da SIP")
-    vendas_sip_total = vendas[vendas["cnpj_limpo"].astype(str).isin(grupo["cnpjs"])].copy()
-    datas = pd.to_datetime(vendas_sip_total.get("data_base"), errors="coerce")
-    data_min = datas.min()
-    data_max = datas.max()
-    if pd.isna(data_min) or pd.isna(data_max):
-        hoje = hoje_brasilia()
-        data_min = pd.Timestamp(hoje.replace(day=1))
-        data_max = pd.Timestamp(hoje)
-
     p1, p2, p3 = st.columns(3)
     data_inicial = p1.date_input("Data inicial", value=filtros["inicio"].date(), format="DD/MM/YYYY", key="sip_data_inicial")
     data_final = p2.date_input("Data final", value=filtros["fim"].date(), format="DD/MM/YYYY", key="sip_data_final")
     status_sel = p3.selectbox("Status do pedido", ["Todos", "Faturados", "Sem nota", "Cancelados"], key="sip_status_pedido")
 
-    vendas_sip = vendas_sip_total[
-        (pd.to_datetime(vendas_sip_total["data_base"], errors="coerce") >= pd.Timestamp(data_inicial))
-        & (pd.to_datetime(vendas_sip_total["data_base"], errors="coerce") <= pd.Timestamp(data_final) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1))
-    ].copy()
-    pedidos = preparar_pedidos_sip(vendas_sip)
-    if status_sel == "Faturados":
-        pedidos = pedidos[pedidos["categoria"].eq("Faturado / nota gerada")].copy()
-    elif status_sel == "Sem nota":
-        pedidos = pedidos[pedidos["categoria"].eq("Ainda não gerou nota")].copy()
-    elif status_sel == "Cancelados":
-        pedidos = pedidos[pedidos["categoria"].eq("Cancelado")].copy()
+    resultado_sip = calcular_indicadores_sip(vendas, clientes, grupo, data_inicial, data_final, status_sel)
+    grupo = resultado_sip["grupo"]
+    membros_sip = resultado_sip["membros_sip"]
+    pedidos = resultado_sip["pedidos"]
+    faturados = resultado_sip["faturados"]
+    sem_nota = resultado_sip["sem_nota"]
+    cancelados = resultado_sip["cancelados"]
+    pagamento_minimo = resultado_sip["pagamento_percentual"]
 
-    faturados = pedidos[pedidos["categoria"].eq("Faturado / nota gerada")]
-    sem_nota = pedidos[pedidos["categoria"].eq("Ainda não gerou nota")]
-    cancelados = pedidos[pedidos["categoria"].eq("Cancelado")]
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        card_metrica("CNPJs", str(resultado_sip["cnpjs"]))
+    with c2:
+        card_metrica("Meta", formatar_moeda(resultado_sip["meta"]))
+    with c3:
+        card_metrica("Faturado", formatar_moeda(resultado_sip["faturado"]))
+    c4, c5, c6 = st.columns(3)
+    with c4:
+        card_metrica("OL prioritários", formatar_moeda(resultado_sip["ol_prioritarios"]))
+    with c5:
+        card_metrica("OL lançamentos", formatar_moeda(resultado_sip["ol_lancamentos"]))
+    with c6:
+        card_metrica("Falta regra", formatar_moeda(resultado_sip["falta_regra"]))
+    st.markdown(
+        f"<span class='pill-note'>Atingimento: {formatar_percentual(resultado_sip['atingimento'])}</span>"
+        f"<span class='pill-note'>Pagamento a partir de {pagamento_minimo:.0f}%</span>",
+        unsafe_allow_html=True,
+    )
+
     m1, m2, m3 = st.columns(3)
     with m1:
         card_metrica("Pedidos faturados", str(len(faturados)), f"{formatar_moeda(faturados['valor_vendido_sem_imposto'].sum())} faturado")
@@ -389,6 +368,23 @@ else:
         card_metrica("Sem nota", str(len(sem_nota)), f"{formatar_moeda(sem_nota['valor_vendido_sem_imposto'].sum())} a faturar")
     with m3:
         card_metrica("Cancelados", str(len(cancelados)), f"{formatar_moeda(cancelados['valor_vendido_sem_imposto'].sum())} cancelado")
+
+    with st.expander("Conferência de cálculo", expanded=False):
+        st.write(
+            {
+                "sip_param_recebido": grupo_nome,
+                "sip_normalizada": grupo["id"],
+                "nome_da_sip": grupo["nome"],
+                "data_inicial_aplicada": formatar_data(data_inicial),
+                "data_final_aplicada": formatar_data(data_final),
+                "status_aplicado": status_sel,
+                "linhas_de_venda_usadas": resultado_sip["linhas_venda_usadas"],
+                "linhas_de_pedidos_usadas": resultado_sip["linhas_pedidos_usados"],
+                "soma_bruta_faturamento": formatar_moeda(resultado_sip["soma_bruta_faturamento"]),
+                "fonte_bussola": fonte_ativa("bussola"),
+                "ultima_atualizacao_bussola": formatar_ultima_atualizacao("bussola"),
+            }
+        )
 
     pedidos_exportar = pedidos.rename(
         columns={
