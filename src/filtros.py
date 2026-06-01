@@ -129,10 +129,9 @@ def filtrar_vendas_operacionais(vendas: pd.DataFrame, clientes_filtrados: pd.Dat
     if consultores:
         base = base[base["consultor"].isin(consultores)].copy()
 
-    if clientes_filtrados is not None and not clientes_filtrados.empty:
+    if filtros.get("restringir_por_clientes") and clientes_filtrados is not None:
         cnpjs = set(clientes_filtrados["cnpj_limpo"].dropna().astype(str))
-        if cnpjs:
-            base = base[base["cnpj_limpo"].astype(str).isin(cnpjs)].copy()
+        base = base[base["cnpj_limpo"].astype(str).isin(cnpjs)].copy()
 
     return base
 
@@ -232,8 +231,9 @@ def aplicar_filtros_globais(
     if tipo_mix_sel:
         vendas_filtradas = vendas_filtradas[vendas_filtradas["tipo_mix"].isin(tipo_mix_sel)].copy()
 
+    restringir_por_clientes = bool(consultor_sel or uf_sel or cidade_sel or grupo_sel)
     cnpjs_permitidos = set(clientes_filtrados["cnpj_limpo"].dropna().astype(str))
-    if cnpjs_permitidos:
+    if restringir_por_clientes:
         vendas_filtradas = vendas_filtradas[vendas_filtradas["cnpj_limpo"].isin(cnpjs_permitidos)].copy()
 
     filtros = {
@@ -247,6 +247,7 @@ def aplicar_filtros_globais(
         "status_modo": status_modo,
         "status": status_sel,
         "tipo_mix": tipo_mix_sel,
+        "restringir_por_clientes": restringir_por_clientes,
         "mes_referencia": mes_referencia,
         "periodo_mes_completo": inicio.normalize() == inicio_mes and fim.normalize() == fim_mes,
         "usar_metas_historicas": pd.Period(mes_referencia, freq="M") < hoje.to_period("M"),
