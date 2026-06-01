@@ -126,11 +126,12 @@ def aplicar_filtros_globais(
     indice_mes = meses_opcoes.index(mes_padrao) if mes_padrao in meses_opcoes else 0
 
     with st.sidebar.expander("Filtros comerciais", expanded=False):
-        mes_referencia = st.selectbox(
+        mes_referencia = st.radio(
             "Mês",
             meses_opcoes,
             index=indice_mes,
             format_func=_rotulo_mes,
+            horizontal=False,
             key=f"{chave}_mes_referencia",
         )
         inicio_mes, fim_mes = _limites_mes(mes_referencia)
