@@ -33,6 +33,27 @@ def _opcoes_consultores(clientes: pd.DataFrame, vendas: pd.DataFrame) -> list[st
     return [normalizados[chave] for chave in sorted(normalizados)]
 
 
+def _meses_disponiveis(datas: pd.Series) -> list[str]:
+    datas_validas = pd.to_datetime(datas, errors="coerce").dropna()
+    if datas_validas.empty:
+        return []
+    periodos = datas_validas.dt.to_period("M").astype(str)
+    return sorted(periodos.unique().tolist())
+
+
+def _rotulo_mes(ano_mes: str) -> str:
+    try:
+        periodo = pd.Period(ano_mes, freq="M")
+    except Exception:
+        return str(ano_mes)
+    return periodo.to_timestamp().strftime("%m/%Y")
+
+
+def _limites_mes(ano_mes: str) -> tuple[pd.Timestamp, pd.Timestamp]:
+    periodo = pd.Period(ano_mes, freq="M")
+    return periodo.start_time.normalize(), periodo.end_time.normalize()
+
+
 def filtrar_busca(df: pd.DataFrame, termo: str, colunas: list[str] | None = None) -> pd.DataFrame:
     if df.empty or not termo:
         return df
@@ -98,22 +119,41 @@ def aplicar_filtros_globais(
         data_min = inicio_mes_atual
         data_max = hoje
 
-    min_calendario = min(pd.Timestamp(data_min), inicio_mes_atual)
-    max_calendario = max(pd.Timestamp(data_max), hoje)
+    meses_base = _meses_disponiveis(datas)
+    mes_atual = hoje.to_period("M").strftime("%Y-%m")
+    meses_opcoes = sorted(set(meses_base + [mes_atual]))
+    mes_padrao = mes_atual if mes_atual in meses_base else (meses_base[-1] if meses_base else mes_atual)
+    indice_mes = meses_opcoes.index(mes_padrao) if mes_padrao in meses_opcoes else 0
 
     with st.sidebar.expander("Filtros comerciais", expanded=False):
-        periodo = st.date_input(
-            "Período",
-            value=(inicio_mes_atual.date(), hoje.date()),
-            min_value=min_calendario.date(),
-            max_value=max_calendario.date(),
-            format="DD/MM/YYYY",
-            key=f"{chave}_periodo_v2",
+        mes_referencia = st.selectbox(
+            "Mês",
+            meses_opcoes,
+            index=indice_mes,
+            format_func=_rotulo_mes,
+            key=f"{chave}_mes_referencia",
         )
-        if isinstance(periodo, tuple) and len(periodo) == 2:
-            inicio, fim = pd.Timestamp(periodo[0]), pd.Timestamp(periodo[1])
-        else:
-            inicio, fim = inicio_mes_atual, hoje
+        inicio_mes, fim_mes = _limites_mes(mes_referencia)
+        fim_padrao = min(fim_mes, hoje) if mes_referencia == mes_atual else fim_mes
+        inicio_data = st.date_input(
+            "Data inicial",
+            value=inicio_mes.date(),
+            min_value=inicio_mes.date(),
+            max_value=fim_mes.date(),
+            format="DD/MM/YYYY",
+            key=f"{chave}_inicio_{mes_referencia}",
+        )
+        fim_data = st.date_input(
+            "Data final",
+            value=fim_padrao.date(),
+            min_value=inicio_mes.date(),
+            max_value=fim_mes.date(),
+            format="DD/MM/YYYY",
+            key=f"{chave}_fim_{mes_referencia}",
+        )
+        inicio, fim = pd.Timestamp(inicio_data), pd.Timestamp(fim_data)
+        if fim < inicio:
+            inicio, fim = fim, inicio
 
         consultores = _opcoes_consultores(clientes_filtrados, vendas_filtradas)
         consultor_sel = st.multiselect("Consultor", consultores, key=f"{chave}_consultor")
@@ -195,5 +235,8 @@ def aplicar_filtros_globais(
         "status_modo": status_modo,
         "status": status_sel,
         "tipo_mix": tipo_mix_sel,
+        "mes_referencia": mes_referencia,
+        "periodo_mes_completo": inicio.normalize() == inicio_mes and fim.normalize() == fim_mes,
+        "usar_metas_historicas": pd.Period(mes_referencia, freq="M") < hoje.to_period("M"),
     }
     return vendas_filtradas, clientes_filtrados, filtros

@@ -125,7 +125,7 @@ def _validar_upload_generico(chave: str, conteudo: bytes) -> tuple[bool, str]:
         return False, "O arquivo enviado esta vazio."
 
     if chave == "bussola":
-        minimas = ["cnpj_pdv", "ean", "produto", "status_pedido", "pedido_id", "data_do_pedido", "preco_unitario_sem_imposto"]
+        minimas = ["cnpj_pdv", "ean", "produto", "status_pedido", "pedido_id", "data_do_pedido", "preco_unitario_sem_imposto", "valor_faturado"]
         faltantes = [coluna for coluna in minimas if not _tem_coluna(bruto, [coluna])]
         if faltantes:
             return False, "A base Bussola precisa conter: " + ", ".join(minimas)

@@ -37,6 +37,13 @@ COLUNAS_BUSSOLA = [
     "quantidade_cancelada",
     "preco_unitario_com_imposto",
     "preco_unitario_sem_imposto",
+    "desconto_digitado",
+    "desconto_aplicado_em_nota",
+    "valor_total_solicitado_com_imposto",
+    "valor_total_solicitado_sem_imposto",
+    "total_atendido_sem_imposto",
+    "total_atendido_com_imposto",
+    "valor_faturado",
 ]
 
 COLUNAS_PAINEL = [
@@ -401,6 +408,7 @@ def preparar_base_vendas(
     produtos_mix: pd.DataFrame,
 ) -> pd.DataFrame:
     vendas = padronizar_colunas(bussola) if bussola is not None else pd.DataFrame()
+    tem_valor_faturado = "valor_faturado" in vendas.columns
     vendas = garantir_colunas(vendas, COLUNAS_BUSSOLA)
     if vendas.empty:
         return pd.DataFrame(
@@ -411,6 +419,7 @@ def preparar_base_vendas(
                 "status_normalizado",
                 "pedido_cancelado",
                 "quantidade_base",
+                "valor_calculado_sem_imposto",
                 "valor_vendido_sem_imposto",
                 "nome_pdv",
                 "cidade",
@@ -445,17 +454,27 @@ def preparar_base_vendas(
         "quantidade_cancelada",
         "preco_unitario_com_imposto",
         "preco_unitario_sem_imposto",
+        "desconto_digitado",
+        "desconto_aplicado_em_nota",
+        "valor_total_solicitado_com_imposto",
+        "valor_total_solicitado_sem_imposto",
+        "total_atendido_sem_imposto",
+        "total_atendido_com_imposto",
+        "valor_faturado",
     ]:
         vendas[coluna] = serie_numero(vendas[coluna])
 
     vendas["data_do_pedido"] = serie_data(vendas["data_do_pedido"])
     vendas["data_de_faturamento"] = serie_data(vendas["data_de_faturamento"])
     vendas["quantidade_base"] = np.where(
-        vendas["quantidade_atendida"] > 0,
-        vendas["quantidade_atendida"],
-        np.where(vendas["quantidade_faturada"] > 0, vendas["quantidade_faturada"], 0),
+        vendas["quantidade_faturada"] > 0,
+        vendas["quantidade_faturada"],
+        np.where(vendas["quantidade_atendida"] > 0, vendas["quantidade_atendida"], 0),
     )
-    vendas["valor_vendido_sem_imposto"] = vendas["quantidade_base"] * vendas["preco_unitario_sem_imposto"]
+    vendas["valor_calculado_sem_imposto"] = vendas["quantidade_base"] * vendas["preco_unitario_sem_imposto"]
+    vendas["valor_vendido_sem_imposto"] = (
+        vendas["valor_faturado"] if tem_valor_faturado else vendas["valor_calculado_sem_imposto"]
+    )
     vendas["pedido_cancelado"] = vendas["status_normalizado"].eq(STATUS_CANCELADO)
 
     for coluna in ["representante", "centro_distribuicao", "uf_centro_distribuicao", "produto", "sku_produto"]:

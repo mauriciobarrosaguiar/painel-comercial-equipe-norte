@@ -5,6 +5,7 @@ import streamlit as st
 from src.calculos import calcular_indicadores, calcular_resumo_operacional
 from src.configuracoes import carregar_metas
 from src.filtros import aplicar_filtros_globais, filtrar_vendas_operacionais
+from src.historico import metas_para_periodo
 from src.layout import mostrar_status_periodo, titulo_pagina
 from src.loader import carregar_dados_tratados
 from src.projecao import projecao_html
@@ -51,6 +52,7 @@ metas = carregar_metas()
 titulo_pagina("")
 
 vendas_f, clientes_f, filtros = aplicar_filtros_globais(vendas, clientes, chave="visao_geral")
+metas = metas_para_periodo(metas, filtros)
 indicadores = calcular_indicadores(vendas_f, clientes_f)
 vendas_operacionais = filtrar_vendas_operacionais(vendas, clientes_f, filtros)
 resumo_operacional = calcular_resumo_operacional(vendas_operacionais, clientes_f)

@@ -7,7 +7,7 @@ from src.bussola_web import extrair_bussola_web_historico_todos
 from src.calculos import calcular_indicadores, gerar_resultado_consultor
 from src.configuracoes import carregar_login_bussola, consultores_unicos
 from src.datas import hoje_brasilia
-from src.historico import carregar_metas_historico, meta_padrao_mes, salvar_metas_historico
+from src.historico import combinar_bases_bussola_historico, carregar_metas_historico, meta_padrao_mes, salvar_metas_historico
 from src.layout import dataframe_com_download, titulo_pagina
 from src.loader import carregar_bussola_historico, carregar_dados_tratados, registrar_upload
 from src.status_bases import formatar_ultima_atualizacao
@@ -46,6 +46,7 @@ dados = carregar_dados_tratados()
 clientes = dados["clientes"]
 produtos_mix = dados["produtos_mix"]
 raw_historico = carregar_bussola_historico()
+raw_historico = combinar_bases_bussola_historico(dados.get("raw_bussola", pd.DataFrame()), raw_historico)
 vendas_historico = preparar_base_vendas(raw_historico, clientes, produtos_mix)
 metas_historico = carregar_metas_historico()
 

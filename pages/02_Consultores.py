@@ -5,6 +5,7 @@ import streamlit as st
 from src.calculos import calcular_resumo_operacional, formatar_tabela_metricas, gerar_resultado_cliente, gerar_resultado_consultor
 from src.configuracoes import carregar_metas
 from src.filtros import aplicar_filtros_globais, filtrar_busca, filtrar_vendas_operacionais
+from src.historico import metas_para_periodo
 from src.layout import dataframe_com_download, status_periodo_html, titulo_pagina
 from src.loader import carregar_dados_tratados
 from src.projecao import projecao_html
@@ -77,6 +78,7 @@ metas = carregar_metas()
 titulo_pagina("Consultores")
 
 vendas_f, clientes_f, filtros = aplicar_filtros_globais(vendas, clientes, chave="consultores")
+metas = metas_para_periodo(metas, filtros)
 vendas_operacionais = filtrar_vendas_operacionais(vendas, clientes_f, filtros)
 resultado = gerar_resultado_consultor(vendas_f, clientes_f)
 

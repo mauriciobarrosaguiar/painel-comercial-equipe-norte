@@ -14,6 +14,7 @@ from src.configuracoes import (
     salvar_login_bussola,
     salvar_metas,
 )
+from src.historico import sincronizar_metas_historico_meses_fechados
 from src.layout import botao_download_excel, titulo_pagina
 from src.loader import (
     carregar_dados_tratados,
@@ -80,6 +81,30 @@ def _numero_seguro(valor: object) -> float:
     except (TypeError, ValueError):
         return 0.0
     return numero if pd.notna(numero) else 0.0
+
+
+def _rotulo_mes(ano_mes: str) -> str:
+    try:
+        return pd.Period(ano_mes, freq="M").to_timestamp().strftime("%m/%Y")
+    except Exception:
+        return str(ano_mes)
+
+
+def _mensagem_historico(resultado: dict[str, object]) -> str:
+    meses = resultado.get("meses_atualizados") or []
+    if not meses:
+        return "Histórico: nenhum mês fechado para atualizar."
+    meses_fmt = ", ".join(_rotulo_mes(str(mes)) for mes in meses)
+    return f"Histórico sincronizado ({meses_fmt})."
+
+
+def _sincronizar_historico_importacao(metas_base: dict | None = None) -> str:
+    dados_atualizados = carregar_dados_tratados()
+    resultado = sincronizar_metas_historico_meses_fechados(
+        dados_atualizados["vendas"],
+        metas_base or carregar_metas(),
+    )
+    return _mensagem_historico(resultado)
 
 
 dados = carregar_dados_tratados()
@@ -164,8 +189,8 @@ with tab_bussola:
             try:
                 destino = extrair_bussola_web_todos(credenciais, headless=headless, log_fn=add_log)
                 progresso.progress(1.0)
-                st.success(f"Base consolidada atualizada: {destino}")
                 st.cache_data.clear()
+                st.success(f"Base consolidada atualizada: {destino}. {_sincronizar_historico_importacao()}")
             except Exception as exc:
                 st.error(f"Extração interrompida: {exc}")
 
@@ -391,6 +416,10 @@ with tab_metas:
 
     b1, b2 = st.columns([1.4, 0.8])
     if b1.button("Salvar ajustes de metas", width="stretch"):
+        try:
+            st.caption(_sincronizar_historico_importacao(metas))
+        except Exception as exc:
+            st.warning(f"Não consegui sincronizar o histórico antes de salvar as novas metas: {exc}")
         metas["gerente_territorial"] = {
             "ol_sem_combate": meta_ol,
             "ol_prioritarios": meta_prio,
@@ -523,8 +552,14 @@ with tab_arquivos:
             salvos.append("Produtos Mercado Farma")
         if registrar_upload("bussola_historico", up_historico):
             salvos.append("Histórico Bússola")
+        mensagem_historico = ""
+        if up_bussola is not None or up_historico is not None:
+            try:
+                mensagem_historico = " " + _sincronizar_historico_importacao()
+            except Exception as exc:
+                mensagem_historico = f" Histórico não sincronizado: {exc}"
         st.session_state["mensagem_upload_salvo"] = (
-            "Uploads aplicados e salvos: " + ", ".join(salvos)
+            "Uploads aplicados e salvos: " + ", ".join(salvos) + mensagem_historico
             if salvos
             else "Nenhum arquivo selecionado para salvar."
         )
