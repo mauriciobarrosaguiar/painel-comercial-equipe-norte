@@ -137,7 +137,8 @@ def combinar_bases_bussola_historico(base_importacao: pd.DataFrame, base_histori
     if len(chaves) != len(CHAVES_DEDUP_PEDIDOS):
         return combinado
 
-    mascara_chave_vazia = base[chaves].fillna("").astype(str).agg("|".join, axis=1).str.strip("|").eq("")
+    chave_texto = base[chaves].astype("string").fillna("")
+    mascara_chave_vazia = chave_texto.eq("").all(axis=1)
     deduplicado = base.loc[~mascara_chave_vazia].drop_duplicates(chaves, keep="last")
     sem_chave = base.loc[mascara_chave_vazia]
     return pd.concat([deduplicado, sem_chave], ignore_index=True)

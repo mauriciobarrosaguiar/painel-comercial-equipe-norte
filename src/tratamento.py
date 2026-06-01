@@ -293,14 +293,8 @@ def deduplicar_pedidos_bussola(vendas: pd.DataFrame) -> pd.DataFrame:
     if len(chaves) != len(CHAVES_DEDUP_PEDIDOS):
         return base
 
-    mascara_chave_vazia = (
-        base[chaves]
-        .fillna("")
-        .astype(str)
-        .agg("|".join, axis=1)
-        .str.strip("|")
-        .eq("")
-    )
+    chave_texto = base[chaves].astype("string").fillna("")
+    mascara_chave_vazia = chave_texto.eq("").all(axis=1)
     com_chave = base.loc[~mascara_chave_vazia].drop_duplicates(chaves, keep="last")
     sem_chave = base.loc[mascara_chave_vazia]
     return pd.concat([com_chave, sem_chave], ignore_index=True)
@@ -324,14 +318,8 @@ def deduplicar_exportacao_bussola(df: pd.DataFrame) -> pd.DataFrame:
     base["sku_produto"] = base["sku_produto"].apply(normalizar_texto)
     base["valor_faturado"] = serie_numero(base["valor_faturado"])
 
-    mascara_chave_vazia = (
-        base[chaves]
-        .fillna("")
-        .astype(str)
-        .agg("|".join, axis=1)
-        .str.strip("|")
-        .eq("")
-    )
+    chave_texto = base[chaves].astype("string").fillna("")
+    mascara_chave_vazia = chave_texto.eq("").all(axis=1)
     indices_deduplicados = base.loc[~mascara_chave_vazia].drop_duplicates(chaves, keep="last").index
     indices_sem_chave = base.loc[mascara_chave_vazia].index
     indices = list(indices_deduplicados) + list(indices_sem_chave)
