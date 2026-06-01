@@ -134,26 +134,9 @@ def aplicar_filtros_globais(
             key=f"{chave}_mes_referencia",
         )
         inicio_mes, fim_mes = _limites_mes(mes_referencia)
-        fim_padrao = min(fim_mes, hoje) if mes_referencia == mes_atual else fim_mes
-        inicio_data = st.date_input(
-            "Data inicial",
-            value=inicio_mes.date(),
-            min_value=inicio_mes.date(),
-            max_value=fim_mes.date(),
-            format="DD/MM/YYYY",
-            key=f"{chave}_inicio_{mes_referencia}",
-        )
-        fim_data = st.date_input(
-            "Data final",
-            value=fim_padrao.date(),
-            min_value=inicio_mes.date(),
-            max_value=fim_mes.date(),
-            format="DD/MM/YYYY",
-            key=f"{chave}_fim_{mes_referencia}",
-        )
-        inicio, fim = pd.Timestamp(inicio_data), pd.Timestamp(fim_data)
-        if fim < inicio:
-            inicio, fim = fim, inicio
+        inicio = inicio_mes
+        fim = min(fim_mes, hoje) if mes_referencia == mes_atual else fim_mes
+        st.caption(f"Período: {inicio.strftime('%d/%m/%Y')} até {fim.strftime('%d/%m/%Y')}")
 
         consultores = _opcoes_consultores(clientes_filtrados, vendas_filtradas)
         consultor_sel = st.multiselect("Consultor", consultores, key=f"{chave}_consultor")
