@@ -8,6 +8,7 @@ import streamlit as st
 
 from src.configuracoes import aplicar_ajustes_vendedores
 from src.datas import agora_brasilia
+from src.historico import combinar_bases_bussola_historico
 from src.persistencia import carregar_bytes, criar_backup, existe_persistido, restaurar_backup, salvar_bytes
 from src.tratamento import (
     COLUNAS_ACOES,
@@ -124,7 +125,7 @@ def _validar_upload_generico(chave: str, conteudo: bytes) -> tuple[bool, str]:
     if bruto.empty:
         return False, "O arquivo enviado esta vazio."
 
-    if chave == "bussola":
+    if chave in {"bussola", "bussola_historico"}:
         minimas = ["cnpj_pdv", "ean", "produto", "status_pedido", "pedido_id", "data_do_pedido", "preco_unitario_sem_imposto", "valor_faturado"]
         faltantes = [coluna for coluna in minimas if not _tem_coluna(bruto, [coluna])]
         if faltantes:
@@ -310,7 +311,9 @@ def carregar_produtos_mercado_farma() -> pd.DataFrame:
 
 
 def carregar_dados_tratados() -> dict[str, pd.DataFrame | list[str]]:
-    bussola_raw = carregar_bussola()
+    bussola_atual_raw = carregar_bussola()
+    bussola_historico_raw = carregar_bussola_historico()
+    bussola_raw = combinar_bases_bussola_historico(bussola_atual_raw, bussola_historico_raw)
     painel_raw = carregar_painel_equipe()
     acoes_raw = carregar_acoes()
     produtos_raw = carregar_produtos_mix()
@@ -340,7 +343,9 @@ def carregar_dados_tratados() -> dict[str, pd.DataFrame | list[str]]:
         "produtos_mix": produtos_mix,
         "acoes": acoes,
         "avisos": avisos,
-        "raw_bussola": bussola_raw,
+        "raw_bussola": bussola_atual_raw,
+        "raw_bussola_historico": bussola_historico_raw,
+        "raw_bussola_completa": bussola_raw,
         "raw_painel": painel_raw,
         "raw_acoes": acoes_raw,
         "raw_produtos_mix": produtos_raw,
