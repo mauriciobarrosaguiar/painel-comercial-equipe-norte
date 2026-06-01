@@ -20,7 +20,7 @@ def _dividir(numerador: float, denominador: float) -> float:
 def _vendas_validas(vendas: pd.DataFrame) -> pd.DataFrame:
     if vendas.empty:
         return vendas.copy()
-    return vendas[vendas["status_normalizado"].ne(STATUS_CANCELADO)].copy()
+    return vendas[vendas["status_normalizado"].isin(STATUS_FATURADOS)].copy()
 
 
 def _metricas_vendas(vendas: pd.DataFrame) -> dict[str, float]:
@@ -97,10 +97,13 @@ def calcular_resumo_operacional(vendas: pd.DataFrame, clientes: pd.DataFrame | N
 
     base = vendas.copy()
     status = base["status_normalizado"].fillna("").astype(str)
-    validas = base[status.ne(STATUS_CANCELADO)].copy()
     faturadas = base[status.isin(STATUS_FATURADOS)].copy()
+    validas = faturadas.copy()
     canceladas = base[status.eq(STATUS_CANCELADO)].copy()
-    sem_nota = validas[validas["nota_fiscal"].fillna("").astype(str).str.strip().eq("")].copy()
+    sem_nota = base[
+        status.ne(STATUS_CANCELADO)
+        & base["nota_fiscal"].fillna("").astype(str).str.strip().eq("")
+    ].copy()
 
     sem_combate = validas[validas["tipo_mix"].ne("COMBATE")]
     ol_cliente = sem_combate.groupby("cnpj_limpo")["valor_vendido_sem_imposto"].sum()

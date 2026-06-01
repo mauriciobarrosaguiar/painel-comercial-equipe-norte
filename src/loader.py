@@ -8,7 +8,6 @@ import streamlit as st
 
 from src.configuracoes import aplicar_ajustes_vendedores
 from src.datas import agora_brasilia
-from src.historico import combinar_bases_bussola_historico
 from src.persistencia import carregar_bytes, criar_backup, existe_persistido, restaurar_backup, salvar_bytes
 from src.tratamento import (
     COLUNAS_ACOES,
@@ -16,6 +15,7 @@ from src.tratamento import (
     COLUNAS_PAINEL,
     COLUNAS_PRODUTOS_MIX,
     TIPO_SEM_CLASSIFICACAO,
+    deduplicar_exportacao_bussola,
     normalizar_ean,
     padronizar_colunas,
     preparar_acoes,
@@ -163,6 +163,14 @@ def _validar_upload_generico(chave: str, conteudo: bytes) -> tuple[bool, str]:
 
 
 def _salvar_upload(chave: str, arquivo, conteudo: bytes, mensagem_backup: str | None = None) -> bool:
+    if chave in {"bussola", "bussola_historico"}:
+        bruto = _ler_excel_upload(conteudo, ABAS_PADRAO[chave])
+        deduplicado = deduplicar_exportacao_bussola(bruto)
+        buffer = BytesIO()
+        with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+            deduplicado.to_excel(writer, sheet_name=ABAS_PADRAO[chave], index=False)
+        conteudo = buffer.getvalue()
+
     atualizado_em = agora_brasilia().isoformat()
     if chave in {"produtos_mix", "produtos_mercado_farma", "bussola", "painel", "mercado_farma", "bussola_historico", "acoes"}:
         criar_backup(chave, mensagem_backup or f"Backup automatico antes de atualizar {chave}")
@@ -313,7 +321,7 @@ def carregar_produtos_mercado_farma() -> pd.DataFrame:
 def carregar_dados_tratados() -> dict[str, pd.DataFrame | list[str]]:
     bussola_atual_raw = carregar_bussola()
     bussola_historico_raw = carregar_bussola_historico()
-    bussola_raw = combinar_bases_bussola_historico(bussola_atual_raw, bussola_historico_raw)
+    bussola_raw = bussola_atual_raw
     painel_raw = carregar_painel_equipe()
     acoes_raw = carregar_acoes()
     produtos_raw = carregar_produtos_mix()

@@ -11,7 +11,7 @@ from src.historico import combinar_bases_bussola_historico, carregar_metas_histo
 from src.layout import dataframe_com_download, titulo_pagina
 from src.loader import carregar_bussola_historico, carregar_dados_tratados, registrar_upload
 from src.status_bases import formatar_ultima_atualizacao
-from src.tratamento import formatar_moeda, formatar_percentual, preparar_base_vendas
+from src.tratamento import STATUS_FATURADOS, formatar_moeda, formatar_percentual, preparar_base_vendas
 
 
 def _periodo_padrao() -> tuple[pd.Timestamp, pd.Timestamp]:
@@ -93,12 +93,13 @@ if vendas_historico.empty:
     st.info("Ainda não existe base histórica carregada.")
     st.stop()
 
-vendas_historico["data_base"] = pd.to_datetime(vendas_historico["data_base"], errors="coerce")
+vendas_historico["data_de_faturamento"] = pd.to_datetime(vendas_historico["data_de_faturamento"], errors="coerce")
 base_periodo = vendas_historico[
-    (vendas_historico["data_base"] >= pd.Timestamp(data_inicio))
-    & (vendas_historico["data_base"] <= pd.Timestamp(data_fim) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1))
+    (vendas_historico["data_de_faturamento"] >= pd.Timestamp(data_inicio))
+    & (vendas_historico["data_de_faturamento"] <= pd.Timestamp(data_fim) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1))
+    & (vendas_historico["status_normalizado"].isin(STATUS_FATURADOS))
 ].copy()
-base_periodo["ano_mes"] = base_periodo["data_base"].dt.to_period("M").astype(str)
+base_periodo["ano_mes"] = base_periodo["data_de_faturamento"].dt.to_period("M").astype(str)
 meses = sorted(base_periodo["ano_mes"].dropna().astype(str).unique().tolist())
 
 if not meses:

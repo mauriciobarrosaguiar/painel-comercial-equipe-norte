@@ -7,7 +7,7 @@ import pandas as pd
 
 from src.datas import hoje_brasilia
 from src.persistencia import carregar_json, salvar_json
-from src.tratamento import padronizar_colunas
+from src.tratamento import CHAVES_DEDUP_PEDIDOS, padronizar_colunas
 
 
 METAS_HISTORICO_PADRAO = {"meses": {}}
@@ -53,9 +53,10 @@ def _normalizar_meta(meta: dict[str, object] | None) -> dict[str, float]:
 
 
 def _periodos_fechados(vendas: pd.DataFrame, metas_historico: dict[str, Any]) -> list[str]:
-    if vendas is None or vendas.empty or "data_base" not in vendas.columns:
+    coluna_data = "data_de_faturamento" if vendas is not None and "data_de_faturamento" in vendas.columns else "data_base"
+    if vendas is None or vendas.empty or coluna_data not in vendas.columns:
         return []
-    datas = pd.to_datetime(vendas["data_base"], errors="coerce").dropna()
+    datas = pd.to_datetime(vendas[coluna_data], errors="coerce").dropna()
     if datas.empty:
         return []
 
@@ -132,12 +133,8 @@ def combinar_bases_bussola_historico(base_importacao: pd.DataFrame, base_histori
 
     combinado = pd.concat(partes, ignore_index=True)
     base = padronizar_colunas(combinado)
-    chaves = [
-        coluna
-        for coluna in ["pedido_id", "cnpj_pdv", "ean", "sku_produto", "data_do_pedido", "consultor_extracao"]
-        if coluna in base.columns
-    ]
-    if not chaves:
+    chaves = [coluna for coluna in CHAVES_DEDUP_PEDIDOS if coluna in base.columns]
+    if len(chaves) != len(CHAVES_DEDUP_PEDIDOS):
         return combinado
 
     mascara_chave_vazia = base[chaves].fillna("").astype(str).agg("|".join, axis=1).str.strip("|").eq("")

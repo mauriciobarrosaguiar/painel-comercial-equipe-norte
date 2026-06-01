@@ -13,8 +13,17 @@ from src.datas import hoje_brasilia
 
 TIPOS_MIX_VALIDOS = ["PRIORITARIO", "LANCAMENTO", "LINHA", "COMBATE"]
 TIPO_SEM_CLASSIFICACAO = "SEM CLASSIFICACAO"
-STATUS_FATURADOS = ["FATURADO", "FATURADO PARCIAL"]
+STATUS_FATURADOS = ["FATURADO", "FATURADO PARCIAL", "FATURADO RECUPERADO"]
 STATUS_CANCELADO = "CANCELADO"
+CHAVES_DEDUP_PEDIDOS = [
+    "pedido_id",
+    "nota_fiscal",
+    "data_de_faturamento",
+    "cnpj_pdv",
+    "ean",
+    "sku_produto",
+    "valor_faturado",
+]
 
 COLUNAS_BUSSOLA = [
     "status_pedido",
@@ -257,6 +266,8 @@ def status_pedido_normalizado(valor: object) -> str:
     texto = normalizar_texto_alto(valor)
     if "CANCEL" in texto:
         return STATUS_CANCELADO
+    if "FATURADO" in texto and "RECUPER" in texto:
+        return "FATURADO RECUPERADO"
     if "FATURADO" in texto and "PARCIAL" in texto:
         return "FATURADO PARCIAL"
     if "FATURADO" in texto:
@@ -272,6 +283,59 @@ def validar_colunas_esperadas(df: pd.DataFrame, esperadas: list[str], nome_base:
     if not faltantes:
         return []
     return [f"{nome_base}: colunas ausentes preenchidas automaticamente: {', '.join(faltantes)}."]
+
+
+def deduplicar_pedidos_bussola(vendas: pd.DataFrame) -> pd.DataFrame:
+    if vendas is None or vendas.empty:
+        return vendas.copy() if vendas is not None else pd.DataFrame()
+    base = vendas.copy()
+    chaves = [coluna for coluna in CHAVES_DEDUP_PEDIDOS if coluna in base.columns]
+    if len(chaves) != len(CHAVES_DEDUP_PEDIDOS):
+        return base
+
+    mascara_chave_vazia = (
+        base[chaves]
+        .fillna("")
+        .astype(str)
+        .agg("|".join, axis=1)
+        .str.strip("|")
+        .eq("")
+    )
+    com_chave = base.loc[~mascara_chave_vazia].drop_duplicates(chaves, keep="last")
+    sem_chave = base.loc[mascara_chave_vazia]
+    return pd.concat([com_chave, sem_chave], ignore_index=True)
+
+
+def deduplicar_exportacao_bussola(df: pd.DataFrame) -> pd.DataFrame:
+    if df is None or df.empty:
+        return df.copy() if df is not None else pd.DataFrame()
+
+    original = df.copy()
+    base = padronizar_colunas(original)
+    chaves = [coluna for coluna in CHAVES_DEDUP_PEDIDOS if coluna in base.columns]
+    if len(chaves) != len(CHAVES_DEDUP_PEDIDOS):
+        return original
+
+    base["pedido_id"] = base["pedido_id"].apply(normalizar_texto)
+    base["nota_fiscal"] = base["nota_fiscal"].apply(normalizar_texto)
+    base["data_de_faturamento"] = serie_data(base["data_de_faturamento"])
+    base["cnpj_pdv"] = base["cnpj_pdv"].apply(normalizar_cnpj)
+    base["ean"] = base["ean"].apply(normalizar_ean)
+    base["sku_produto"] = base["sku_produto"].apply(normalizar_texto)
+    base["valor_faturado"] = serie_numero(base["valor_faturado"])
+
+    mascara_chave_vazia = (
+        base[chaves]
+        .fillna("")
+        .astype(str)
+        .agg("|".join, axis=1)
+        .str.strip("|")
+        .eq("")
+    )
+    indices_deduplicados = base.loc[~mascara_chave_vazia].drop_duplicates(chaves, keep="last").index
+    indices_sem_chave = base.loc[mascara_chave_vazia].index
+    indices = list(indices_deduplicados) + list(indices_sem_chave)
+    return original.loc[indices].reset_index(drop=True)
 
 
 def _valor_grupo_valido(valor: object) -> bool:
@@ -408,7 +472,6 @@ def preparar_base_vendas(
     produtos_mix: pd.DataFrame,
 ) -> pd.DataFrame:
     vendas = padronizar_colunas(bussola) if bussola is not None else pd.DataFrame()
-    tem_valor_faturado = "valor_faturado" in vendas.columns
     vendas = garantir_colunas(vendas, COLUNAS_BUSSOLA)
     if vendas.empty:
         return pd.DataFrame(
@@ -444,6 +507,8 @@ def preparar_base_vendas(
     vendas["cnpj_pdv"] = vendas["cnpj_limpo"]
     vendas["ean"] = vendas["ean_limpo"]
     vendas["pedido_id"] = vendas["pedido_id"].apply(normalizar_texto)
+    vendas["nota_fiscal"] = vendas["nota_fiscal"].apply(normalizar_texto)
+    vendas["sku_produto"] = vendas["sku_produto"].apply(normalizar_texto)
     vendas["status_pedido"] = vendas["status_pedido"].apply(normalizar_texto)
     vendas["status_normalizado"] = vendas["status_pedido"].apply(status_pedido_normalizado)
 
@@ -472,12 +537,11 @@ def preparar_base_vendas(
         np.where(vendas["quantidade_atendida"] > 0, vendas["quantidade_atendida"], 0),
     )
     vendas["valor_calculado_sem_imposto"] = vendas["quantidade_base"] * vendas["preco_unitario_sem_imposto"]
-    vendas["valor_vendido_sem_imposto"] = (
-        vendas["valor_faturado"] if tem_valor_faturado else vendas["valor_calculado_sem_imposto"]
-    )
+    vendas = deduplicar_pedidos_bussola(vendas)
+    vendas["valor_vendido_sem_imposto"] = vendas["valor_faturado"]
     vendas["pedido_cancelado"] = vendas["status_normalizado"].eq(STATUS_CANCELADO)
 
-    for coluna in ["representante", "centro_distribuicao", "uf_centro_distribuicao", "produto", "sku_produto"]:
+    for coluna in ["representante", "centro_distribuicao", "uf_centro_distribuicao", "produto"]:
         vendas[coluna] = vendas[coluna].apply(normalizar_texto)
 
     clientes = painel_equipe.copy() if painel_equipe is not None else pd.DataFrame()

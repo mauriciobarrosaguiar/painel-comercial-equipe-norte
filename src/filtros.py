@@ -54,6 +54,46 @@ def _limites_mes(ano_mes: str) -> tuple[pd.Timestamp, pd.Timestamp]:
     return periodo.start_time.normalize(), periodo.end_time.normalize()
 
 
+def _datas_faturamento(vendas: pd.DataFrame) -> pd.Series:
+    if vendas is None or vendas.empty or "data_de_faturamento" not in vendas.columns:
+        indice = vendas.index if isinstance(vendas, pd.DataFrame) else None
+        return pd.Series(pd.NaT, index=indice, dtype="datetime64[ns]")
+    return pd.to_datetime(vendas["data_de_faturamento"], errors="coerce")
+
+
+def filtrar_periodo_faturamento(
+    vendas: pd.DataFrame,
+    inicio: object,
+    fim: object,
+    apenas_faturados: bool = True,
+) -> pd.DataFrame:
+    if vendas is None or vendas.empty:
+        return vendas.copy() if vendas is not None else pd.DataFrame()
+
+    base = vendas.copy()
+    inicio_ts = pd.Timestamp(inicio).normalize()
+    fim_ts = pd.Timestamp(fim).normalize() + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
+    datas = _datas_faturamento(base)
+    filtrada = base[(datas >= inicio_ts) & (datas <= fim_ts)].copy()
+
+    if apenas_faturados and "status_normalizado" in filtrada.columns:
+        filtrada = filtrada[filtrada["status_normalizado"].isin(STATUS_FATURADOS)].copy()
+    return filtrada
+
+
+def _aplicar_filtro_status(vendas: pd.DataFrame, modo: str, status_sel: list[str] | None = None) -> pd.DataFrame:
+    if vendas.empty or "status_normalizado" not in vendas.columns:
+        return vendas.copy()
+    status_sel = status_sel or []
+    if modo == "Apenas faturados":
+        return vendas[vendas["status_normalizado"].isin(STATUS_FATURADOS)].copy()
+    if modo == "Todos exceto cancelados":
+        return vendas[vendas["status_normalizado"].ne(STATUS_CANCELADO)].copy()
+    if status_sel:
+        return vendas[vendas["status_normalizado"].isin(status_sel)].copy()
+    return vendas.copy()
+
+
 def filtrar_busca(df: pd.DataFrame, termo: str, colunas: list[str] | None = None) -> pd.DataFrame:
     if df.empty or not termo:
         return df
@@ -69,13 +109,10 @@ def filtrar_busca(df: pd.DataFrame, termo: str, colunas: list[str] | None = None
 def filtrar_vendas_operacionais(vendas: pd.DataFrame, clientes_filtrados: pd.DataFrame, filtros: dict[str, object]) -> pd.DataFrame:
     if vendas.empty:
         return vendas.copy()
-    base = vendas.copy()
     inicio = pd.Timestamp(filtros.get("inicio"))
     fim = pd.Timestamp(filtros.get("fim"))
-    base = base[
-        (pd.to_datetime(base["data_base"], errors="coerce") >= inicio)
-        & (pd.to_datetime(base["data_base"], errors="coerce") <= fim + pd.Timedelta(days=1) - pd.Timedelta(seconds=1))
-    ].copy()
+    base = filtrar_periodo_faturamento(vendas, inicio, fim, apenas_faturados=False)
+    base = _aplicar_filtro_status(base, str(filtros.get("status_modo") or ""), filtros.get("status") or [])
 
     for coluna_filtro, coluna_base in [
         ("distribuidora", "distribuidora"),
@@ -109,7 +146,7 @@ def aplicar_filtros_globais(
     vendas_filtradas = vendas.copy()
     clientes_filtrados = clientes.copy()
 
-    datas = pd.to_datetime(vendas_filtradas.get("data_base"), errors="coerce")
+    datas = _datas_faturamento(vendas_filtradas)
     data_min = datas.min()
     data_max = datas.max()
     hoje_data = hoje_brasilia()
@@ -136,7 +173,7 @@ def aplicar_filtros_globais(
         )
         inicio_mes, fim_mes = _limites_mes(mes_referencia)
         inicio = inicio_mes
-        fim = min(fim_mes, hoje) if mes_referencia == mes_atual else fim_mes
+        fim = fim_mes
         st.caption(f"Período: {inicio.strftime('%d/%m/%Y')} até {fim.strftime('%d/%m/%Y')}")
 
         consultores = _opcoes_consultores(clientes_filtrados, vendas_filtradas)
@@ -175,17 +212,8 @@ def aplicar_filtros_globais(
             tipos = _opcoes(vendas_filtradas.get("tipo_mix", pd.Series(dtype=str)))
             tipo_mix_sel = st.multiselect("Tipo de mix", tipos, key=f"{chave}_tipo_mix")
 
-    vendas_filtradas = vendas_filtradas[
-        (pd.to_datetime(vendas_filtradas["data_base"], errors="coerce") >= inicio)
-        & (pd.to_datetime(vendas_filtradas["data_base"], errors="coerce") <= fim + pd.Timedelta(days=1) - pd.Timedelta(seconds=1))
-    ].copy()
-
-    if status_modo == "Apenas faturados":
-        vendas_filtradas = vendas_filtradas[vendas_filtradas["status_normalizado"].isin(STATUS_FATURADOS)].copy()
-    elif status_modo == "Todos exceto cancelados":
-        vendas_filtradas = vendas_filtradas[vendas_filtradas["status_normalizado"].ne(STATUS_CANCELADO)].copy()
-    elif status_sel:
-        vendas_filtradas = vendas_filtradas[vendas_filtradas["status_normalizado"].isin(status_sel)].copy()
+    vendas_filtradas = filtrar_periodo_faturamento(vendas_filtradas, inicio, fim, apenas_faturados=False)
+    vendas_filtradas = _aplicar_filtro_status(vendas_filtradas, status_modo, status_sel)
 
     if consultor_sel:
         clientes_filtrados = clientes_filtrados[clientes_filtrados["nome_rep"].isin(consultor_sel)].copy()

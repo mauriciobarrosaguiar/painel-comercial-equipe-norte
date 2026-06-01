@@ -6,7 +6,7 @@ import pandas as pd
 
 from src.loader import DATA_DIR
 from src.persistencia import salvar_bytes
-from src.tratamento import slug_coluna
+from src.tratamento import deduplicar_exportacao_bussola, slug_coluna
 
 
 def _executar_extrator_bussola():
@@ -35,6 +35,7 @@ def extrair_bussola_web(usuario: str, senha: str, headless: bool = False, log_fn
     destino = DATA_DIR / "bussola.xlsx"
     if pedidos.exists():
         df = pd.read_excel(pedidos, dtype=str)
+        df = deduplicar_exportacao_bussola(df)
         with pd.ExcelWriter(destino, engine="openpyxl") as writer:
             df.to_excel(writer, sheet_name="Pedidos", index=False)
     if not destino.exists():
@@ -104,7 +105,7 @@ def extrair_bussola_web_todos(credenciais: list[dict[str, str]], headless: bool 
         detalhe = "\n".join(erros) if erros else "Nenhuma base retornou linhas."
         raise RuntimeError(f"Nenhuma extração foi concluída.\n{detalhe}")
 
-    combinado = pd.concat(frames, ignore_index=True)
+    combinado = deduplicar_exportacao_bussola(pd.concat(frames, ignore_index=True))
     destino = DATA_DIR / "bussola.xlsx"
     with pd.ExcelWriter(destino, engine="openpyxl") as writer:
         combinado.to_excel(writer, sheet_name="Pedidos", index=False)
@@ -188,7 +189,7 @@ def extrair_bussola_web_historico_todos(
         detalhe = "\n".join(erros) if erros else "Nenhuma base histórica retornou linhas."
         raise RuntimeError(f"Nenhuma extração histórica foi concluída.\n{detalhe}")
 
-    combinado = pd.concat(frames, ignore_index=True)
+    combinado = deduplicar_exportacao_bussola(pd.concat(frames, ignore_index=True))
     destino = DATA_DIR / "bussola_historico.xlsx"
     with pd.ExcelWriter(destino, engine="openpyxl") as writer:
         combinado.to_excel(writer, sheet_name="Pedidos", index=False)
