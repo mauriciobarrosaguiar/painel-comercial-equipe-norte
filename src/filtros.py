@@ -158,7 +158,7 @@ def aplicar_filtros_globais(
     meses_base = _meses_disponiveis(datas)
     mes_atual = hoje.to_period("M").strftime("%Y-%m")
     meses_opcoes = sorted(set(meses_base + [mes_atual]))
-    mes_padrao = mes_atual if mes_atual in meses_base else (meses_base[-1] if meses_base else mes_atual)
+    mes_padrao = mes_atual
     indice_mes = meses_opcoes.index(mes_padrao) if mes_padrao in meses_opcoes else 0
 
     with st.sidebar.expander("Filtros comerciais", expanded=False):
