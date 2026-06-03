@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from html import escape
+from io import BytesIO
 import os
 from uuid import uuid4
 
@@ -42,11 +43,66 @@ def tabela_mercado_sem_consultor(df: pd.DataFrame) -> pd.DataFrame:
 MIME_XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 
+def _formatar_aba_excel_mercado_app(ws) -> None:
+    from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+    from openpyxl.utils import get_column_letter
+
+    header_fill = PatternFill("solid", fgColor="0B5D3B")
+    header_font = Font(color="FFFFFF", bold=True)
+    thin = Side(style="thin", color="D9E2DD")
+    border = Border(left=thin, right=thin, top=thin, bottom=thin)
+    for cell in ws[1]:
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal="center", vertical="center")
+        cell.border = border
+
+    ws.freeze_panes = "A2"
+    ws.auto_filter.ref = ws.dimensions
+    larguras: dict[str, int] = {}
+    for row in ws.iter_rows():
+        for cell in row:
+            valor = "" if cell.value is None else str(cell.value)
+            larguras[cell.column_letter] = min(max(larguras.get(cell.column_letter, 0), len(valor) + 2), 45)
+            cell.border = border
+            if cell.row > 1:
+                cell.alignment = Alignment(vertical="top", wrap_text=True)
+    for idx, _ in enumerate(ws.iter_cols(min_row=1, max_row=1), start=1):
+        letra = get_column_letter(idx)
+        ws.column_dimensions[letra].width = max(larguras.get(letra, 12), 10)
+
+
+def excel_mercado_farma_por_uf_app(df: pd.DataFrame) -> bytes:
+    if hasattr(mf, "excel_mercado_farma_por_uf"):
+        return mf.excel_mercado_farma_por_uf(df)
+
+    base = tabela_mercado_sem_consultor(df)
+    ordenacao = [col for col in ["UF", "Produto", "EAN", "Distribuidora"] if col in base.columns]
+    if ordenacao and not base.empty:
+        base = base.sort_values(ordenacao, kind="stable").reset_index(drop=True)
+
+    buffer = BytesIO()
+    with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+        if base.empty or "UF" not in base.columns:
+            base.to_excel(writer, sheet_name="Mercado Farma", index=False)
+            _formatar_aba_excel_mercado_app(writer.book["Mercado Farma"])
+        else:
+            ufs = sorted(uf for uf in base["UF"].dropna().astype(str).str.strip().str.upper().unique().tolist() if uf)
+            if not ufs:
+                base.to_excel(writer, sheet_name="SEM_UF", index=False)
+                _formatar_aba_excel_mercado_app(writer.book["SEM_UF"])
+            for uf in ufs:
+                df_uf = base[base["UF"].astype(str).str.upper().eq(uf)].copy()
+                df_uf.to_excel(writer, sheet_name=uf[:31], index=False)
+                _formatar_aba_excel_mercado_app(writer.book[uf[:31]])
+    return buffer.getvalue()
+
+
 def botao_download_mercado_excel(df: pd.DataFrame, nome_arquivo: str, rotulo: str, key: str) -> None:
     base = mf.preparar_mercado_farma(df)
     st.download_button(
         rotulo,
-        data=mf.excel_mercado_farma_por_uf(base),
+        data=excel_mercado_farma_por_uf_app(base),
         file_name=nome_arquivo,
         mime=MIME_XLSX,
         width="stretch",
