@@ -61,7 +61,7 @@ jobs:
           pip install -r requirements.txt
 
       - name: Extrair UF ${{ matrix.uf }}
-        if: ${{ (inputs.ufs == '' && inputs.uf == '') || contains(format(',{0},', replace(inputs.ufs, ' ', '')), format(',{0},', matrix.uf)) || contains(format(',{0},', replace(inputs.uf, ' ', '')), format(',{0},', matrix.uf)) }}
+        if: ${{ (inputs.ufs == '' && inputs.uf == '') || contains(inputs.ufs, matrix.uf) || contains(inputs.uf, matrix.uf) }}
         env:
           GITHUB_TOKEN: ${{ github.token }}
           GITHUB_REPO: ${{ github.repository }}
