@@ -398,13 +398,23 @@ with st.expander("Extração Mercado Farma", expanded=False):
     col_git1, col_git2 = st.columns(2)
     if col_git1.button("Atualizar UFs Selecionadas", width="stretch", disabled=not bool(ufs_para_rodar)):
         try:
-            gha.disparar_mercado_farma(ufs_para_rodar, int(limite_eans or 0))
+            gha.disparar_mercado_farma(
+                ufs_para_rodar,
+                int(limite_eans or 0),
+                mercadofarma_usuario=usuario_gd,
+                mercadofarma_senha=senha_gd,
+            )
             st.success("Atualização iniciada. Acompanhe o status abaixo.")
         except Exception as exc:
             st.error(f"Não consegui iniciar a atualização: {exc}")
     if col_git2.button("Atualizar Todas as UFs", width="stretch", disabled=not bool(ufs_alvos)):
         try:
-            gha.disparar_mercado_farma(ufs_alvos, int(limite_eans or 0))
+            gha.disparar_mercado_farma(
+                ufs_alvos,
+                int(limite_eans or 0),
+                mercadofarma_usuario=usuario_gd,
+                mercadofarma_senha=senha_gd,
+            )
             st.success("Atualização iniciada para todas as UFs.")
         except Exception as exc:
             st.error(f"Não consegui iniciar a atualização: {exc}")

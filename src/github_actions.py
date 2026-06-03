@@ -140,7 +140,14 @@ def github_actions_disponivel() -> bool:
     return bool(cfg["token"] and cfg["repo"])
 
 
-def disparar_mercado_farma(ufs: list[str], limite_eans: int = 0, *, headless: bool = True) -> None:
+def disparar_mercado_farma(
+    ufs: list[str],
+    limite_eans: int = 0,
+    *,
+    headless: bool = True,
+    mercadofarma_usuario: str = "",
+    mercadofarma_senha: str = "",
+) -> None:
     cfg = _config()
     if not github_actions_disponivel():
         raise RuntimeError("Configure GITHUB_TOKEN e GITHUB_REPO nos Secrets para disparar a atualização.")
@@ -153,6 +160,8 @@ def disparar_mercado_farma(ufs: list[str], limite_eans: int = 0, *, headless: bo
             "uf": ufs_txt,
             "limite_eans": str(int(limite_eans or 0)),
             "headless": "true" if headless else "false",
+            "mercadofarma_usuario": str(mercadofarma_usuario or ""),
+            "mercadofarma_senha": str(mercadofarma_senha or ""),
             "command_id": uuid4().hex,
         },
     }
