@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from html import escape
 import os
+from uuid import uuid4
 
 import pandas as pd
+import requests
 import streamlit as st
 
 from src import github_actions as gha
@@ -107,6 +109,50 @@ def alvos_mercadofarma_por_uf_app(clientes: pd.DataFrame, usuario_gd: str, senha
         cnpj = str(grupo_uf["cnpj_limpo"].iloc[0])
         alvos.append({"consultor": "GD", "uf": str(uf), "cnpj": cnpj, "usuario": usuario_gd, "senha": senha_gd})
     return sorted(alvos, key=lambda item: item["uf"])
+
+
+def disparar_mercado_farma_app(ufs: list[str], limite_eans: int, usuario_gd: str, senha_gd: str) -> None:
+    try:
+        gha.disparar_mercado_farma(
+            ufs,
+            limite_eans,
+            mercadofarma_usuario=usuario_gd,
+            mercadofarma_senha=senha_gd,
+        )
+        return
+    except TypeError as exc:
+        if "mercadofarma_usuario" not in str(exc):
+            raise
+
+    token = secret_app("GITHUB_TOKEN")
+    repo = secret_app("GITHUB_REPO", "mauriciobarrosaguiar/painel-comercial-equipe-norte")
+    branch = secret_app("GITHUB_BRANCH", "main")
+    if not token or not repo:
+        raise RuntimeError("Configure GITHUB_TOKEN e GITHUB_REPO nos Secrets para disparar a atualização.")
+
+    ufs_txt = ",".join(str(uf).strip().upper() for uf in ufs if str(uf).strip())
+    payload = {
+        "ref": branch,
+        "inputs": {
+            "acao": "atualizar_mercadofarma_paralelo",
+            "ufs": ufs_txt,
+            "uf": ufs_txt,
+            "limite_eans": str(int(limite_eans or 0)),
+            "headless": "true",
+            "mercadofarma_usuario": str(usuario_gd or ""),
+            "mercadofarma_senha": str(senha_gd or ""),
+            "command_id": uuid4().hex,
+        },
+    }
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "Authorization": f"Bearer {token}",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+    url = f"https://api.github.com/repos/{repo}/actions/workflows/mercadofarma.yml/dispatches"
+    resp = requests.post(url, headers=headers, json=payload, timeout=30)
+    if resp.status_code not in {204, 201}:
+        raise RuntimeError(f"A atualização não foi aceita ({resp.status_code}): {resp.text[:500]}")
 
 
 def produto_card_distribuidora(grupo: pd.DataFrame, key: str) -> None:
@@ -398,22 +444,22 @@ with st.expander("Extração Mercado Farma", expanded=False):
     col_git1, col_git2 = st.columns(2)
     if col_git1.button("Atualizar UFs Selecionadas", width="stretch", disabled=not bool(ufs_para_rodar)):
         try:
-            gha.disparar_mercado_farma(
+            disparar_mercado_farma_app(
                 ufs_para_rodar,
                 int(limite_eans or 0),
-                mercadofarma_usuario=usuario_gd,
-                mercadofarma_senha=senha_gd,
+                usuario_gd,
+                senha_gd,
             )
             st.success("Atualização iniciada. Acompanhe o status abaixo.")
         except Exception as exc:
             st.error(f"Não consegui iniciar a atualização: {exc}")
     if col_git2.button("Atualizar Todas as UFs", width="stretch", disabled=not bool(ufs_alvos)):
         try:
-            gha.disparar_mercado_farma(
+            disparar_mercado_farma_app(
                 ufs_alvos,
                 int(limite_eans or 0),
-                mercadofarma_usuario=usuario_gd,
-                mercadofarma_senha=senha_gd,
+                usuario_gd,
+                senha_gd,
             )
             st.success("Atualização iniciada para todas as UFs.")
         except Exception as exc:
