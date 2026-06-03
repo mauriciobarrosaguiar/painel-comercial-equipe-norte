@@ -147,6 +147,7 @@ def disparar_mercado_farma(
     headless: bool = True,
     mercadofarma_usuario: str = "",
     mercadofarma_senha: str = "",
+    persistence_key: str = "",
 ) -> None:
     cfg = _config()
     if not github_actions_disponivel():
@@ -162,6 +163,7 @@ def disparar_mercado_farma(
             "headless": "true" if headless else "false",
             "mercadofarma_usuario": str(mercadofarma_usuario or ""),
             "mercadofarma_senha": str(mercadofarma_senha or ""),
+            "persistence_key": str(persistence_key or _secret("PERSISTENCE_KEY")),
             "command_id": uuid4().hex,
         },
     }

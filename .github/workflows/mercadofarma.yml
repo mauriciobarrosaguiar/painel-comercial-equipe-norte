@@ -36,6 +36,10 @@ on:
         description: "Senha GD Mercado Farma enviada pelo painel"
         required: false
         default: ""
+      persistence_key:
+        description: "Chave de persistencia enviada pelo painel"
+        required: false
+        default: ""
 
 permissions:
   contents: write
@@ -75,7 +79,7 @@ jobs:
           GITHUB_REPO: ${{ github.repository }}
           GITHUB_BRANCH: ${{ github.ref_name }}
           GITHUB_STORAGE_BRANCH: app-storage
-          PERSISTENCE_KEY: ${{ secrets.PERSISTENCE_KEY }}
+          PERSISTENCE_KEY: ${{ secrets.PERSISTENCE_KEY || inputs.persistence_key }}
           MERCADOFARMA_USUARIO: ${{ secrets.MERCADOFARMA_USUARIO || inputs.mercadofarma_usuario }}
           MERCADOFARMA_SENHA: ${{ secrets.MERCADOFARMA_SENHA || inputs.mercadofarma_senha }}
           CHROME_BIN: ${{ steps.setup-chrome.outputs.chrome-path }}
@@ -85,6 +89,9 @@ jobs:
           fi
           if [ -n "$MERCADOFARMA_SENHA" ]; then
             echo "::add-mask::$MERCADOFARMA_SENHA"
+          fi
+          if [ -n "$PERSISTENCE_KEY" ]; then
+            echo "::add-mask::$PERSISTENCE_KEY"
           fi
           echo "Iniciando extracao Mercado Farma para UF ${{ matrix.uf }}"
           EXTRA_ARGS=""

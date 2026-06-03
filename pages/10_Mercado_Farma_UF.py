@@ -112,16 +112,18 @@ def alvos_mercadofarma_por_uf_app(clientes: pd.DataFrame, usuario_gd: str, senha
 
 
 def disparar_mercado_farma_app(ufs: list[str], limite_eans: int, usuario_gd: str, senha_gd: str) -> None:
+    persistence_key = secret_app("PERSISTENCE_KEY")
     try:
         gha.disparar_mercado_farma(
             ufs,
             limite_eans,
             mercadofarma_usuario=usuario_gd,
             mercadofarma_senha=senha_gd,
+            persistence_key=persistence_key,
         )
         return
     except TypeError as exc:
-        if "mercadofarma_usuario" not in str(exc):
+        if "mercadofarma_usuario" not in str(exc) and "persistence_key" not in str(exc):
             raise
 
     token = secret_app("GITHUB_TOKEN")
@@ -141,6 +143,7 @@ def disparar_mercado_farma_app(ufs: list[str], limite_eans: int, usuario_gd: str
             "headless": "true",
             "mercadofarma_usuario": str(usuario_gd or ""),
             "mercadofarma_senha": str(senha_gd or ""),
+            "persistence_key": persistence_key,
             "command_id": uuid4().hex,
         },
     }
