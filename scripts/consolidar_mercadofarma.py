@@ -140,15 +140,47 @@ def formatar_aba_excel(ws) -> None:
     for idx in range(1, ws.max_column + 1):
         letra = get_column_letter(idx)
         ws.column_dimensions[letra].width = max(larguras.get(letra, 12), 10)
+        cabecalho = ws.cell(row=1, column=idx).value
+        if cabecalho == "DESCONTO":
+            for cell in ws.iter_cols(min_col=idx, max_col=idx, min_row=2):
+                for item in cell:
+                    item.number_format = "0.00%"
+        elif cabecalho in {"PF_DIST", "PF_FABRICA", "PRECO_COM_IMPOSTO", "PRECO_SEM_IMPOSTO"}:
+            for cell in ws.iter_cols(min_col=idx, max_col=idx, min_row=2):
+                for item in cell:
+                    item.number_format = "#,##0.00"
+        elif cabecalho == "ESTOQUE":
+            for cell in ws.iter_cols(min_col=idx, max_col=idx, min_row=2):
+                for item in cell:
+                    item.number_format = "#,##0"
 
 
 def salvar_excel_por_uf(df: pd.DataFrame) -> None:
     base = normalizar_uf(df)
     if base.empty:
         return
-    ordenacao = [col for col in ["UF", "PRODUTO", "EAN", "DISTRIBUIDORA"] if col in base.columns]
+    for coluna in ["ESTOQUE", "DESCONTO", "PF_DIST", "PF_FABRICA", "PRECO_COM_IMPOSTO", "PRECO_SEM_IMPOSTO"]:
+        if coluna in base.columns:
+            base[coluna] = pd.to_numeric(base[coluna], errors="coerce").fillna(0)
+    if {"STATUS", "PRODUTO", "DISTRIBUIDORA", "ESTOQUE", "PRECO_SEM_IMPOSTO", "ERRO"}.issubset(base.columns):
+        status_erro = base["STATUS"].astype(str).str.strip().str.upper().isin({"ERRO", "NAO ENCONTRADO"})
+        sem_produto = base["PRODUTO"].fillna("").astype(str).str.strip().eq("")
+        sem_distribuidora = base["DISTRIBUIDORA"].fillna("").astype(str).str.strip().eq("")
+        sem_valor = (base["ESTOQUE"] <= 0) & (base["PRECO_SEM_IMPOSTO"] <= 0)
+        erro_generico = base["ERRO"].fillna("").astype(str).str.strip().str.lower().isin({"", "message:", "message"})
+        mask_nao_encontrado = status_erro & sem_produto & sem_distribuidora & sem_valor & erro_generico
+        base.loc[mask_nao_encontrado, "PRODUTO"] = "Produto nao encontrado"
+        base.loc[mask_nao_encontrado, "STATUS"] = "NAO ENCONTRADO"
+        base.loc[mask_nao_encontrado, "ERRO"] = "EAN nao encontrado no Mercado Farma"
+    if "STATUS" in base.columns:
+        status = base["STATUS"].fillna("").astype(str).str.strip().str.upper()
+        base["_ORDEM_STATUS"] = 2
+        base.loc[status.eq("OK"), "_ORDEM_STATUS"] = 0
+        base.loc[status.eq("NAO ENCONTRADO"), "_ORDEM_STATUS"] = 1
+    ordenacao = [col for col in ["UF", "_ORDEM_STATUS", "PRODUTO", "EAN", "DISTRIBUIDORA"] if col in base.columns]
     if ordenacao:
         base = base.sort_values(ordenacao, kind="stable").reset_index(drop=True)
+    base = base.drop(columns=["_ORDEM_STATUS"], errors="ignore")
     with pd.ExcelWriter(FINAL_XLSX_PATH, engine="openpyxl") as writer:
         ufs = sorted(uf for uf in base["UF"].dropna().astype(str).str.strip().str.upper().unique().tolist() if uf)
         if not ufs:

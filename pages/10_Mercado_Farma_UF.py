@@ -70,16 +70,75 @@ def _formatar_aba_excel_mercado_app(ws) -> None:
     for idx, _ in enumerate(ws.iter_cols(min_row=1, max_row=1), start=1):
         letra = get_column_letter(idx)
         ws.column_dimensions[letra].width = max(larguras.get(letra, 12), 10)
+        cabecalho = ws.cell(row=1, column=idx).value
+        if cabecalho == "Desconto":
+            for cell in ws.iter_cols(min_col=idx, max_col=idx, min_row=2):
+                for item in cell:
+                    item.number_format = "0.00%"
+        elif cabecalho in {"PF Dist.", "PF Fábrica", "Preço com imposto", "Preço sem imposto"}:
+            for cell in ws.iter_cols(min_col=idx, max_col=idx, min_row=2):
+                for item in cell:
+                    item.number_format = "#,##0.00"
+        elif cabecalho == "Estoque":
+            for cell in ws.iter_cols(min_col=idx, max_col=idx, min_row=2):
+                for item in cell:
+                    item.number_format = "#,##0"
+        elif cabecalho == "Atualizado em":
+            for cell in ws.iter_cols(min_col=idx, max_col=idx, min_row=2):
+                for item in cell:
+                    item.number_format = "dd/mm/yyyy hh:mm"
+
+
+def _tabela_excel_mercado_app(df: pd.DataFrame) -> pd.DataFrame:
+    base = mf.preparar_mercado_farma(df)
+    if not base.empty:
+        status_erro = base["status"].astype(str).str.strip().str.upper().isin({"ERRO", "NAO ENCONTRADO"})
+        sem_produto = base["produto"].astype(str).str.strip().eq("")
+        sem_distribuidora = base["distribuidora"].astype(str).str.strip().eq("")
+        sem_valor = (base["estoque"].fillna(0).astype(float) <= 0) & (base["preco_sem_imposto"].fillna(0).astype(float) <= 0)
+        erro_generico = base["erro"].astype(str).str.strip().str.lower().isin({"", "message:", "message"})
+        mask_nao_encontrado = status_erro & sem_produto & sem_distribuidora & sem_valor & erro_generico
+        base.loc[mask_nao_encontrado, "produto"] = "Produto nao encontrado"
+        base.loc[mask_nao_encontrado, "status"] = "NAO ENCONTRADO"
+        base.loc[mask_nao_encontrado, "erro"] = "EAN nao encontrado no Mercado Farma"
+
+    colunas = {
+        "uf": "UF",
+        "cnpj_referencia": "CNPJ referência",
+        "ean": "EAN",
+        "produto": "Produto",
+        "distribuidora": "Distribuidora",
+        "estoque": "Estoque",
+        "desconto": "Desconto",
+        "pf_dist": "PF Dist.",
+        "pf_fabrica": "PF Fábrica",
+        "preco_com_imposto": "Preço com imposto",
+        "preco_sem_imposto": "Preço sem imposto",
+        "data_atualizacao": "Atualizado em",
+        "status": "Status",
+        "erro": "Erro",
+    }
+    tabela = base.rename(columns=colunas)
+    return tabela[list(colunas.values())]
+
+
+def _ordenar_tabela_excel_mercado_app(base: pd.DataFrame) -> pd.DataFrame:
+    if base.empty:
+        return base
+    tabela = base.copy()
+    status = tabela["Status"].fillna("").astype(str).str.strip().str.upper() if "Status" in tabela.columns else pd.Series("", index=tabela.index)
+    tabela["_ordem_status"] = 2
+    tabela.loc[status.eq("OK"), "_ordem_status"] = 0
+    tabela.loc[status.eq("NAO ENCONTRADO"), "_ordem_status"] = 1
+    ordenacao = [col for col in ["UF", "_ordem_status", "Produto", "EAN", "Distribuidora"] if col in tabela.columns]
+    return tabela.sort_values(ordenacao, kind="stable").drop(columns=["_ordem_status"], errors="ignore").reset_index(drop=True)
 
 
 def excel_mercado_farma_por_uf_app(df: pd.DataFrame) -> bytes:
     if hasattr(mf, "excel_mercado_farma_por_uf"):
         return mf.excel_mercado_farma_por_uf(df)
 
-    base = tabela_mercado_sem_consultor(df)
-    ordenacao = [col for col in ["UF", "Produto", "EAN", "Distribuidora"] if col in base.columns]
-    if ordenacao and not base.empty:
-        base = base.sort_values(ordenacao, kind="stable").reset_index(drop=True)
+    base = _ordenar_tabela_excel_mercado_app(_tabela_excel_mercado_app(df))
 
     buffer = BytesIO()
     with pd.ExcelWriter(buffer, engine="openpyxl") as writer:

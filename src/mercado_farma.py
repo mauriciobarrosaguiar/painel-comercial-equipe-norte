@@ -398,6 +398,60 @@ def dataframe_excel_bytes(df: pd.DataFrame) -> bytes:
     return buffer.getvalue()
 
 
+def _linha_sem_resultado_excel(base: pd.DataFrame) -> pd.Series:
+    status_erro = base["status"].astype(str).str.strip().str.upper().isin({"ERRO", "NAO ENCONTRADO"})
+    sem_produto = base["produto"].astype(str).str.strip().eq("")
+    sem_distribuidora = base["distribuidora"].astype(str).str.strip().eq("")
+    sem_valor = (base["estoque"].fillna(0).astype(float) <= 0) & (base["preco_sem_imposto"].fillna(0).astype(float) <= 0)
+    erro_generico = base["erro"].astype(str).str.strip().str.lower().isin({"", "message:", "message"})
+    return status_erro & sem_produto & sem_distribuidora & sem_valor & erro_generico
+
+
+def _tabela_excel_mercado(df: pd.DataFrame, *, incluir_consultor: bool = False) -> pd.DataFrame:
+    base = preparar_mercado_farma(df)
+    if not base.empty:
+        mask_nao_encontrado = _linha_sem_resultado_excel(base)
+        base.loc[mask_nao_encontrado, "produto"] = "Produto nao encontrado"
+        base.loc[mask_nao_encontrado, "status"] = "NAO ENCONTRADO"
+        base.loc[mask_nao_encontrado, "erro"] = "EAN nao encontrado no Mercado Farma"
+
+    colunas = {
+        "consultor": "Consultor",
+        "uf": "UF",
+        "cnpj_referencia": "CNPJ referência",
+        "ean": "EAN",
+        "produto": "Produto",
+        "distribuidora": "Distribuidora",
+        "estoque": "Estoque",
+        "desconto": "Desconto",
+        "pf_dist": "PF Dist.",
+        "pf_fabrica": "PF Fábrica",
+        "preco_com_imposto": "Preço com imposto",
+        "preco_sem_imposto": "Preço sem imposto",
+        "data_atualizacao": "Atualizado em",
+        "status": "Status",
+        "erro": "Erro",
+    }
+    tabela = base.rename(columns=colunas)
+    if not incluir_consultor:
+        tabela = tabela.drop(columns=["Consultor"], errors="ignore")
+    return tabela
+
+
+def _ordenar_tabela_excel_mercado(base: pd.DataFrame) -> pd.DataFrame:
+    if base.empty:
+        return base
+    ordenada = base.copy()
+    if "Status" in ordenada.columns:
+        status = ordenada["Status"].fillna("").astype(str).str.strip().str.upper()
+        ordenada["_ordem_status"] = np.select([status.eq("OK"), status.eq("NAO ENCONTRADO")], [0, 1], default=2)
+    else:
+        ordenada["_ordem_status"] = 0
+    ordenacao = [col for col in ["UF", "_ordem_status", "Produto", "EAN", "Distribuidora"] if col in ordenada.columns]
+    ordenada = ordenada.sort_values(ordenacao, kind="stable").drop(columns=["_ordem_status"], errors="ignore")
+    return ordenada.reset_index(drop=True)
+
+
 def _nome_aba_uf(valor: object) -> str:
     texto = _texto(valor).upper()
     texto = "".join(char for char in texto if char not in r"[]:*?/\\").strip()
@@ -433,16 +487,27 @@ def _formatar_aba_excel_mercado(ws) -> None:
     for idx in range(1, ws.max_column + 1):
         letra = get_column_letter(idx)
         ws.column_dimensions[letra].width = max(larguras.get(letra, 12), 10)
+        cabecalho = ws.cell(row=1, column=idx).value
+        if cabecalho == "Desconto":
+            for cell in ws.iter_cols(min_col=idx, max_col=idx, min_row=2):
+                for item in cell:
+                    item.number_format = "0.00%"
+        elif cabecalho in {"PF Dist.", "PF Fábrica", "Preço com imposto", "Preço sem imposto"}:
+            for cell in ws.iter_cols(min_col=idx, max_col=idx, min_row=2):
+                for item in cell:
+                    item.number_format = "#,##0.00"
+        elif cabecalho == "Estoque":
+            for cell in ws.iter_cols(min_col=idx, max_col=idx, min_row=2):
+                for item in cell:
+                    item.number_format = "#,##0"
+        elif cabecalho == "Atualizado em":
+            for cell in ws.iter_cols(min_col=idx, max_col=idx, min_row=2):
+                for item in cell:
+                    item.number_format = "dd/mm/yyyy hh:mm"
 
 
 def excel_mercado_farma_por_uf(df: pd.DataFrame, *, incluir_consultor: bool = False) -> bytes:
-    base = formatar_tabela_mercado(df)
-    if not incluir_consultor:
-        base = base.drop(columns=["Consultor"], errors="ignore")
-
-    ordenacao = [col for col in ["UF", "Produto", "EAN", "Distribuidora"] if col in base.columns]
-    if ordenacao and not base.empty:
-        base = base.sort_values(ordenacao, kind="stable").reset_index(drop=True)
+    base = _ordenar_tabela_excel_mercado(_tabela_excel_mercado(df, incluir_consultor=incluir_consultor))
 
     buffer = BytesIO()
     with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
@@ -705,6 +770,13 @@ def extrair_mercado_farma(
     return salvar_mercado_farma(preparar_mercado_farma(pd.DataFrame(resultados)))
 
 
+def _mensagem_erro_consulta(erro: Exception | str) -> str:
+    texto = str(erro or "").strip()
+    if texto.lower() in {"", "message:", "message"}:
+        return "Nao consegui consultar o EAN no Mercado Farma."
+    return texto
+
+
 def _linha_erro(alvo: dict[str, str], ean: str, erro: Exception | str) -> dict:
     return {
         "consultor": _texto(alvo.get("consultor")),
@@ -721,7 +793,7 @@ def _linha_erro(alvo: dict[str, str], ean: str, erro: Exception | str) -> dict:
         "preco_sem_imposto": 0,
         "data_atualizacao": agora_brasilia().strftime("%d/%m/%Y %H:%M:%S"),
         "status": "ERRO",
-        "erro": str(erro),
+        "erro": _mensagem_erro_consulta(erro),
     }
 
 

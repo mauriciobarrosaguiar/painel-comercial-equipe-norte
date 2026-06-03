@@ -374,7 +374,7 @@ def extract_buybox_row(row, ean: str, nome_produto: str) -> Optional[dict]:
 def build_not_found_row(ean: str) -> dict:
     return {
         "EAN": ean,
-        "NOME DO PRODUTO": "PRODUTO NAO ENCONTRADO",
+        "NOME DO PRODUTO": "Produto nao encontrado",
         "DISTRIBUIDORA": "",
         "ESTOQUE": 0,
         "DESCONTO (%)": 0.0,
@@ -383,6 +383,8 @@ def build_not_found_row(ean: str) -> dict:
         "PREÇO FINAL (R$)": 0.0,
         "SEM IMPOSTO (R$)": 0.0,
         "DATA": now_str(),
+        "STATUS": "NAO ENCONTRADO",
+        "ERRO": "EAN nao encontrado no Mercado Farma",
     }
 
 
@@ -391,7 +393,10 @@ def processar_ean_catalogo(driver: WebDriver, ean: str) -> list[dict]:
     popover = None
 
     try:
-        card_produto = localizar_card_produto_por_ean(driver, ean)
+        try:
+            card_produto = localizar_card_produto_por_ean(driver, ean)
+        except TimeoutException:
+            return [build_not_found_row(ean)]
         nome_produto = extrair_nome_produto(card_produto) or "NOME NAO IDENTIFICADO"
         popover = abrir_lista_distribuidoras(driver, card_produto)
         wait(driver, 8).until(lambda _d: len(rows_buybox(popover)) > 0)
