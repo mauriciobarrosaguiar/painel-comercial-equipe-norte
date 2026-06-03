@@ -7,7 +7,7 @@ import streamlit as st
 
 from src import github_actions as gha
 from src import mercado_farma as mf
-from src.configuracoes import carregar_login_bussola, consultores_unicos
+from src.configuracoes import carregar_login_bussola
 from src.layout import botao_download_excel, card_metrica, dataframe_com_download, titulo_pagina
 from src.loader import carregar_dados_tratados, registrar_upload
 from src.status_bases import formatar_ultima_atualizacao
@@ -98,16 +98,6 @@ def produto_card_distribuidora(grupo: pd.DataFrame, key: str) -> None:
             """,
             unsafe_allow_html=True,
         )
-
-
-def credenciais_por_consultor(login: dict, consultores: list[str]) -> list[dict[str, str]]:
-    salvos = login.get("consultores", {}) if isinstance(login, dict) else {}
-    credenciais = []
-    for consultor in consultores:
-        item = salvos.get(consultor, {})
-        if item.get("usuario") and item.get("senha") and item.get("extrair", True):
-            credenciais.append({"consultor": consultor, "usuario": item["usuario"], "senha": item["senha"]})
-    return credenciais
 
 
 def painel_status_extracao(estado: dict) -> None:
@@ -286,25 +276,35 @@ titulo_pagina("Mercado Farma / UF", "Preços e estoque por UF da carteira")
 mercado_original = mf.mercado_farma_atual()
 descontos_config = mf.carregar_descontos_adicionais()
 mercado = mf.aplicar_descontos_adicionais(mercado_original, descontos_config)
-consultores = consultores_unicos(clientes)
 login = carregar_login_bussola()
-credenciais = credenciais_por_consultor(login, consultores)
-alvos = mf.alvos_unicos_por_uf(clientes, credenciais, exigir_login=True)
+credencial_gd = mf.carregar_credenciais_mercadofarma(login)
+usuario_gd = str(credencial_gd.get("usuario", ""))
+senha_gd = str(credencial_gd.get("senha", ""))
+credenciais = [{"consultor": "GD", "usuario": usuario_gd, "senha": senha_gd}] if credencial_gd.get("configurado") else []
+alvos = mf.alvos_mercadofarma_por_uf(clientes, usuario_gd, senha_gd)
 ufs_carteira = set(mf.ufs_validas_clientes(clientes))
 ufs_alvos = sorted({alvo["uf"] for alvo in alvos} or ufs_carteira)
-ufs_sem_login = sorted(ufs_carteira - {alvo["uf"] for alvo in alvos})
+ufs_sem_cnpj = sorted(ufs_carteira - {alvo["uf"] for alvo in alvos})
 
 st.markdown(f"<span class='pill-note'>Última atualização consolidada: {formatar_ultima_atualizacao('mercado_farma')}</span>", unsafe_allow_html=True)
 
 with st.expander("Extração Mercado Farma", expanded=False):
-    st.caption("Cada UF usa um CNPJ de referência. O nome do usuário usado fica oculto na tela.")
+    st.caption("Cada UF usa um CNPJ de referência da própria carteira. A extração usa somente o acesso GD do Mercado Farma.")
+    if credencial_gd.get("configurado"):
+        st.markdown(
+            f"<span class='pill-note'>Acesso GD configurado: {escape(str(credencial_gd.get('usuario_mascarado') or 'usuario oculto'))}</span>",
+            unsafe_allow_html=True,
+        )
+    else:
+        faltantes = ", ".join(str(item) for item in credencial_gd.get("faltantes", []))
+        st.warning(f"Configure o acesso GD do Mercado Farma nos Secrets do Streamlit/GitHub: {faltantes}.")
     if alvos:
         tabela_alvos = pd.DataFrame([{"UF": item["uf"], "CNPJ referência": item["cnpj"]} for item in alvos])
         st.dataframe(tabela_alvos, width="stretch", height=170, hide_index=True)
     else:
-        st.info("Cadastre pelo menos um login de vendedor para montar a extração por UF.")
-    if ufs_sem_login:
-        st.warning("UFs na carteira ainda sem vendedor com login salvo: " + ", ".join(ufs_sem_login))
+        st.info("Não encontrei CNPJ referência ativo na carteira para montar a extração por UF.")
+    if ufs_sem_cnpj:
+        st.warning("UFs na carteira sem CNPJ referência ativo: " + ", ".join(ufs_sem_cnpj))
 
     eans = mf.obter_eans_para_consulta(produtos_mercado)
     st.markdown(
@@ -353,7 +353,8 @@ with st.expander("Extração Mercado Farma", expanded=False):
         rodando = estado.get("status") == "rodando" and estado.get("thread_alive")
         pode_retomar = estado.get("status") in {"erro", "cancelado", "interrompido"}
         col1, col2, col3 = st.columns(3)
-        if col1.button("Iniciar extração local", width="stretch", disabled=rodando or not bool(ufs_para_rodar)):
+        local_desabilitado = rodando or not bool(ufs_para_rodar) or not bool(credenciais)
+        if col1.button("Iniciar extração local", width="stretch", disabled=local_desabilitado):
             try:
                 mf.iniciar_extracao_background(
                     credenciais,
@@ -369,7 +370,7 @@ with st.expander("Extração Mercado Farma", expanded=False):
             except Exception as exc:
                 st.error(f"Falha ao iniciar extração local: {exc}")
 
-        if col2.button("Retomar local", width="stretch", disabled=rodando or not pode_retomar):
+        if col2.button("Retomar local", width="stretch", disabled=rodando or not pode_retomar or not bool(credenciais)):
             try:
                 mf.iniciar_extracao_background(
                     credenciais,

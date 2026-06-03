@@ -143,10 +143,20 @@ def login_mercadofarma(driver: WebDriver, usuario: str, senha: str, log_fn: Opti
         timeout=30,
         desc="Entrar como representante",
     )
-    click_first(driver, [(By.ID, "social-saml")], timeout=30, desc="Active Directory")
+    _emit(log_fn, "Etapa login: Active Directory")
+    click_first(
+        driver,
+        [
+            (By.ID, "social-saml"),
+            (By.CSS_SELECTOR, "#social-saml"),
+            (By.XPATH, "//*[contains(@id, 'social-saml') or contains(., 'Active Directory') or contains(., 'Diretório Ativo')]"),
+        ],
+        timeout=30,
+        desc="Active Directory",
+    )
 
-    user = wait_visible(driver, [(By.ID, "userNameInput")], timeout=60, desc="usuario")
-    pwd = wait_visible(driver, [(By.ID, "passwordInput")], timeout=20, desc="senha")
+    user = wait_visible(driver, [(By.ID, "userNameInput"), (By.NAME, "UserName")], timeout=60, desc="usuario")
+    pwd = wait_visible(driver, [(By.ID, "passwordInput"), (By.NAME, "Password")], timeout=20, desc="senha")
     clear_and_type(user, usuario)
     clear_and_type(pwd, senha)
 
@@ -157,7 +167,7 @@ def login_mercadofarma(driver: WebDriver, usuario: str, senha: str, log_fn: Opti
 
 def selecionar_cnpj_catalogo(driver: WebDriver, cnpj: str, log_fn: Optional[Callable[[str], None]] = None) -> None:
     cnpj = clean_cnpj(cnpj)
-    _emit(log_fn, f"Selecionando CNPJ {cnpj}...")
+    _emit(log_fn, f"Etapa selecao CNPJ: {cnpj}")
 
     campo = wait_visible(
         driver,
@@ -177,6 +187,7 @@ def selecionar_cnpj_catalogo(driver: WebDriver, cnpj: str, log_fn: Optional[Call
     safe_click(driver, item)
     time.sleep(2)
 
+    _emit(log_fn, "Etapa catalogo: abrindo Catalogo A a Z")
     click_first(
         driver,
         [

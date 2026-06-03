@@ -11,7 +11,7 @@ on:
       ufs:
         description: "UFs separadas por virgula. Vazio executa todas."
         required: false
-        default: "MA,MT,PA,PI"
+        default: "MA,MT,PA,PI,TO"
       uf:
         description: "Compatibilidade: UF ou UFs separadas por virgula."
         required: false
@@ -39,7 +39,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
-      max-parallel: 2
+      max-parallel: 5
       matrix:
         uf: [MA, MT, PA, PI, TO]
     steps:
@@ -61,13 +61,15 @@ jobs:
           pip install -r requirements.txt
 
       - name: Extrair UF ${{ matrix.uf }}
-        if: ${{ (inputs.ufs == '' && inputs.uf == '') || contains(format(',{0},', inputs.ufs), format(',{0},', matrix.uf)) || contains(format(',{0},', inputs.uf), format(',{0},', matrix.uf)) }}
+        if: ${{ (inputs.ufs == '' && inputs.uf == '') || contains(format(',{0},', replace(inputs.ufs, ' ', '')), format(',{0},', matrix.uf)) || contains(format(',{0},', replace(inputs.uf, ' ', '')), format(',{0},', matrix.uf)) }}
         env:
           GITHUB_TOKEN: ${{ github.token }}
           GITHUB_REPO: ${{ github.repository }}
           GITHUB_BRANCH: ${{ github.ref_name }}
           GITHUB_STORAGE_BRANCH: app-storage
           PERSISTENCE_KEY: ${{ secrets.PERSISTENCE_KEY }}
+          MERCADOFARMA_USUARIO: ${{ secrets.MERCADOFARMA_USUARIO }}
+          MERCADOFARMA_SENHA: ${{ secrets.MERCADOFARMA_SENHA }}
           CHROME_BIN: ${{ steps.setup-chrome.outputs.chrome-path }}
         run: |
           echo "Iniciando extracao Mercado Farma para UF ${{ matrix.uf }}"

@@ -88,6 +88,87 @@ def _norm_nome(valor: object) -> str:
     return " ".join(_texto(valor).upper().split())
 
 
+def _secret(nome: str, padrao: str = "") -> str:
+    try:
+        import streamlit as st
+
+        if nome in st.secrets:
+            return str(st.secrets[nome])
+    except Exception:
+        pass
+    return str(os.environ.get(nome, padrao) or padrao)
+
+
+def mascarar_usuario(usuario: object) -> str:
+    texto = _texto(usuario)
+    if not texto:
+        return ""
+    if "@" in texto:
+        nome, dominio = texto.split("@", 1)
+        if len(nome) <= 2:
+            nome_mask = nome[:1] + "***"
+        else:
+            nome_mask = nome[:2] + "***" + nome[-1:]
+        return f"{nome_mask}@{dominio}"
+    if len(texto) <= 4:
+        return texto[:1] + "***"
+    return texto[:2] + "***" + texto[-2:]
+
+
+def carregar_credenciais_mercadofarma(login: dict | None = None, *, exigir: bool = False) -> dict[str, object]:
+    fontes = []
+    usuario = _secret("MERCADOFARMA_USUARIO")
+    senha = _secret("MERCADOFARMA_SENHA")
+    if usuario or senha:
+        fontes.append("secrets")
+
+    login = login if isinstance(login, dict) else {}
+    candidatos = [
+        ("configuracao_mercadofarma", login.get("mercadofarma", {})),
+        ("configuracao_mercado_farma", login.get("mercado_farma", {})),
+        ("configuracao_gd", login.get("gd", {})),
+    ]
+    for fonte, dados in candidatos:
+        if usuario and senha:
+            break
+        if not isinstance(dados, dict):
+            continue
+        usuario = usuario or _texto(dados.get("usuario"))
+        senha = senha or _texto(dados.get("senha"))
+        if usuario or senha:
+            fontes.append(fonte)
+
+    faltantes = []
+    if not usuario:
+        faltantes.append("MERCADOFARMA_USUARIO")
+    if not senha:
+        faltantes.append("MERCADOFARMA_SENHA")
+    configurado = not faltantes
+    if exigir and not configurado:
+        raise RuntimeError(
+            "Configure o acesso GD do Mercado Farma. Secrets ausentes: " + ", ".join(faltantes)
+        )
+    return {
+        "usuario": usuario,
+        "senha": senha,
+        "usuario_mascarado": mascarar_usuario(usuario),
+        "configurado": configurado,
+        "faltantes": faltantes,
+        "fonte": fontes[0] if fontes else "",
+    }
+
+
+def _credenciais_gd_da_lista(credenciais: list[dict[str, str]] | None) -> tuple[str, str]:
+    for item in credenciais or []:
+        consultor = _norm_nome(item.get("consultor"))
+        if consultor in {"GD", "GERENTE DISTRITAL", "MERCADO FARMA GD"}:
+            usuario = _texto(item.get("usuario"))
+            senha = _texto(item.get("senha"))
+            if usuario and senha:
+                return usuario, senha
+    return "", ""
+
+
 def _estado_padrao() -> dict:
     return {
         "job_id": "",
@@ -350,6 +431,51 @@ def ufs_por_consultor(clientes: pd.DataFrame) -> dict[str, list[dict[str, str]]]
     return retorno
 
 
+def _clientes_ativos_com_cnpj_por_uf(clientes: pd.DataFrame) -> pd.DataFrame:
+    if clientes is None or clientes.empty:
+        return pd.DataFrame(columns=["uf", "cnpj_limpo"])
+    base = clientes.copy()
+    for coluna in ["uf", "cnpj_limpo"]:
+        if coluna not in base.columns:
+            base[coluna] = ""
+    if "cliente_ativo" in base.columns:
+        base = base[base["cliente_ativo"].fillna(True)].copy()
+    base["uf"] = base["uf"].astype(str).str.strip().str.upper()
+    base["cnpj_limpo"] = base["cnpj_limpo"].apply(normalizar_cnpj)
+    base = base[base["uf"].isin(VALID_UFS) & base["cnpj_limpo"].str.len().eq(14)].copy()
+    if base.empty:
+        return pd.DataFrame(columns=["uf", "cnpj_limpo"])
+    ordenacao = [col for col in ["uf", "nome_rep", "nome_pdv", "cnpj_limpo"] if col in base.columns]
+    return base.sort_values(ordenacao or ["uf", "cnpj_limpo"]).reset_index(drop=True)
+
+
+def alvos_mercadofarma_por_uf(
+    clientes: pd.DataFrame,
+    usuario_gd: str,
+    senha_gd: str,
+) -> list[dict[str, str]]:
+    base = _clientes_ativos_com_cnpj_por_uf(clientes)
+    if base.empty:
+        return []
+
+    alvos: list[dict[str, str]] = []
+    for uf, grupo_uf in base.groupby("uf", dropna=False):
+        cnpjs = grupo_uf["cnpj_limpo"].dropna().astype(str)
+        cnpj = normalizar_cnpj(cnpjs.iloc[0]) if not cnpjs.empty else ""
+        if not cnpj:
+            continue
+        alvos.append(
+            {
+                "consultor": "GD",
+                "uf": str(uf),
+                "cnpj": cnpj,
+                "usuario": _texto(usuario_gd),
+                "senha": _texto(senha_gd),
+            }
+        )
+    return sorted(alvos, key=lambda item: item["uf"])
+
+
 def alvos_unicos_por_uf(
     clientes: pd.DataFrame,
     credenciais: list[dict[str, str]] | None = None,
@@ -484,9 +610,15 @@ def extrair_mercado_farma(
     if not eans:
         raise RuntimeError("Não encontrei EANs na planilha produtos.xlsx para consultar o Mercado Farma.")
 
-    alvos_unicos = alvos_unicos_por_uf(clientes, credenciais, exigir_login=True)
+    usuario_gd, senha_gd = _credenciais_gd_da_lista(credenciais)
+    if not usuario_gd or not senha_gd:
+        gd = carregar_credenciais_mercadofarma(exigir=True)
+        usuario_gd = str(gd.get("usuario", ""))
+        senha_gd = str(gd.get("senha", ""))
+
+    alvos_unicos = alvos_mercadofarma_por_uf(clientes, usuario_gd, senha_gd)
     if not alvos_unicos:
-        raise RuntimeError("Não encontrei CNPJs com UF na base de clientes.")
+        raise RuntimeError("Não encontrei CNPJ referência ativo na base de clientes.")
 
     resultados: list[dict] = []
     for alvo in alvos_unicos:
@@ -553,12 +685,18 @@ def _extrair_alvo(
     etapa = "abrir_navegador"
     try:
         if callable(log_fn):
-            log_fn(f"{consultor} / {uf}: abrindo Mercado Farma")
+            log_fn(f"UF {uf}: CNPJ referencia {cnpj} | usuario {mascarar_usuario(usuario)}")
+            log_fn(f"UF {uf}: etapa login - abrindo Mercado Farma")
         driver = criar_driver(headless=headless)
         etapa = "login"
         login_mercadofarma(driver, usuario, senha, log_fn=log_fn)
-        etapa = "catalogo"
+        etapa = "selecao_cnpj"
+        if callable(log_fn):
+            log_fn(f"UF {uf}: etapa selecao CNPJ - {cnpj}")
         selecionar_cnpj_catalogo(driver, cnpj, log_fn=log_fn)
+        etapa = "catalogo"
+        if callable(log_fn):
+            log_fn(f"UF {uf}: etapa catalogo - Catalogo A a Z carregado")
         etapa = "extracao"
         for idx in range(start_index, len(eans)):
             ean = eans[idx]
@@ -573,7 +711,7 @@ def _extrair_alvo(
                 estado["current_ean"] = ean
                 estado["processados"] = int(estado.get("target_index", 0)) * len(eans) + idx
             if callable(log_fn):
-                log_fn(f"{consultor} / {uf}: consultando {idx + 1}/{len(eans)} - {ean}")
+                log_fn(f"UF {uf}: etapa extracao - consultando {idx + 1}/{len(eans)} - {ean}")
             try:
                 linhas = processar_ean_catalogo(driver, ean)
                 saida.extend(converter_linhas_extrator(linhas, consultor, uf, cnpj))
@@ -591,6 +729,7 @@ def _extrair_alvo(
     except Exception as exc:
         nome_debug = {
             "login": "erro_login",
+            "selecao_cnpj": "erro_selecao_cnpj",
             "catalogo": "erro_catalogo",
             "extracao": "erro_extracao",
             "abrir_navegador": "erro_navegador",
@@ -619,14 +758,19 @@ def iniciar_extracao_background(
     eans = obter_eans_para_consulta(produtos_mercado_farma)
     if limite_eans:
         eans = eans[: int(limite_eans)]
-    alvos = alvos_unicos_por_uf(clientes, credenciais, exigir_login=True)
+    usuario_gd, senha_gd = _credenciais_gd_da_lista(credenciais)
+    if not usuario_gd or not senha_gd:
+        gd = carregar_credenciais_mercadofarma(exigir=True)
+        usuario_gd = str(gd.get("usuario", ""))
+        senha_gd = str(gd.get("senha", ""))
+    alvos = alvos_mercadofarma_por_uf(clientes, usuario_gd, senha_gd)
     if ufs:
         ufs_set = {str(uf).strip().upper() for uf in ufs if str(uf).strip()}
         alvos = [alvo for alvo in alvos if str(alvo.get("uf", "")).upper() in ufs_set]
     if not eans:
         raise RuntimeError("A planilha produtos.xlsx não tem EANs válidos.")
     if not alvos:
-        raise RuntimeError("Não encontrei UF válida com vendedor que tenha login salvo.")
+        raise RuntimeError("Não encontrei UF válida com CNPJ referência ativo.")
 
     job_id = uuid4().hex
     start_target = int(atual.get("target_index", 0) or 0) if retomar else 0
@@ -702,7 +846,7 @@ def _worker_extracao(
                     "current_cnpj": alvo.get("cnpj", ""),
                 }
             )
-            _log_estado(estado, f"{alvo.get('consultor')} / {alvo.get('uf')}: iniciando UF.")
+            _log_estado(estado, f"UF {alvo.get('uf')}: iniciando com CNPJ {alvo.get('cnpj')}.")
             _salvar_estado_extracao(estado)
             _extrair_alvo(
                 alvo,
