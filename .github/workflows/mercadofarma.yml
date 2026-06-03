@@ -45,6 +45,9 @@ permissions:
   contents: write
   actions: read
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 jobs:
   extrair_uf:
     if: ${{ inputs.acao == 'atualizar_mercadofarma_paralelo' }}
