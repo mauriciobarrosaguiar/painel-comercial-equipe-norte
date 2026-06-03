@@ -1,12 +1,14 @@
 {
   "uf": "TO",
   "status": "erro",
-  "consultor_usado": "",
+  "consultor_usado": "GD",
   "cnpj_referencia": "",
+  "usuario_mascarado": "",
+  "total_eans": 0,
   "total_produtos": 0,
-  "erro": "PERSISTENCE_KEY nao esta configurado nos Secrets do GitHub Actions. Sem essa chave o robo nao consegue ler os logins salvos no painel.",
-  "etapa": "inicio",
-  "traceback": "Traceback (most recent call last):\n  File \"/home/runner/work/painel-comercial-equipe-norte/painel-comercial-equipe-norte/automacoes/mercadofarma.py\", line 108, in main\n    raise RuntimeError(\nRuntimeError: PERSISTENCE_KEY nao esta configurado nos Secrets do GitHub Actions. Sem essa chave o robo nao consegue ler os logins salvos no painel.\n",
-  "iniciado_em": "2026-05-26T14:00:02.758499-03:00",
-  "finalizado_em": "2026-05-26T14:00:02.758879-03:00"
+  "erro": "Configure o acesso GD do Mercado Farma. Secrets ausentes: MERCADOFARMA_USUARIO, MERCADOFARMA_SENHA",
+  "etapa": "carregar_acesso_gd",
+  "traceback": "Traceback (most recent call last):\n  File \"/home/runner/work/painel-comercial-equipe-norte/painel-comercial-equipe-norte/automacoes/mercadofarma.py\", line 126, in main\n    credencial_gd = carregar_credenciais_mercadofarma(login, exigir=True)\n                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/runner/work/painel-comercial-equipe-norte/painel-comercial-equipe-norte/src/mercado_farma.py\", line 148, in carregar_credenciais_mercadofarma\n    raise RuntimeError(\nRuntimeError: Configure o acesso GD do Mercado Farma. Secrets ausentes: MERCADOFARMA_USUARIO, MERCADOFARMA_SENHA\n",
+  "iniciado_em": "2026-06-03T12:00:17.801509-03:00",
+  "finalizado_em": "2026-06-03T12:00:17.809444-03:00"
 }

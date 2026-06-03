@@ -1,5 +1,76 @@
 {
-  "gerado_em": "2026-05-26T14:00:21.722264-03:00",
+  "gerado_em": "2026-06-03T12:00:48.146192-03:00",
   "ufs_atualizadas": [],
-  "status": []
+  "status": [
+    {
+      "uf": "MA",
+      "status": "erro",
+      "consultor_usado": "GD",
+      "cnpj_referencia": "",
+      "usuario_mascarado": "",
+      "total_eans": 0,
+      "total_produtos": 0,
+      "erro": "Configure o acesso GD do Mercado Farma. Secrets ausentes: MERCADOFARMA_USUARIO, MERCADOFARMA_SENHA",
+      "etapa": "carregar_acesso_gd",
+      "traceback": "Traceback (most recent call last):\n  File \"/home/runner/work/painel-comercial-equipe-norte/painel-comercial-equipe-norte/automacoes/mercadofarma.py\", line 126, in main\n    credencial_gd = carregar_credenciais_mercadofarma(login, exigir=True)\n                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/runner/work/painel-comercial-equipe-norte/painel-comercial-equipe-norte/src/mercado_farma.py\", line 148, in carregar_credenciais_mercadofarma\n    raise RuntimeError(\nRuntimeError: Configure o acesso GD do Mercado Farma. Secrets ausentes: MERCADOFARMA_USUARIO, MERCADOFARMA_SENHA\n",
+      "iniciado_em": "2026-06-03T12:00:16.661025-03:00",
+      "finalizado_em": "2026-06-03T12:00:16.670098-03:00"
+    },
+    {
+      "uf": "MT",
+      "status": "erro",
+      "consultor_usado": "GD",
+      "cnpj_referencia": "",
+      "usuario_mascarado": "",
+      "total_eans": 0,
+      "total_produtos": 0,
+      "erro": "Configure o acesso GD do Mercado Farma. Secrets ausentes: MERCADOFARMA_USUARIO, MERCADOFARMA_SENHA",
+      "etapa": "carregar_acesso_gd",
+      "traceback": "Traceback (most recent call last):\n  File \"/home/runner/work/painel-comercial-equipe-norte/painel-comercial-equipe-norte/automacoes/mercadofarma.py\", line 126, in main\n    credencial_gd = carregar_credenciais_mercadofarma(login, exigir=True)\n                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/runner/work/painel-comercial-equipe-norte/painel-comercial-equipe-norte/src/mercado_farma.py\", line 148, in carregar_credenciais_mercadofarma\n    raise RuntimeError(\nRuntimeError: Configure o acesso GD do Mercado Farma. Secrets ausentes: MERCADOFARMA_USUARIO, MERCADOFARMA_SENHA\n",
+      "iniciado_em": "2026-06-03T12:00:16.185035-03:00",
+      "finalizado_em": "2026-06-03T12:00:16.194183-03:00"
+    },
+    {
+      "uf": "PA",
+      "status": "erro",
+      "consultor_usado": "GD",
+      "cnpj_referencia": "",
+      "usuario_mascarado": "",
+      "total_eans": 0,
+      "total_produtos": 0,
+      "erro": "Configure o acesso GD do Mercado Farma. Secrets ausentes: MERCADOFARMA_USUARIO, MERCADOFARMA_SENHA",
+      "etapa": "carregar_acesso_gd",
+      "traceback": "Traceback (most recent call last):\n  File \"/home/runner/work/painel-comercial-equipe-norte/painel-comercial-equipe-norte/automacoes/mercadofarma.py\", line 126, in main\n    credencial_gd = carregar_credenciais_mercadofarma(login, exigir=True)\n                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/runner/work/painel-comercial-equipe-norte/painel-comercial-equipe-norte/src/mercado_farma.py\", line 148, in carregar_credenciais_mercadofarma\n    raise RuntimeError(\nRuntimeError: Configure o acesso GD do Mercado Farma. Secrets ausentes: MERCADOFARMA_USUARIO, MERCADOFARMA_SENHA\n",
+      "iniciado_em": "2026-06-03T12:00:19.844493-03:00",
+      "finalizado_em": "2026-06-03T12:00:19.854121-03:00"
+    },
+    {
+      "uf": "PI",
+      "status": "erro",
+      "consultor_usado": "GD",
+      "cnpj_referencia": "",
+      "usuario_mascarado": "",
+      "total_eans": 0,
+      "total_produtos": 0,
+      "erro": "Configure o acesso GD do Mercado Farma. Secrets ausentes: MERCADOFARMA_USUARIO, MERCADOFARMA_SENHA",
+      "etapa": "carregar_acesso_gd",
+      "traceback": "Traceback (most recent call last):\n  File \"/home/runner/work/painel-comercial-equipe-norte/painel-comercial-equipe-norte/automacoes/mercadofarma.py\", line 126, in main\n    credencial_gd = carregar_credenciais_mercadofarma(login, exigir=True)\n                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/runner/work/painel-comercial-equipe-norte/painel-comercial-equipe-norte/src/mercado_farma.py\", line 148, in carregar_credenciais_mercadofarma\n    raise RuntimeError(\nRuntimeError: Configure o acesso GD do Mercado Farma. Secrets ausentes: MERCADOFARMA_USUARIO, MERCADOFARMA_SENHA\n",
+      "iniciado_em": "2026-06-03T12:00:21.631501-03:00",
+      "finalizado_em": "2026-06-03T12:00:21.640752-03:00"
+    },
+    {
+      "uf": "TO",
+      "status": "erro",
+      "consultor_usado": "GD",
+      "cnpj_referencia": "",
+      "usuario_mascarado": "",
+      "total_eans": 0,
+      "total_produtos": 0,
+      "erro": "Configure o acesso GD do Mercado Farma. Secrets ausentes: MERCADOFARMA_USUARIO, MERCADOFARMA_SENHA",
+      "etapa": "carregar_acesso_gd",
+      "traceback": "Traceback (most recent call last):\n  File \"/home/runner/work/painel-comercial-equipe-norte/painel-comercial-equipe-norte/automacoes/mercadofarma.py\", line 126, in main\n    credencial_gd = carregar_credenciais_mercadofarma(login, exigir=True)\n                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/runner/work/painel-comercial-equipe-norte/painel-comercial-equipe-norte/src/mercado_farma.py\", line 148, in carregar_credenciais_mercadofarma\n    raise RuntimeError(\nRuntimeError: Configure o acesso GD do Mercado Farma. Secrets ausentes: MERCADOFARMA_USUARIO, MERCADOFARMA_SENHA\n",
+      "iniciado_em": "2026-06-03T12:00:17.801509-03:00",
+      "finalizado_em": "2026-06-03T12:00:17.809444-03:00"
+    }
+  ]
 }
