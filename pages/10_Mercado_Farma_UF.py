@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from html import escape
+import os
 
 import pandas as pd
 import streamlit as st
@@ -11,7 +12,7 @@ from src.configuracoes import carregar_login_bussola
 from src.layout import botao_download_excel, card_metrica, dataframe_com_download, titulo_pagina
 from src.loader import carregar_dados_tratados, registrar_upload
 from src.status_bases import formatar_ultima_atualizacao
-from src.tratamento import formatar_moeda, normalizar_ean
+from src.tratamento import formatar_moeda, normalizar_cnpj, normalizar_ean
 
 
 def desconto_texto(valor: object) -> str:
@@ -34,6 +35,78 @@ def _html(valor: object, padrao: str = "-") -> str:
 def tabela_mercado_sem_consultor(df: pd.DataFrame) -> pd.DataFrame:
     tabela = mf.formatar_tabela_mercado(df)
     return tabela.drop(columns=["Consultor"], errors="ignore")
+
+
+def secret_app(nome: str, padrao: str = "") -> str:
+    try:
+        if nome in st.secrets:
+            return str(st.secrets[nome])
+    except Exception:
+        pass
+    return str(os.environ.get(nome, padrao) or padrao)
+
+
+def mascarar_usuario_app(usuario: object) -> str:
+    if hasattr(mf, "mascarar_usuario"):
+        return str(mf.mascarar_usuario(usuario))
+    texto = _texto(usuario, "")
+    if not texto:
+        return ""
+    if "@" in texto:
+        nome, dominio = texto.split("@", 1)
+        return f"{nome[:2]}***{nome[-1:]}@{dominio}" if len(nome) > 2 else f"{nome[:1]}***@{dominio}"
+    return f"{texto[:2]}***{texto[-2:]}" if len(texto) > 4 else f"{texto[:1]}***"
+
+
+def carregar_credenciais_mercadofarma_app(login: dict | None) -> dict[str, object]:
+    if hasattr(mf, "carregar_credenciais_mercadofarma"):
+        return mf.carregar_credenciais_mercadofarma(login)
+
+    login = login if isinstance(login, dict) else {}
+    usuario = secret_app("MERCADOFARMA_USUARIO")
+    senha = secret_app("MERCADOFARMA_SENHA")
+    for dados in [login.get("mercadofarma", {}), login.get("mercado_farma", {}), login.get("gd", {})]:
+        if usuario and senha:
+            break
+        if isinstance(dados, dict):
+            usuario = usuario or _texto(dados.get("usuario"), "")
+            senha = senha or _texto(dados.get("senha"), "")
+
+    faltantes = []
+    if not usuario:
+        faltantes.append("MERCADOFARMA_USUARIO")
+    if not senha:
+        faltantes.append("MERCADOFARMA_SENHA")
+    return {
+        "usuario": usuario,
+        "senha": senha,
+        "usuario_mascarado": mascarar_usuario_app(usuario),
+        "configurado": not faltantes,
+        "faltantes": faltantes,
+    }
+
+
+def alvos_mercadofarma_por_uf_app(clientes: pd.DataFrame, usuario_gd: str, senha_gd: str) -> list[dict[str, str]]:
+    if hasattr(mf, "alvos_mercadofarma_por_uf"):
+        return mf.alvos_mercadofarma_por_uf(clientes, usuario_gd, senha_gd)
+
+    if clientes is None or clientes.empty:
+        return []
+    base = clientes.copy()
+    for coluna in ["uf", "cnpj_limpo"]:
+        if coluna not in base.columns:
+            base[coluna] = ""
+    if "cliente_ativo" in base.columns:
+        base = base[base["cliente_ativo"].fillna(True)].copy()
+    base["uf"] = base["uf"].astype(str).str.strip().str.upper()
+    base["cnpj_limpo"] = base["cnpj_limpo"].apply(normalizar_cnpj)
+    valid_ufs = getattr(mf, "VALID_UFS", {"MA", "MT", "PA", "PI", "TO"})
+    base = base[base["uf"].isin(valid_ufs) & base["cnpj_limpo"].str.len().eq(14)].copy()
+    alvos = []
+    for uf, grupo_uf in base.sort_values(["uf", "cnpj_limpo"]).groupby("uf", dropna=False):
+        cnpj = str(grupo_uf["cnpj_limpo"].iloc[0])
+        alvos.append({"consultor": "GD", "uf": str(uf), "cnpj": cnpj, "usuario": usuario_gd, "senha": senha_gd})
+    return sorted(alvos, key=lambda item: item["uf"])
 
 
 def produto_card_distribuidora(grupo: pd.DataFrame, key: str) -> None:
@@ -277,11 +350,11 @@ mercado_original = mf.mercado_farma_atual()
 descontos_config = mf.carregar_descontos_adicionais()
 mercado = mf.aplicar_descontos_adicionais(mercado_original, descontos_config)
 login = carregar_login_bussola()
-credencial_gd = mf.carregar_credenciais_mercadofarma(login)
+credencial_gd = carregar_credenciais_mercadofarma_app(login)
 usuario_gd = str(credencial_gd.get("usuario", ""))
 senha_gd = str(credencial_gd.get("senha", ""))
 credenciais = [{"consultor": "GD", "usuario": usuario_gd, "senha": senha_gd}] if credencial_gd.get("configurado") else []
-alvos = mf.alvos_mercadofarma_por_uf(clientes, usuario_gd, senha_gd)
+alvos = alvos_mercadofarma_por_uf_app(clientes, usuario_gd, senha_gd)
 ufs_carteira = set(mf.ufs_validas_clientes(clientes))
 ufs_alvos = sorted({alvo["uf"] for alvo in alvos} or ufs_carteira)
 ufs_sem_cnpj = sorted(ufs_carteira - {alvo["uf"] for alvo in alvos})
