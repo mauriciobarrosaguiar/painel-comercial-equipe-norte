@@ -12,6 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 BASE_DIR = ROOT / "data" / "mercadofarma"
 PARCIAIS_DIR = BASE_DIR / "parciais"
 FINAL_PATH = BASE_DIR / "mercadofarma_consolidado.csv"
+FINAL_XLSX_PATH = BASE_DIR / "mercadofarma_consolidado.xlsx"
 STATUS_PATH = BASE_DIR / "status_mercadofarma.json"
 TZ_BRASILIA = ZoneInfo("America/Sao_Paulo")
 COLUNAS_MINIMAS = {"UF", "EAN", "CNPJ_REFERENCIA"}
@@ -105,6 +106,66 @@ def csv_valido(df: pd.DataFrame) -> tuple[bool, str]:
     return True, ""
 
 
+def nome_aba_uf(valor: object) -> str:
+    texto = "" if valor is None else str(valor).strip().upper()
+    texto = "".join(char for char in texto if char not in r"[]:*?/\\")
+    return (texto or "SEM_UF")[:31]
+
+
+def formatar_aba_excel(ws) -> None:
+    from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+    from openpyxl.utils import get_column_letter
+
+    header_fill = PatternFill("solid", fgColor="0B5D3B")
+    header_font = Font(color="FFFFFF", bold=True)
+    thin = Side(style="thin", color="D9E2DD")
+    border = Border(left=thin, right=thin, top=thin, bottom=thin)
+    for cell in ws[1]:
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal="center", vertical="center")
+        cell.border = border
+
+    ws.freeze_panes = "A2"
+    ws.auto_filter.ref = ws.dimensions
+    larguras: dict[str, int] = {}
+    for row in ws.iter_rows():
+        for cell in row:
+            valor = "" if cell.value is None else str(cell.value)
+            larguras[cell.column_letter] = min(max(larguras.get(cell.column_letter, 0), len(valor) + 2), 45)
+            cell.border = border
+            if cell.row > 1:
+                cell.alignment = Alignment(vertical="top", wrap_text=True)
+
+    for idx in range(1, ws.max_column + 1):
+        letra = get_column_letter(idx)
+        ws.column_dimensions[letra].width = max(larguras.get(letra, 12), 10)
+
+
+def salvar_excel_por_uf(df: pd.DataFrame) -> None:
+    base = normalizar_uf(df)
+    if base.empty:
+        return
+    ordenacao = [col for col in ["UF", "PRODUTO", "EAN", "DISTRIBUIDORA"] if col in base.columns]
+    if ordenacao:
+        base = base.sort_values(ordenacao, kind="stable").reset_index(drop=True)
+    with pd.ExcelWriter(FINAL_XLSX_PATH, engine="openpyxl") as writer:
+        ufs = sorted(uf for uf in base["UF"].dropna().astype(str).str.strip().str.upper().unique().tolist() if uf)
+        if not ufs:
+            base.to_excel(writer, sheet_name="SEM_UF", index=False)
+            formatar_aba_excel(writer.book["SEM_UF"])
+            return
+        abas_usadas: set[str] = set()
+        for uf in ufs:
+            aba = nome_aba_uf(uf)
+            while aba in abas_usadas:
+                aba = f"{aba[:28]}_{len(abas_usadas) + 1}"
+            abas_usadas.add(aba)
+            df_uf = base[base["UF"].astype(str).str.upper().eq(uf)].copy()
+            df_uf.to_excel(writer, sheet_name=aba, index=False)
+            formatar_aba_excel(writer.book[aba])
+
+
 def main() -> int:
     log("Iniciando consolidacao dos arquivos Mercado Farma")
     BASE_DIR.mkdir(parents=True, exist_ok=True)
@@ -166,16 +227,19 @@ def main() -> int:
     if subset:
         consolidado = consolidado.drop_duplicates(subset=subset, keep="last")
     consolidado.to_csv(FINAL_PATH, index=False, encoding="utf-8-sig")
+    salvar_excel_por_uf(consolidado)
 
     resumo = {
         "gerado_em": agora_brasilia_iso(),
-        "arquivo": str(FINAL_PATH.relative_to(ROOT)),
+        "arquivo": FINAL_PATH.relative_to(ROOT).as_posix(),
+        "arquivo_excel": FINAL_XLSX_PATH.relative_to(ROOT).as_posix(),
         "ufs_atualizadas": sorted(ufs_atualizadas),
         "total_linhas": int(len(consolidado)),
         "status": list(status_por_uf.values()),
     }
     STATUS_PATH.write_text(json.dumps(resumo, ensure_ascii=False, indent=2), encoding="utf-8")
     log(f"Arquivo consolidado gerado com sucesso: {FINAL_PATH}")
+    log(f"Arquivo Excel por UF gerado com sucesso: {FINAL_XLSX_PATH}")
     log(f"Total de linhas consolidadas: {len(consolidado)}")
     return 0
 

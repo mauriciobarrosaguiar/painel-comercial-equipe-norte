@@ -11,7 +11,7 @@ import streamlit as st
 from src import github_actions as gha
 from src import mercado_farma as mf
 from src.configuracoes import carregar_login_bussola
-from src.layout import botao_download_excel, card_metrica, dataframe_com_download, titulo_pagina
+from src.layout import card_metrica, dataframe_com_download, titulo_pagina
 from src.loader import carregar_dados_tratados, registrar_upload
 from src.status_bases import formatar_ultima_atualizacao
 from src.tratamento import formatar_moeda, normalizar_cnpj, normalizar_ean
@@ -37,6 +37,47 @@ def _html(valor: object, padrao: str = "-") -> str:
 def tabela_mercado_sem_consultor(df: pd.DataFrame) -> pd.DataFrame:
     tabela = mf.formatar_tabela_mercado(df)
     return tabela.drop(columns=["Consultor"], errors="ignore")
+
+
+MIME_XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+
+def botao_download_mercado_excel(df: pd.DataFrame, nome_arquivo: str, rotulo: str, key: str) -> None:
+    base = mf.preparar_mercado_farma(df)
+    st.download_button(
+        rotulo,
+        data=mf.excel_mercado_farma_por_uf(base),
+        file_name=nome_arquivo,
+        mime=MIME_XLSX,
+        width="stretch",
+        disabled=base.empty,
+        key=key,
+    )
+
+
+def renderizar_downloads_mercado(base: pd.DataFrame) -> None:
+    dados = mf.preparar_mercado_farma(base)
+    with st.expander("Downloads Mercado Farma", expanded=False):
+        st.caption("Baixe todas as UFs em abas separadas ou gere uma planilha individual por UF.")
+        botao_download_mercado_excel(
+            dados,
+            "mercado_farma_todas_ufs.xlsx",
+            "Baixar todas as UFs em abas separadas",
+            "mf_download_todas_ufs",
+        )
+        if dados.empty:
+            return
+
+        ufs_download = sorted(dados["uf"].dropna().astype(str).str.strip().str.upper().replace("", pd.NA).dropna().unique().tolist())
+        if not ufs_download:
+            return
+
+        st.markdown("<span class='pill-note'>Planilha por UF</span>", unsafe_allow_html=True)
+        colunas = st.columns(min(3, len(ufs_download)))
+        for idx, uf in enumerate(ufs_download):
+            df_uf = dados[dados["uf"].astype(str).str.upper().eq(uf)].copy()
+            with colunas[idx % len(colunas)]:
+                botao_download_mercado_excel(df_uf, f"mercado_farma_{uf}.xlsx", f"Baixar {uf}", f"mf_download_uf_{uf}")
 
 
 def secret_app(nome: str, padrao: str = "") -> str:
@@ -552,6 +593,8 @@ with m4:
     estoque_total = int(pd.to_numeric(mf_metricas["estoque"], errors="coerce").fillna(0).sum())
     card_metrica("Estoque total", f"{estoque_total:,}".replace(",", "."))
 
+renderizar_downloads_mercado(mercado)
+
 total_melhores = len(mf.melhor_preco_por_ean(mercado_valido))
 with st.expander(f"Melhores preços — {total_melhores} produtos encontrados", expanded=False):
     f1, f2, f3, f4 = st.columns([1.6, 0.8, 1.2, 0.7])
@@ -598,9 +641,9 @@ with st.expander(f"Melhores preços — {total_melhores} produtos encontrados", 
     if deve_mostrar:
         c1, c2 = st.columns(2)
         with c1:
-            botao_download_excel(tabela_mercado_sem_consultor(filtrado), "mercado_farma_por_uf.xlsx", "Extrair lista completa em Excel")
+            botao_download_mercado_excel(filtrado, "mercado_farma_por_uf.xlsx", "Extrair lista completa em Excel", "mf_download_lista_filtrada")
         with c2:
-            botao_download_excel(tabela_mercado_sem_consultor(melhores), "mercado_farma_melhores_precos.xlsx", "Extrair melhores preços em Excel")
+            botao_download_mercado_excel(melhores, "mercado_farma_melhores_precos.xlsx", "Extrair melhores preços em Excel", "mf_download_melhores")
 
         with st.expander("Tabela completa", expanded=False):
             dataframe_com_download(tabela_mercado_sem_consultor(filtrado), "mercado_farma_completo", altura=420)

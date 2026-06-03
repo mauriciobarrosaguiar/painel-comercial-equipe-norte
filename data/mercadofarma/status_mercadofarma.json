@@ -1,6 +1,7 @@
 {
-  "gerado_em": "2026-06-03T13:57:49.601740-03:00",
+  "gerado_em": "2026-06-03T14:16:15.427836-03:00",
   "arquivo": "data/mercadofarma/mercadofarma_consolidado.csv",
+  "arquivo_excel": "data/mercadofarma/mercadofarma_consolidado.xlsx",
   "ufs_atualizadas": [
     "MA",
     "MT",

@@ -398,6 +398,74 @@ def dataframe_excel_bytes(df: pd.DataFrame) -> bytes:
     return buffer.getvalue()
 
 
+def _nome_aba_uf(valor: object) -> str:
+    texto = _texto(valor).upper()
+    texto = "".join(char for char in texto if char not in r"[]:*?/\\").strip()
+    return (texto or "SEM_UF")[:31]
+
+
+def _formatar_aba_excel_mercado(ws) -> None:
+    from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+    from openpyxl.utils import get_column_letter
+
+    header_fill = PatternFill("solid", fgColor="0B5D3B")
+    header_font = Font(color="FFFFFF", bold=True)
+    thin = Side(style="thin", color="D9E2DD")
+    border = Border(left=thin, right=thin, top=thin, bottom=thin)
+    for cell in ws[1]:
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal="center", vertical="center")
+        cell.border = border
+
+    ws.freeze_panes = "A2"
+    ws.auto_filter.ref = ws.dimensions
+
+    larguras: dict[str, int] = {}
+    for row in ws.iter_rows():
+        for cell in row:
+            valor = "" if cell.value is None else str(cell.value)
+            larguras[cell.column_letter] = min(max(larguras.get(cell.column_letter, 0), len(valor) + 2), 45)
+            cell.border = border
+            if cell.row > 1:
+                cell.alignment = Alignment(vertical="top", wrap_text=True)
+
+    for idx in range(1, ws.max_column + 1):
+        letra = get_column_letter(idx)
+        ws.column_dimensions[letra].width = max(larguras.get(letra, 12), 10)
+
+
+def excel_mercado_farma_por_uf(df: pd.DataFrame, *, incluir_consultor: bool = False) -> bytes:
+    base = formatar_tabela_mercado(df)
+    if not incluir_consultor:
+        base = base.drop(columns=["Consultor"], errors="ignore")
+
+    ordenacao = [col for col in ["UF", "Produto", "EAN", "Distribuidora"] if col in base.columns]
+    if ordenacao and not base.empty:
+        base = base.sort_values(ordenacao, kind="stable").reset_index(drop=True)
+
+    buffer = BytesIO()
+    with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+        if base.empty or "UF" not in base.columns:
+            base.to_excel(writer, sheet_name="Mercado Farma", index=False)
+            _formatar_aba_excel_mercado(writer.book["Mercado Farma"])
+        else:
+            abas_usadas: set[str] = set()
+            ufs = sorted(uf for uf in base["UF"].dropna().astype(str).str.strip().str.upper().unique().tolist() if uf)
+            for uf in ufs:
+                aba = _nome_aba_uf(uf)
+                while aba in abas_usadas:
+                    aba = f"{aba[:28]}_{len(abas_usadas) + 1}"
+                abas_usadas.add(aba)
+                df_uf = base[base["UF"].astype(str).str.upper().eq(uf)].copy()
+                df_uf.to_excel(writer, sheet_name=aba, index=False)
+                _formatar_aba_excel_mercado(writer.book[aba])
+            if not ufs:
+                base.to_excel(writer, sheet_name="SEM_UF", index=False)
+                _formatar_aba_excel_mercado(writer.book["SEM_UF"])
+    return buffer.getvalue()
+
+
 def obter_eans_para_consulta(produtos_mercado_farma: pd.DataFrame) -> list[str]:
     if produtos_mercado_farma is None or produtos_mercado_farma.empty:
         return []
