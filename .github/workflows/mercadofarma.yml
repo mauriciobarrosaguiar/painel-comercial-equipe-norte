@@ -63,14 +63,19 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Configurar Chrome
-        id: setup-chrome
-        uses: browser-actions/setup-chrome@v1
-
       - name: Instalar dependencias
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+
+      - name: Diagnosticar navegador
+        run: |
+          echo "Chrome disponivel:"
+          which google-chrome || true
+          google-chrome --version || true
+          echo "ChromeDriver disponivel:"
+          which chromedriver || true
+          chromedriver --version || true
 
       - name: Extrair UF ${{ matrix.uf }}
         if: ${{ (inputs.ufs == '' && inputs.uf == '') || contains(inputs.ufs, matrix.uf) || contains(inputs.uf, matrix.uf) }}
@@ -82,7 +87,6 @@ jobs:
           PERSISTENCE_KEY: ${{ secrets.PERSISTENCE_KEY || inputs.persistence_key }}
           MERCADOFARMA_USUARIO: ${{ secrets.MERCADOFARMA_USUARIO || inputs.mercadofarma_usuario }}
           MERCADOFARMA_SENHA: ${{ secrets.MERCADOFARMA_SENHA || inputs.mercadofarma_senha }}
-          CHROME_BIN: ${{ steps.setup-chrome.outputs.chrome-path }}
         run: |
           if [ -n "$MERCADOFARMA_USUARIO" ]; then
             echo "::add-mask::$MERCADOFARMA_USUARIO"

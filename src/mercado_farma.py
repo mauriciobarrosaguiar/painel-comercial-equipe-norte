@@ -538,26 +538,34 @@ def criar_driver(headless: bool = True):
 
     chrome_bin = (
         os.environ.get("CHROME_BIN")
+        or shutil.which("google-chrome")
+        or shutil.which("google-chrome-stable")
+        or shutil.which("chrome")
         or shutil.which("chromium")
         or shutil.which("chromium-browser")
-        or shutil.which("google-chrome")
-        or shutil.which("chrome")
     )
     if chrome_bin:
         options.binary_location = chrome_bin
 
     erros: list[str] = []
-    driver_path = os.environ.get("CHROMEDRIVER_PATH") or shutil.which("chromedriver")
+    driver_path = os.environ.get("CHROMEDRIVER_PATH")
     if driver_path:
         try:
             return webdriver.Chrome(service=Service(driver_path), options=options)
         except Exception as exc:
-            erros.append(f"chromedriver do sistema ({driver_path}): {exc}")
+            erros.append(f"CHROMEDRIVER_PATH ({driver_path}): {exc}")
 
     try:
         return webdriver.Chrome(options=options)
     except Exception as exc:
         erros.append(f"Selenium Manager: {exc}")
+
+    driver_path = shutil.which("chromedriver")
+    if driver_path:
+        try:
+            return webdriver.Chrome(service=Service(driver_path), options=options)
+        except Exception as exc:
+            erros.append(f"chromedriver do sistema ({driver_path}): {exc}")
 
     try:
         from webdriver_manager.chrome import ChromeDriverManager
