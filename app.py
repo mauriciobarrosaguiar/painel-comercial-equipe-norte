@@ -8,7 +8,7 @@ import sys
 import streamlit as st
 
 
-APP_RUNTIME_VERSION = "2026-06-01-1145"
+APP_RUNTIME_VERSION = "2026-06-04-templates-bases"
 ROOT = Path(__file__).resolve().parent
 
 PAGINAS = [
@@ -23,6 +23,7 @@ PAGINAS = [
     ("Mercado Farma / UF", "pages/10_Mercado_Farma_UF.py"),
     ("Desafio de Gigantes", "pages/09_Desafio_Gigantes.py"),
     ("Histórico", "pages/13_Historico.py"),
+    ("Templates de Bases", "pages/14_Templates_Bases.py"),
     ("Importação", "pages/08_Importar_Bases.py"),
 ]
 
