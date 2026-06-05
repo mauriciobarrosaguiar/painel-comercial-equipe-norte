@@ -1,15 +1,14 @@
 {
   "uf": "MA",
-  "status": "sucesso",
+  "status": "erro",
   "consultor_usado": "GD",
-  "cnpj_referencia": "14569758000150",
+  "cnpj_referencia": "25682880000154",
   "usuario_mascarado": "a0***8@ems.com.br",
   "total_eans": 434,
-  "total_produtos": 434,
-  "erro": "",
-  "etapa": "concluido",
-  "traceback": "",
-  "iniciado_em": "2026-06-03T13:24:17.048057-03:00",
-  "finalizado_em": "2026-06-03T13:53:43.996351-03:00",
-  "arquivo": "data/mercadofarma/parciais/mercadofarma_MA.csv"
+  "total_produtos": 0,
+  "erro": "selecao_cnpj: Message: Nao encontrei/clicavel: Catalogo A a Z. Ultimo erro: Message: \nStacktrace:\n#0 0x564b09b0216a <unknown>\n#1 0x564b094ff6b9 <unknown>\n#2 0x564b09553c0d <unknown>\n#3 0x564b09553e51 <unknown>\n#4 0x564b0959eb24 <unknown>\n#5 0x564b0959bcbf <unknown>\n#6 0x564b09547222 <unknown>\n#7 0x564b09548011 <unknown>\n#8 0x564b09ac7a0b <unknown>\n#9 0x564b09aca92d <unknown>\n#10 0x564b09ab4948 <unknown>\n#11 0x564b09acb4c0 <unknown>\n#12 0x564b09a9b560 <unknown>\n#13 0x564b09aeedd8 <unknown>\n#14 0x564b09aeef75 <unknown>\n#15 0x564b09b00bce <unknown>\n#16 0x7f643cc9caa4 <unknown>\n#17 0x7f643cd29c6c <unknown>\n\n",
+  "etapa": "extracao_mercado_farma",
+  "traceback": "Traceback (most recent call last):\n  File \"/home/runner/work/painel-comercial-equipe-norte/painel-comercial-equipe-norte/src/mercado_farma.py\", line 844, in _extrair_alvo\n    selecionar_cnpj_catalogo(driver, cnpj, log_fn=log_fn)\n  File \"/home/runner/work/painel-comercial-equipe-norte/painel-comercial-equipe-norte/src/mercadofarma_inventory.py\", line 191, in selecionar_cnpj_catalogo\n    click_first(\n  File \"/home/runner/work/painel-comercial-equipe-norte/painel-comercial-equipe-norte/src/mercadofarma_inventory.py\", line 52, in click_first\n    raise TimeoutException(f\"Nao encontrei/clicavel: {desc}. Ultimo erro: {last}\")\nselenium.common.exceptions.TimeoutException: Message: Nao encontrei/clicavel: Catalogo A a Z. Ultimo erro: Message: \nStacktrace:\n#0 0x564b09b0216a <unknown>\n#1 0x564b094ff6b9 <unknown>\n#2 0x564b09553c0d <unknown>\n#3 0x564b09553e51 <unknown>\n#4 0x564b0959eb24 <unknown>\n#5 0x564b0959bcbf <unknown>\n#6 0x564b09547222 <unknown>\n#7 0x564b09548011 <unknown>\n#8 0x564b09ac7a0b <unknown>\n#9 0x564b09aca92d <unknown>\n#10 0x564b09ab4948 <unknown>\n#11 0x564b09acb4c0 <unknown>\n#12 0x564b09a9b560 <unknown>\n#13 0x564b09aeedd8 <unknown>\n#14 0x564b09aeef75 <unknown>\n#15 0x564b09b00bce <unknown>\n#16 0x7f643cc9caa4 <unknown>\n#17 0x7f643cd29c6c <unknown>\n\n\n\nThe above exception was the direct cause of the following exception:\n\nTraceback (most recent call last):\n  File \"/home/runner/work/painel-comercial-equipe-norte/painel-comercial-equipe-norte/automacoes/mercadofarma.py\", line 162, in main\n    _extrair_alvo(alvo, eans, headless=not args.visivel, resultados=resultados, log_fn=_log, debug_dir=debug_dir)\n  File \"/home/runner/work/painel-comercial-equipe-norte/painel-comercial-equipe-norte/src/mercado_farma.py\", line 886, in _extrair_alvo\n    raise RuntimeError(f\"{etapa}: {exc}\") from exc\nRuntimeError: selecao_cnpj: Message: Nao encontrei/clicavel: Catalogo A a Z. Ultimo erro: Message: \nStacktrace:\n#0 0x564b09b0216a <unknown>\n#1 0x564b094ff6b9 <unknown>\n#2 0x564b09553c0d <unknown>\n#3 0x564b09553e51 <unknown>\n#4 0x564b0959eb24 <unknown>\n#5 0x564b0959bcbf <unknown>\n#6 0x564b09547222 <unknown>\n#7 0x564b09548011 <unknown>\n#8 0x564b09ac7a0b <unknown>\n#9 0x564b09aca92d <unknown>\n#10 0x564b09ab4948 <unknown>\n#11 0x564b09acb4c0 <unknown>\n#12 0x564b09a9b560 <unknown>\n#13 0x564b09aeedd8 <unknown>\n#14 0x564b09aeef75 <unknown>\n#15 0x564b09b00bce <unknown>\n#16 0x7f643cc9caa4 <unknown>\n#17 0x7f643cd29c6c <unknown>\n\n\n",
+  "iniciado_em": "2026-06-05T19:13:52.849003-03:00",
+  "finalizado_em": "2026-06-05T19:16:23.331813-03:00"
 }
