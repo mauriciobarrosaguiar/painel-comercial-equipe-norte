@@ -12,6 +12,7 @@ from src.tratamento import CHAVES_DEDUP_PEDIDOS, padronizar_colunas
 
 METAS_HISTORICO_PADRAO = {"meses": {}}
 CHAVES_META = ["ol_sem_combate", "ol_prioritarios", "ol_lancamentos", "clientes_positivados"]
+CHAVES_META_OPCIONAIS = ["demanda_sem_combate"]
 
 
 def carregar_metas_historico() -> dict[str, Any]:
@@ -49,7 +50,11 @@ def _numero(valor: object) -> float:
 
 def _normalizar_meta(meta: dict[str, object] | None) -> dict[str, float]:
     meta = meta or {}
-    return {chave: _numero(meta.get(chave, 0)) for chave in CHAVES_META}
+    normalizada = {chave: _numero(meta.get(chave, 0)) for chave in CHAVES_META}
+    for chave in CHAVES_META_OPCIONAIS:
+        if chave in meta:
+            normalizada[chave] = _numero(meta.get(chave, 0))
+    return normalizada
 
 
 def _periodos_fechados(vendas: pd.DataFrame, metas_historico: dict[str, Any]) -> list[str]:

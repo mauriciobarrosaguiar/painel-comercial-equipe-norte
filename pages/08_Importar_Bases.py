@@ -10,6 +10,8 @@ from src.configuracoes import (
     carregar_login_bussola,
     carregar_metas,
     consultores_unicos,
+    importar_metas_excel,
+    normalizar_nome_meta,
     salvar_ajustes_vendedores,
     salvar_login_bussola,
     salvar_metas,
@@ -65,6 +67,81 @@ def metas_dataframe(consultores: list[str], metas: dict) -> pd.DataFrame:
     return pd.DataFrame(linhas)
 
 
+def _consultores_para_edicao(consultores: list[str], metas_importadas: dict | None) -> list[str]:
+    mapa = {normalizar_nome_meta(nome): nome for nome in consultores}
+    if metas_importadas:
+        for nome in metas_importadas.get("consultores", {}):
+            nome_norm = normalizar_nome_meta(nome)
+            if nome_norm:
+                mapa.setdefault(nome_norm, nome_norm)
+    return [mapa[chave] for chave in sorted(mapa)]
+
+
+def _meta_importada_consultor(metas_importadas: dict | None, consultor: str) -> dict:
+    if not metas_importadas:
+        return {}
+    consultores_importados = metas_importadas.get("consultores", {})
+    if not isinstance(consultores_importados, dict):
+        return {}
+    return consultores_importados.get(normalizar_nome_meta(consultor), {})
+
+
+def _meta_base_consultor(metas: dict, metas_importadas: dict | None, consultor: str) -> dict:
+    importada = _meta_importada_consultor(metas_importadas, consultor)
+    atual = metas.get("consultores", {}).get(consultor, {})
+    if not importada:
+        return atual
+    base = dict(importada)
+    base["clientes_positivados"] = atual.get("clientes_positivados", 0)
+    return base
+
+
+def _meta_base_gerente(metas: dict, metas_importadas: dict | None) -> dict:
+    atual = metas.get("gerente_territorial", {})
+    if not metas_importadas:
+        return atual
+    importada = dict(metas_importadas.get("gerente_territorial", {}))
+    importada["clientes_positivados"] = atual.get("clientes_positivados", 0)
+    return importada
+
+
+def _demanda_dataframe(metas_importadas: dict | None) -> pd.DataFrame:
+    if not metas_importadas:
+        return pd.DataFrame()
+    linhas = []
+    gerente = metas_importadas.get("gerente_territorial", {})
+    if isinstance(gerente, dict) and "demanda_sem_combate" in gerente:
+        linhas.append({"escopo": "GD", "nome": "Gerente territorial", "demanda_sem_combate": gerente.get("demanda_sem_combate", 0)})
+    consultores_importados = metas_importadas.get("consultores", {})
+    if isinstance(consultores_importados, dict):
+        for nome, meta in sorted(consultores_importados.items()):
+            if isinstance(meta, dict) and "demanda_sem_combate" in meta:
+                linhas.append({"escopo": "Consultor", "nome": nome, "demanda_sem_combate": meta.get("demanda_sem_combate", 0)})
+    return pd.DataFrame(linhas)
+
+
+def _aplicar_metas_importadas_widgets(metas: dict, metas_importadas: dict | None, consultores_edicao: list[str]) -> None:
+    gerente = _meta_base_gerente(metas, metas_importadas)
+    st.session_state["meta_gd_ol"] = float(gerente.get("ol_sem_combate", 0) or 0)
+    st.session_state["meta_gd_prio"] = float(gerente.get("ol_prioritarios", 0) or 0)
+    st.session_state["meta_gd_lanc"] = float(gerente.get("ol_lancamentos", 0) or 0)
+    st.session_state["meta_gd_cli"] = float(gerente.get("clientes_positivados", 0) or 0)
+    for idx, consultor in enumerate(consultores_edicao):
+        atual = _meta_base_consultor(metas, metas_importadas, consultor)
+        chave_consultor = f"{idx}_{slug_coluna(consultor)}"
+        st.session_state[f"meta_ol_{chave_consultor}"] = float(atual.get("ol_sem_combate", 0) or 0)
+        st.session_state[f"meta_prio_{chave_consultor}"] = float(atual.get("ol_prioritarios", 0) or 0)
+        st.session_state[f"meta_lanc_{chave_consultor}"] = float(atual.get("ol_lancamentos", 0) or 0)
+        st.session_state[f"meta_cli_{chave_consultor}"] = float(atual.get("clientes_positivados", 0) or 0)
+
+
+def _numero_meta_input(container, label: str, key: str, valor: object, step: float) -> float:
+    kwargs = {"min_value": 0.0, "step": step, "key": key}
+    if key not in st.session_state:
+        kwargs["value"] = float(valor or 0)
+    return float(container.number_input(label, **kwargs))
+
+
 def _cartao_meta_resumo(titulo: str, valor: str, detalhe: str) -> str:
     return f"""
     <div class="small-update">
@@ -117,7 +194,12 @@ titulo_pagina("Importação")
 
 mensagem_upload = st.session_state.pop("mensagem_upload_salvo", "")
 if mensagem_upload:
-    st.success(mensagem_upload)
+    if mensagem_upload.startswith("Falhas:"):
+        st.error(mensagem_upload)
+    elif "Falhas:" in mensagem_upload:
+        st.warning(mensagem_upload)
+    else:
+        st.success(mensagem_upload)
 
 tab_bussola, tab_vendedores, tab_metas, tab_arquivos = st.tabs(["Bússola Web", "Vendedores", "Metas", "Arquivos"])
 
@@ -307,69 +389,73 @@ with tab_vendedores:
 with tab_metas:
     st.subheader("Ajustes de metas")
     metas = carregar_metas()
-    gerente = metas.get("gerente_territorial", {})
+    metas_importadas = st.session_state.get("metas_importadas_excel")
+    gerente = _meta_base_gerente(metas, metas_importadas)
     st.caption("As metas salvas aqui alimentam a Visão Geral e a página Consultores. Use este ajuste para o mês atual.")
+
+    up_metas = st.file_uploader("Importar metas do mês (.xlsx)", type=["xlsx"], key="file_metas_mes")
+    if st.button("Importar metas", width="stretch"):
+        if up_metas is None:
+            st.warning("Selecione uma planilha de metas para importar.")
+        else:
+            try:
+                metas_importadas = importar_metas_excel(up_metas)
+            except Exception as exc:
+                st.error(f"Falha ao importar metas: {exc}")
+            else:
+                st.session_state["metas_importadas_excel"] = metas_importadas
+                st.session_state["_aplicar_metas_importadas_widgets"] = True
+                st.success("Metas importadas para conferência.")
+
+    if metas_importadas:
+        st.warning("A coluna DEMANDA SEM COMBATE foi importada como referência e não substitui Clientes com venda.")
+        demanda_ref = _demanda_dataframe(metas_importadas)
+        if not demanda_ref.empty:
+            with st.expander("Referência DEMANDA SEM COMBATE"):
+                st.dataframe(demanda_ref, width="stretch", hide_index=True)
+
+    consultores_edicao = _consultores_para_edicao(consultores, metas_importadas)
+    if st.session_state.pop("_aplicar_metas_importadas_widgets", False):
+        _aplicar_metas_importadas_widgets(metas, metas_importadas, consultores_edicao)
 
     st.markdown(f"<div class='consultor-name'>GD - {nome_gd}</div>", unsafe_allow_html=True)
     g1, g2, g3, g4 = st.columns(4)
-    meta_ol = g1.number_input("Meta OL sem combate", min_value=0.0, step=1000.0, value=float(gerente.get("ol_sem_combate", 0) or 0), key="meta_gd_ol")
-    meta_prio = g2.number_input("Meta OL prioritários", min_value=0.0, step=1000.0, value=float(gerente.get("ol_prioritarios", 0) or 0), key="meta_gd_prio")
-    meta_lanc = g3.number_input("Meta OL lançamentos", min_value=0.0, step=1000.0, value=float(gerente.get("ol_lancamentos", 0) or 0), key="meta_gd_lanc")
-    meta_cli = g4.number_input("Meta clientes com venda", min_value=0.0, step=1.0, value=float(gerente.get("clientes_positivados", 0) or 0), key="meta_gd_cli")
+    meta_ol = _numero_meta_input(g1, "Meta OL sem combate", "meta_gd_ol", gerente.get("ol_sem_combate", 0), 1000.0)
+    meta_prio = _numero_meta_input(g2, "Meta OL prioritários", "meta_gd_prio", gerente.get("ol_prioritarios", 0), 1000.0)
+    meta_lanc = _numero_meta_input(g3, "Meta OL lançamentos", "meta_gd_lanc", gerente.get("ol_lancamentos", 0), 1000.0)
+    meta_cli = _numero_meta_input(g4, "Meta clientes com venda", "meta_gd_cli", gerente.get("clientes_positivados", 0), 1.0)
 
     st.subheader("Metas dos consultores")
-    metas_consultores = metas.get("consultores", {})
     busca_meta = st.text_input("Buscar consultor para ajustar meta", placeholder="Digite parte do nome", key="buscar_meta_consultor")
     consultores_visiveis = [
         consultor
-        for consultor in consultores
+        for consultor in consultores_edicao
         if not busca_meta.strip() or busca_meta.strip().upper() in consultor.upper()
     ]
-    metas_editadas = {consultor: dict(metas_consultores.get(consultor, {})) for consultor in consultores}
+    metas_editadas = {consultor: dict(_meta_base_consultor(metas, metas_importadas, consultor)) for consultor in consultores_edicao}
     if not consultores_visiveis:
         st.info("Nenhum consultor encontrado para a busca.")
 
-    for idx, consultor in enumerate(consultores):
+    for idx, consultor in enumerate(consultores_edicao):
         if consultor not in consultores_visiveis:
             continue
-        atual = metas_consultores.get(consultor, {})
+        atual = _meta_base_consultor(metas, metas_importadas, consultor)
+        demanda = atual.get("demanda_sem_combate")
         st.markdown(f"<div class='consultor-name'>{consultor}</div>", unsafe_allow_html=True)
         c1, c2, c3, c4 = st.columns(4)
         chave_consultor = f"{idx}_{slug_coluna(consultor)}"
         metas_editadas[consultor] = {
-            "ol_sem_combate": c1.number_input(
-                "OL sem combate",
-                min_value=0.0,
-                step=1000.0,
-                value=float(atual.get("ol_sem_combate", 0) or 0),
-                key=f"meta_ol_{chave_consultor}",
-            ),
-            "ol_prioritarios": c2.number_input(
-                "OL prioritários",
-                min_value=0.0,
-                step=1000.0,
-                value=float(atual.get("ol_prioritarios", 0) or 0),
-                key=f"meta_prio_{chave_consultor}",
-            ),
-            "ol_lancamentos": c3.number_input(
-                "OL lançamentos",
-                min_value=0.0,
-                step=1000.0,
-                value=float(atual.get("ol_lancamentos", 0) or 0),
-                key=f"meta_lanc_{chave_consultor}",
-            ),
-            "clientes_positivados": c4.number_input(
-                "Clientes com venda",
-                min_value=0.0,
-                step=1.0,
-                value=float(atual.get("clientes_positivados", 0) or 0),
-                key=f"meta_cli_{chave_consultor}",
-            ),
+            "ol_sem_combate": _numero_meta_input(c1, "OL sem combate", f"meta_ol_{chave_consultor}", atual.get("ol_sem_combate", 0), 1000.0),
+            "ol_prioritarios": _numero_meta_input(c2, "OL prioritários", f"meta_prio_{chave_consultor}", atual.get("ol_prioritarios", 0), 1000.0),
+            "ol_lancamentos": _numero_meta_input(c3, "OL lançamentos", f"meta_lanc_{chave_consultor}", atual.get("ol_lancamentos", 0), 1000.0),
+            "clientes_positivados": _numero_meta_input(c4, "Clientes com venda", f"meta_cli_{chave_consultor}", atual.get("clientes_positivados", 0), 1.0),
         }
+        if demanda is not None:
+            metas_editadas[consultor]["demanda_sem_combate"] = demanda
         st.divider()
 
     metas_preview = {"consultores": metas_editadas}
-    df_metas = metas_dataframe(consultores, metas_preview)
+    df_metas = metas_dataframe(consultores_edicao, metas_preview)
     soma_ol = float(df_metas["ol_sem_combate"].sum()) if not df_metas.empty else 0.0
     soma_prio = float(df_metas["ol_prioritarios"].sum()) if not df_metas.empty else 0.0
     soma_lanc = float(df_metas["ol_lancamentos"].sum()) if not df_metas.empty else 0.0
@@ -415,7 +501,8 @@ with tab_metas:
     st.dataframe(conferencia_formatada, width="stretch", hide_index=True)
 
     b1, b2 = st.columns([1.4, 0.8])
-    if b1.button("Salvar ajustes de metas", width="stretch"):
+    texto_botao_metas = "Salvar metas importadas" if metas_importadas else "Salvar ajustes de metas"
+    if b1.button(texto_botao_metas, width="stretch"):
         try:
             st.caption(_sincronizar_historico_importacao(metas))
         except Exception as exc:
@@ -426,9 +513,17 @@ with tab_metas:
             "ol_lancamentos": meta_lanc,
             "clientes_positivados": meta_cli,
         }
+        demanda_gt = gerente.get("demanda_sem_combate")
+        if demanda_gt is not None:
+            metas["gerente_territorial"]["demanda_sem_combate"] = demanda_gt
         metas["consultores"] = metas_editadas
         salvar_metas(metas)
-        st.success("Metas salvas e fixadas.")
+        if metas_importadas:
+            mes = metas_importadas.get("_importacao", {}).get("mes", "")
+            st.session_state["mensagem_upload_salvo"] = f"Metas de {mes or 'mês'} importadas e salvas."
+            st.session_state.pop("metas_importadas_excel", None)
+        else:
+            st.success("Metas salvas e fixadas.")
         st.rerun()
 
     with b2:
@@ -498,6 +593,22 @@ with tab_arquivos:
             ),
             unsafe_allow_html=True,
         )
+        st.write(f"Repo: {diag.get('repo') or '-'}")
+        st.write(f"Branch: {diag.get('branch') or '-'}")
+        st.write(f"Diretório: {diag.get('diretorio') or '-'}")
+        st.write(f"Token configurado: {'sim' if diag.get('github_token_configurado') else 'não'}")
+        st.write(f"PERSISTENCE_KEY configurada: {'sim' if diag.get('persistence_key_configurada') else 'não'}")
+        st.write(f"Branch existe: {'sim' if diag.get('branch_ok') else 'não'}")
+        st.write(f"Diretório existe: {'sim' if diag.get('diretorio_ok') else 'não'}")
+        st.write(f"Nome da chave: {diag.get('ultima_chave') or '-'}")
+        tamanho = diag.get("ultimo_tamanho_mb")
+        st.write(f"Tamanho do último arquivo tentado: {tamanho if tamanho is not None else '-'} MB")
+        if diag.get("ultimo_erro_escrita"):
+            st.warning(f"Último erro de escrita GitHub: {diag.get('ultimo_erro_escrita')}")
+            st.write(f"Status code: {diag.get('ultimo_status_code') or '-'}")
+            resposta = diag.get("ultima_resposta")
+            if resposta:
+                st.code(str(resposta)[:800], language="text")
         if not diag.get("persistence_key_configurada") or not diag.get("healthcheck_ok"):
             st.warning(
                 "Não foi possível confirmar a leitura da persistência. "
@@ -537,32 +648,39 @@ with tab_arquivos:
 
     c1, c2 = st.columns(2)
     if c1.button("Usar e salvar uploads", width="stretch"):
-        salvos = []
-        if registrar_upload("bussola", up_bussola):
-            salvos.append("Bússola")
-        if registrar_upload("painel", up_painel):
-            salvos.append("Painel clientes")
-        if registrar_upload("acoes", up_acoes):
-            salvos.append("Ações promocionais")
-        if registrar_upload_produtos_mix(up_mix):
-            salvos.append("Produtos / mix")
-        if registrar_upload("mercado_farma", up_mercado):
-            salvos.append("Mercado Farma")
-        if registrar_upload_produtos_mercado_farma(up_produtos_mercado):
-            salvos.append("Produtos Mercado Farma")
-        if registrar_upload("bussola_historico", up_historico):
-            salvos.append("Histórico Bússola")
+        tarefas_upload = [
+            ("Bússola", up_bussola, lambda: registrar_upload("bussola", up_bussola)),
+            ("Painel clientes", up_painel, lambda: registrar_upload("painel", up_painel)),
+            ("Ações promocionais", up_acoes, lambda: registrar_upload("acoes", up_acoes)),
+            ("Produtos / mix", up_mix, lambda: registrar_upload_produtos_mix(up_mix)),
+            ("Mercado Farma", up_mercado, lambda: registrar_upload("mercado_farma", up_mercado)),
+            ("Produtos Mercado Farma", up_produtos_mercado, lambda: registrar_upload_produtos_mercado_farma(up_produtos_mercado)),
+            ("Histórico Bússola", up_historico, lambda: registrar_upload("bussola_historico", up_historico)),
+        ]
+        salvos: list[str] = []
+        falhas: list[str] = []
+        for nome, arquivo, executar in tarefas_upload:
+            if arquivo is None:
+                continue
+            try:
+                if executar():
+                    salvos.append(nome)
+            except Exception as exc:
+                falhas.append(f"{nome} - {exc}")
         mensagem_historico = ""
         if up_bussola is not None or up_historico is not None:
             try:
                 mensagem_historico = " " + _sincronizar_historico_importacao()
             except Exception as exc:
                 mensagem_historico = f" Histórico não sincronizado: {exc}"
-        st.session_state["mensagem_upload_salvo"] = (
-            "Uploads aplicados e salvos: " + ", ".join(salvos) + mensagem_historico
-            if salvos
-            else "Nenhum arquivo selecionado para salvar."
-        )
+        mensagens = []
+        if salvos:
+            mensagens.append("Uploads aplicados: " + ", ".join(salvos) + mensagem_historico)
+        elif not falhas:
+            mensagens.append("Nenhum arquivo selecionado para salvar.")
+        if falhas:
+            mensagens.append("Falhas: " + "; ".join(falhas))
+        st.session_state["mensagem_upload_salvo"] = " ".join(mensagens)
         st.rerun()
     if c2.button("Limpar uploads da sessão", width="stretch"):
         limpar_uploads()

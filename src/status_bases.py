@@ -130,11 +130,17 @@ def ultima_atualizacao_base(chave: str) -> object | None:
     if local.exists():
         return datetime_arquivo_brasilia(local)
 
-    metadata = _github_metadata(chave)
+    try:
+        metadata = _github_metadata(chave)
+    except requests.exceptions.RequestException:
+        metadata = None
     if metadata:
         return metadata
 
-    commit_at = _github_commit_at(chave)
+    try:
+        commit_at = _github_commit_at(chave)
+    except requests.exceptions.RequestException:
+        commit_at = None
     if commit_at:
         return commit_at
 

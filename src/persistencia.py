@@ -119,6 +119,62 @@ def status_persistencia() -> dict[str, str]:
     }
 
 
+def _texto_resposta(resp: requests.Response | None) -> str:
+    if resp is None:
+        return ""
+    texto = resp.text or ""
+    token = _github_config()["token"]
+    if token:
+        texto = texto.replace(token, "[token oculto]")
+    return texto[:800]
+
+
+def _registrar_erro_escrita_github(
+    chave: str,
+    conteudo: bytes,
+    erro: str,
+    status_code: int | None = None,
+    resposta: str = "",
+) -> None:
+    try:
+        st.session_state["ultimo_erro_escrita_github"] = {
+            "chave": chave,
+            "erro": erro[:800],
+            "status_code": status_code,
+            "resposta": resposta[:800],
+            "tamanho_bytes": len(conteudo),
+            "tamanho_mb": round(len(conteudo) / (1024 * 1024), 2),
+            "quando": agora_brasilia().isoformat(),
+        }
+    except Exception:
+        pass
+
+
+def _ultimo_erro_escrita_github() -> dict[str, Any]:
+    try:
+        erro = st.session_state.get("ultimo_erro_escrita_github", {})
+    except Exception:
+        erro = {}
+    return erro if isinstance(erro, dict) else {}
+
+
+def _mostrar_erro_github(
+    chave: str,
+    conteudo: bytes,
+    erro: str,
+    status_code: int | None = None,
+    resposta: str = "",
+) -> None:
+    _registrar_erro_escrita_github(chave, conteudo, erro, status_code, resposta)
+    st.error("Não consegui salvar no GitHub. Verifique GITHUB_TOKEN, branch app-storage ou tamanho do arquivo.")
+    st.warning("A cópia local/sessão foi mantida, mas a atualização pode não persistir após reiniciar.")
+    with st.expander("Detalhe técnico do GitHub"):
+        st.write(f"Chave: {chave}")
+        st.write(f"Status code: {status_code if status_code is not None else '-'}")
+        st.write(f"Tamanho tentado: {len(conteudo) / (1024 * 1024):.2f} MB")
+        st.code((resposta or erro)[:800], language="text")
+
+
 def _fernet() -> Fernet:
     chave = _github_config()["key"]
     if not chave:
@@ -268,6 +324,27 @@ def _github_write(chave: str, conteudo: bytes, mensagem: str) -> None:
         ultimo_erro.raise_for_status()
 
 
+def _github_write_safe(chave: str, conteudo: bytes, mensagem: str) -> tuple[bool, str]:
+    if not persistencia_github_ativa():
+        return False, "Persistência GitHub não configurada."
+    try:
+        _github_write(chave, conteudo, mensagem)
+        return True, ""
+    except requests.exceptions.HTTPError as exc:
+        resp = exc.response
+        status_code = resp.status_code if resp is not None else None
+        resposta = _texto_resposta(resp)
+        detalhe = resposta or str(exc)
+        _mostrar_erro_github(chave, conteudo, str(exc), status_code, resposta)
+        return False, detalhe
+    except requests.exceptions.RequestException as exc:
+        _mostrar_erro_github(chave, conteudo, str(exc))
+        return False, str(exc)
+    except Exception as exc:
+        _mostrar_erro_github(chave, conteudo, str(exc))
+        return False, str(exc)
+
+
 def carregar_bytes(chave: str) -> bytes | None:
     if persistencia_github_leitura_ativa():
         try:
@@ -293,15 +370,17 @@ def carregar_metadados() -> dict[str, Any]:
     return carregado if isinstance(carregado, dict) else {}
 
 
-def _salvar_metadados(dados: dict[str, Any]) -> None:
+def _salvar_metadados(dados: dict[str, Any], persistir_github: bool = True) -> bool:
     conteudo = json.dumps(dados, ensure_ascii=False, indent=2).encode("utf-8")
     LOCAL_STORE_DIR.mkdir(parents=True, exist_ok=True)
     _caminho_local("metadata").write_bytes(conteudo)
-    if persistencia_github_ativa():
-        _github_write("metadata", conteudo, "Atualiza controle de atualizacoes pelo painel")
+    if persistir_github and persistencia_github_ativa():
+        persistiu, _detalhe = _github_write_safe("metadata", conteudo, "Atualiza controle de atualizacoes pelo painel")
+        return persistiu
+    return False
 
 
-def _registrar_atualizacao(chave: str, mensagem: str | None = None) -> None:
+def _registrar_atualizacao(chave: str, mensagem: str | None = None, persistir_github: bool = True) -> None:
     if chave == "metadata":
         return
     try:
@@ -311,18 +390,20 @@ def _registrar_atualizacao(chave: str, mensagem: str | None = None) -> None:
             "arquivo": _nome_arquivo(chave),
             "mensagem": mensagem or f"Atualiza {chave} pelo painel",
         }
-        _salvar_metadados(metadados)
+        _salvar_metadados(metadados, persistir_github=persistir_github)
     except Exception as exc:
         st.warning(f"Base salva, mas não consegui atualizar o horário fixo ({chave}): {exc}")
 
 
-def salvar_bytes(chave: str, conteudo: bytes, mensagem: str | None = None) -> None:
+def salvar_bytes(chave: str, conteudo: bytes, mensagem: str | None = None) -> bool:
     LOCAL_STORE_DIR.mkdir(parents=True, exist_ok=True)
     _caminho_local(chave).write_bytes(conteudo)
     mensagem_final = mensagem or f"Atualiza {chave} pelo painel"
+    github_persistiu = False
     if persistencia_github_ativa():
-        _github_write(chave, conteudo, mensagem_final)
-    _registrar_atualizacao(chave, mensagem_final)
+        github_persistiu, _detalhe = _github_write_safe(chave, conteudo, mensagem_final)
+    _registrar_atualizacao(chave, mensagem_final, persistir_github=github_persistiu)
+    return github_persistiu
 
 
 def criar_backup(chave: str, mensagem: str | None = None) -> bool:
@@ -411,6 +492,7 @@ def diagnosticar_persistencia(chaves: list[str] | None = None) -> dict[str, Any]
     """Retorna um diagnóstico seguro, sem expor valores de secrets."""
     cfg = _github_config()
     status = status_persistencia()
+    ultimo_erro = _ultimo_erro_escrita_github()
     resultado: dict[str, Any] = {
         "modo": status.get("modo", ""),
         "detalhe": status.get("detalhe", ""),
@@ -425,6 +507,13 @@ def diagnosticar_persistencia(chaves: list[str] | None = None) -> dict[str, Any]
         "healthcheck_erro": "",
         "arquivos": [],
         "erro": "",
+        "ultimo_erro_escrita": ultimo_erro.get("erro", ""),
+        "ultimo_status_code": ultimo_erro.get("status_code"),
+        "ultima_resposta": ultimo_erro.get("resposta", ""),
+        "ultimo_tamanho_bytes": ultimo_erro.get("tamanho_bytes"),
+        "ultimo_tamanho_mb": ultimo_erro.get("tamanho_mb"),
+        "ultima_chave": ultimo_erro.get("chave", ""),
+        "ultimo_erro_quando": ultimo_erro.get("quando", ""),
     }
 
     if cfg["repo"] and cfg["branch"]:
@@ -459,7 +548,9 @@ def diagnosticar_persistencia(chaves: list[str] | None = None) -> dict[str, Any]
 
     chaves_padrao = [
         "metadata",
+        "painel",
         "produtos_mix",
+        "acoes",
         "sip",
         "login_bussola",
         "bussola",
