@@ -593,20 +593,44 @@ def alvos_mercadofarma_por_uf(
 
     alvos: list[dict[str, str]] = []
     for uf, grupo_uf in base.groupby("uf", dropna=False):
-        cnpjs = grupo_uf["cnpj_limpo"].dropna().astype(str)
-        cnpj = normalizar_cnpj(cnpjs.iloc[0]) if not cnpjs.empty else ""
-        if not cnpj:
+        cnpjs: list[str] = []
+        for valor in grupo_uf["cnpj_limpo"].dropna().astype(str):
+            cnpj = normalizar_cnpj(valor)
+            if cnpj and cnpj not in cnpjs:
+                cnpjs.append(cnpj)
+        if not cnpjs:
             continue
         alvos.append(
             {
                 "consultor": "GD",
                 "uf": str(uf),
-                "cnpj": cnpj,
+                "cnpj": cnpjs[0],
+                "cnpjs_candidatos": cnpjs,
                 "usuario": _texto(usuario_gd),
                 "senha": _texto(senha_gd),
             }
         )
     return sorted(alvos, key=lambda item: item["uf"])
+
+
+def _cnpjs_candidatos_alvo(alvo: dict) -> list[str]:
+    valores = alvo.get("cnpjs_candidatos", [])
+    if isinstance(valores, str):
+        brutos = [item.strip() for item in valores.split(",")]
+    elif isinstance(valores, (list, tuple, set)):
+        brutos = list(valores)
+    else:
+        brutos = []
+
+    principal = normalizar_cnpj(alvo.get("cnpj"))
+    cnpjs: list[str] = []
+    if principal:
+        cnpjs.append(principal)
+    for valor in brutos:
+        cnpj = normalizar_cnpj(valor)
+        if cnpj and cnpj not in cnpjs:
+            cnpjs.append(cnpj)
+    return cnpjs
 
 
 def alvos_unicos_por_uf(
@@ -828,23 +852,45 @@ def _extrair_alvo(
     consultor = _texto(alvo.get("consultor"))
     uf = _texto(alvo.get("uf")).upper()
     cnpj = normalizar_cnpj(alvo.get("cnpj"))
+    cnpjs_candidatos = _cnpjs_candidatos_alvo(alvo)
     usuario = _texto(alvo.get("usuario"))
     senha = _texto(alvo.get("senha"))
     etapa = "abrir_navegador"
     try:
+        if not cnpjs_candidatos:
+            raise RuntimeError(f"UF {uf}: nenhum CNPJ candidato valido para Mercado Farma.")
         if callable(log_fn):
-            log_fn(f"UF {uf}: CNPJ referencia {cnpj} | usuario {mascarar_usuario(usuario)}")
+            log_fn(
+                f"UF {uf}: CNPJ referencia {cnpj} | "
+                f"{len(cnpjs_candidatos)} candidato(s) | usuario {mascarar_usuario(usuario)}"
+            )
             log_fn(f"UF {uf}: etapa login - abrindo Mercado Farma")
         driver = criar_driver(headless=headless)
         etapa = "login"
         login_mercadofarma(driver, usuario, senha, log_fn=log_fn)
         etapa = "selecao_cnpj"
-        if callable(log_fn):
-            log_fn(f"UF {uf}: etapa selecao CNPJ - {cnpj}")
-        selecionar_cnpj_catalogo(driver, cnpj, log_fn=log_fn)
+        erros_cnpj: list[str] = []
+        for posicao, candidato in enumerate(cnpjs_candidatos, start=1):
+            cnpj = candidato
+            if estado is not None:
+                estado["current_cnpj"] = cnpj
+            if callable(log_fn):
+                log_fn(f"UF {uf}: etapa selecao CNPJ {posicao}/{len(cnpjs_candidatos)} - {cnpj}")
+            try:
+                selecionar_cnpj_catalogo(driver, cnpj, log_fn=log_fn)
+                alvo["cnpj"] = cnpj
+                break
+            except Exception as exc:
+                erros_cnpj.append(f"{cnpj}: {_mensagem_erro_consulta(exc)}")
+                if callable(log_fn):
+                    log_fn(f"UF {uf}: CNPJ {cnpj} indisponivel no Mercado Farma. Tentando proximo.")
+        else:
+            detalhes = " | ".join(erros_cnpj[-5:])
+            raise RuntimeError(f"UF {uf}: nenhum CNPJ candidato abriu o Mercado Farma. {detalhes}")
+
         etapa = "catalogo"
         if callable(log_fn):
-            log_fn(f"UF {uf}: etapa catalogo - Catalogo A a Z carregado")
+            log_fn(f"UF {uf}: etapa catalogo - Catalogo A a Z carregado com CNPJ {cnpj}")
         etapa = "extracao"
         for idx in range(start_index, len(eans)):
             ean = eans[idx]

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 import time
+import unicodedata
 from datetime import datetime
 from typing import Callable, Iterable, Optional
 
@@ -69,6 +70,20 @@ def clear_and_type(element, text: str) -> None:
     element.send_keys(text)
 
 
+def _texto_pagina(driver: WebDriver) -> str:
+    try:
+        return (driver.find_element(By.TAG_NAME, "body").text or "").strip()
+    except Exception:
+        return ""
+
+
+def _mensagem_sem_vinculo(driver: WebDriver) -> str:
+    texto = _normalize_label(_texto_pagina(driver))
+    if "nao possui vinculo" in texto or "nao possui vinculo com ponto de venda" in texto:
+        return "Representante nao possui vinculo com o ponto de venda solicitado."
+    return ""
+
+
 def extrair_valor_numerico(texto: str, tipo: str = "valor"):
     if not texto:
         return 0.0 if tipo != "estoque" else 0
@@ -97,7 +112,9 @@ def extrair_valor_numerico(texto: str, tipo: str = "valor"):
 
 
 def _normalize_label(texto: str) -> str:
-    return re.sub(r"[^a-z0-9]+", " ", str(texto or "").lower()).strip()
+    sem_acento = unicodedata.normalize("NFKD", str(texto or "").lower())
+    sem_acento = "".join(char for char in sem_acento if not unicodedata.combining(char))
+    return re.sub(r"[^a-z0-9]+", " ", sem_acento).strip()
 
 
 def _find_text_by_keywords(root, keywords: Iterable[str]) -> str:
@@ -181,11 +198,24 @@ def selecionar_cnpj_catalogo(driver: WebDriver, cnpj: str, log_fn: Optional[Call
     clear_and_type(campo, cnpj)
     time.sleep(2)
 
-    item = wait(driver, 30).until(
-        EC.element_to_be_clickable((By.XPATH, f"//div[contains(@data-value, '{cnpj}') or contains(., '{cnpj}')]"))
+    item_xpath = (
+        f"//*[@data-value and contains(@data-value, '{cnpj}')]"
+        f"|//*[contains(., '{cnpj}') and "
+        "(@role='option' or @role='button' or self::button or self::a)]"
     )
+    try:
+        item = wait(driver, 12).until(EC.element_to_be_clickable((By.XPATH, item_xpath)))
+    except Exception as exc:
+        msg_vinculo = _mensagem_sem_vinculo(driver)
+        if msg_vinculo:
+            raise TimeoutException(f"CNPJ {cnpj}: {msg_vinculo}") from exc
+        raise TimeoutException(f"CNPJ {cnpj}: loja nao encontrada na base do Mercado Farma.") from exc
+
     safe_click(driver, item)
     time.sleep(2)
+    msg_vinculo = _mensagem_sem_vinculo(driver)
+    if msg_vinculo:
+        raise TimeoutException(f"CNPJ {cnpj}: {msg_vinculo}")
 
     _emit(log_fn, "Etapa catalogo: abrindo Catalogo A a Z")
     click_first(

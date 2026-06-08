@@ -143,8 +143,13 @@ def main() -> int:
         alvo = alvos[0]
         status["consultor_usado"] = alvo.get("consultor", "")
         status["cnpj_referencia"] = alvo.get("cnpj", "")
+        candidatos = alvo.get("cnpjs_candidatos", [])
+        if isinstance(candidatos, list):
+            status["cnpjs_candidatos"] = candidatos
         _log(f"Consultor usado: {status['consultor_usado']}")
         _log(f"CNPJ referencia: {status['cnpj_referencia']}")
+        if isinstance(candidatos, list) and len(candidatos) > 1:
+            _log(f"CNPJs candidatos na UF {uf}: {len(candidatos)}")
 
         status["etapa"] = "carregar_eans"
         eans = obter_eans_para_consulta(produtos_mercado)
@@ -160,6 +165,7 @@ def main() -> int:
         _log("Etapa atual: login")
         status["etapa"] = "extracao_mercado_farma"
         _extrair_alvo(alvo, eans, headless=not args.visivel, resultados=resultados, log_fn=_log, debug_dir=debug_dir)
+        status["cnpj_referencia"] = alvo.get("cnpj", status["cnpj_referencia"])
         status["etapa"] = "salvar_arquivo"
         _log("Etapa atual: salvar arquivo")
         df = _csv_saida(pd.DataFrame(resultados))
