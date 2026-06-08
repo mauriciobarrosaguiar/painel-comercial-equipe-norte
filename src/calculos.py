@@ -100,10 +100,18 @@ def calcular_resumo_operacional(vendas: pd.DataFrame, clientes: pd.DataFrame | N
     faturadas = base[status.isin(STATUS_FATURADOS)].copy()
     validas = faturadas.copy()
     canceladas = base[status.eq(STATUS_CANCELADO)].copy()
-    sem_nota = base[
-        status.ne(STATUS_CANCELADO)
-        & base["nota_fiscal"].fillna("").astype(str).str.strip().eq("")
-    ].copy()
+    if "pedido_sem_nota" in base.columns:
+        sem_nota = base[base["pedido_sem_nota"].fillna(False)].copy()
+    else:
+        sem_nota = base[
+            status.ne(STATUS_CANCELADO)
+            & base["nota_fiscal"].fillna("").astype(str).str.strip().eq("")
+        ].copy()
+    coluna_valor_sem_nota = (
+        "valor_sem_nota_sem_imposto"
+        if "valor_sem_nota_sem_imposto" in sem_nota.columns
+        else "valor_vendido_sem_imposto"
+    )
 
     sem_combate = validas[validas["tipo_mix"].ne("COMBATE")]
     ol_cliente = sem_combate.groupby("cnpj_limpo")["valor_vendido_sem_imposto"].sum()
@@ -123,7 +131,7 @@ def calcular_resumo_operacional(vendas: pd.DataFrame, clientes: pd.DataFrame | N
         "pedidos_faturados": int(faturadas["pedido_id"].nunique()),
         "valor_pedidos_faturados": float(faturadas["valor_vendido_sem_imposto"].sum()),
         "pedidos_sem_nota": int(sem_nota["pedido_id"].nunique()),
-        "valor_sem_nota": float(sem_nota["valor_vendido_sem_imposto"].sum()),
+        "valor_sem_nota": float(sem_nota[coluna_valor_sem_nota].sum()),
         "pedidos_cancelados": int(canceladas["pedido_id"].nunique()),
         "valor_cancelado": float(canceladas["valor_vendido_sem_imposto"].sum()),
     }

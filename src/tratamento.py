@@ -469,9 +469,12 @@ def preparar_base_vendas(
                 "ean_limpo",
                 "status_normalizado",
                 "pedido_cancelado",
+                "pedido_sem_nota",
                 "quantidade_base",
                 "valor_calculado_sem_imposto",
                 "valor_vendido_sem_imposto",
+                "valor_sem_nota_sem_imposto",
+                "valor_pedido_sem_imposto",
                 "nome_pdv",
                 "cidade",
                 "uf",
@@ -528,6 +531,18 @@ def preparar_base_vendas(
     vendas = deduplicar_pedidos_bussola(vendas)
     vendas["valor_vendido_sem_imposto"] = vendas["valor_faturado"]
     vendas["pedido_cancelado"] = vendas["status_normalizado"].eq(STATUS_CANCELADO)
+    nota_vazia = vendas["nota_fiscal"].fillna("").astype(str).str.strip().eq("")
+    vendas["pedido_sem_nota"] = nota_vazia & ~vendas["pedido_cancelado"]
+    vendas["valor_sem_nota_sem_imposto"] = np.where(
+        vendas["pedido_sem_nota"],
+        vendas["valor_total_solicitado_sem_imposto"],
+        0.0,
+    )
+    vendas["valor_pedido_sem_imposto"] = np.where(
+        vendas["pedido_sem_nota"],
+        vendas["valor_sem_nota_sem_imposto"],
+        vendas["valor_vendido_sem_imposto"],
+    )
 
     for coluna in ["representante", "centro_distribuicao", "uf_centro_distribuicao", "produto"]:
         vendas[coluna] = vendas[coluna].apply(normalizar_texto)

@@ -160,14 +160,22 @@ st.markdown(
 
 st.subheader("Pedidos e notas da SIP")
 m1, m2, m3 = st.columns(3)
+valor_sem_nota = (
+    sem_nota["valor_sem_nota_sem_imposto"].sum()
+    if "valor_sem_nota_sem_imposto" in sem_nota.columns
+    else sem_nota["valor_vendido_sem_imposto"].sum()
+)
 with m1:
     card_metrica("Pedidos faturados", str(len(faturados)), f"{formatar_moeda(faturados['valor_vendido_sem_imposto'].sum())} faturado")
 with m2:
-    card_metrica("Sem nota", str(len(sem_nota)), f"{formatar_moeda(sem_nota['valor_vendido_sem_imposto'].sum())} a faturar")
+    card_metrica("Sem nota", str(len(sem_nota)), f"{formatar_moeda(valor_sem_nota)} a faturar")
 with m3:
     card_metrica("Cancelados", str(len(cancelados)), f"{formatar_moeda(cancelados['valor_vendido_sem_imposto'].sum())} cancelado")
 
-pedidos_visual = pedidos.rename(
+pedidos_visual_base = pedidos.copy()
+if "valor_pedido_sem_imposto" not in pedidos_visual_base.columns:
+    pedidos_visual_base["valor_pedido_sem_imposto"] = pedidos_visual_base["valor_vendido_sem_imposto"]
+pedidos_visual = pedidos_visual_base.rename(
     columns={
         "categoria": "Categoria",
         "pedido_id": "Pedido",
@@ -178,7 +186,7 @@ pedidos_visual = pedidos.rename(
         "cidade": "Cidade",
         "uf": "UF",
         "data_base": "Data pedido",
-        "valor_vendido_sem_imposto": "Valor",
+        "valor_pedido_sem_imposto": "Valor",
     }
 )[["Categoria", "Pedido", "Nota fiscal", "Status", "CNPJ", "Cliente", "Cidade", "UF", "Data pedido", "Valor"]]
 pedidos_visual["Data pedido"] = pedidos_visual["Data pedido"].apply(formatar_data)

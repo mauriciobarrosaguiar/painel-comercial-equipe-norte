@@ -53,12 +53,19 @@ def preparar_pedidos_sip(vendas_base: pd.DataFrame) -> pd.DataFrame:
         "uf",
         "data_base",
         "valor_vendido_sem_imposto",
+        "valor_sem_nota_sem_imposto",
+        "valor_pedido_sem_imposto",
     ]
     if vendas_base is None or vendas_base.empty:
         return pd.DataFrame(columns=colunas)
 
+    base = vendas_base.copy()
+    for coluna in ["valor_sem_nota_sem_imposto", "valor_pedido_sem_imposto"]:
+        if coluna not in base.columns:
+            base[coluna] = 0.0
+
     agrupado = (
-        vendas_base.groupby(
+        base.groupby(
             [
                 "pedido_id",
                 "nota_fiscal",
@@ -72,7 +79,11 @@ def preparar_pedidos_sip(vendas_base: pd.DataFrame) -> pd.DataFrame:
             ],
             dropna=False,
         )
-        .agg(valor_vendido_sem_imposto=("valor_vendido_sem_imposto", "sum"))
+        .agg(
+            valor_vendido_sem_imposto=("valor_vendido_sem_imposto", "sum"),
+            valor_sem_nota_sem_imposto=("valor_sem_nota_sem_imposto", "sum"),
+            valor_pedido_sem_imposto=("valor_pedido_sem_imposto", "sum"),
+        )
         .reset_index()
     )
     agrupado["categoria"] = agrupado.apply(categorizar_pedido, axis=1)
@@ -159,7 +170,7 @@ def calcular_indicadores_sip(
         "pedidos_sem_nota": int(len(sem_nota)),
         "pedidos_cancelados": int(len(cancelados)),
         "valor_pedidos_faturados": float(faturados["valor_vendido_sem_imposto"].sum()) if not faturados.empty else 0.0,
-        "valor_sem_nota": float(sem_nota["valor_vendido_sem_imposto"].sum()) if not sem_nota.empty else 0.0,
+        "valor_sem_nota": float(sem_nota["valor_sem_nota_sem_imposto"].sum()) if not sem_nota.empty else 0.0,
         "valor_cancelado": float(cancelados["valor_vendido_sem_imposto"].sum()) if not cancelados.empty else 0.0,
         "linhas_venda_usadas": int(len(vendas_metricas)),
         "linhas_pedidos_usados": int(len(pedidos)),
