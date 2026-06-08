@@ -872,6 +872,10 @@ def _extrair_alvo(
         erros_cnpj: list[str] = []
         for posicao, candidato in enumerate(cnpjs_candidatos, start=1):
             cnpj = candidato
+            if posicao > 1:
+                if callable(log_fn):
+                    log_fn(f"UF {uf}: resetando tela de selecao antes do proximo CNPJ.")
+                driver.get("https://www.mercadofarma.com.br/selecionar-loja")
             if estado is not None:
                 estado["current_cnpj"] = cnpj
             if callable(log_fn):

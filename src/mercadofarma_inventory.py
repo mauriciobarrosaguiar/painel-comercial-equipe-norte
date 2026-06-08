@@ -213,21 +213,24 @@ def selecionar_cnpj_catalogo(driver: WebDriver, cnpj: str, log_fn: Optional[Call
 
     safe_click(driver, item)
     time.sleep(2)
-    msg_vinculo = _mensagem_sem_vinculo(driver)
-    if msg_vinculo:
-        raise TimeoutException(f"CNPJ {cnpj}: {msg_vinculo}")
 
     _emit(log_fn, "Etapa catalogo: abrindo Catalogo A a Z")
-    click_first(
-        driver,
-        [
-            (By.XPATH, "//a[contains(., 'Catálogo A a Z') ]"),
-            (By.XPATH, "//*[normalize-space()='Catálogo A a Z']"),
-            (By.XPATH, "//a[contains(., 'Catalogo A a Z') ]"),
-        ],
-        timeout=40,
-        desc="Catalogo A a Z",
-    )
+    try:
+        click_first(
+            driver,
+            [
+                (By.XPATH, "//a[contains(., 'Catálogo A a Z') ]"),
+                (By.XPATH, "//*[normalize-space()='Catálogo A a Z']"),
+                (By.XPATH, "//a[contains(., 'Catalogo A a Z') ]"),
+            ],
+            timeout=15,
+            desc="Catalogo A a Z",
+        )
+    except Exception as exc:
+        msg_vinculo = _mensagem_sem_vinculo(driver)
+        if msg_vinculo:
+            raise TimeoutException(f"CNPJ {cnpj}: {msg_vinculo}") from exc
+        raise
     wait_visible(driver, [(By.NAME, "term")], timeout=30, desc="campo de busca do catalogo")
     _emit(log_fn, "Catalogo carregado.")
 
