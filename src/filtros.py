@@ -106,13 +106,44 @@ def filtrar_busca(df: pd.DataFrame, termo: str, colunas: list[str] | None = None
     return df[mascara].copy()
 
 
-def filtrar_vendas_operacionais(vendas: pd.DataFrame, clientes_filtrados: pd.DataFrame, filtros: dict[str, object]) -> pd.DataFrame:
+def filtrar_vendas_operacionais(
+    vendas: pd.DataFrame,
+    clientes_filtrados: pd.DataFrame,
+    filtros: dict[str, object],
+    aplicar_status: bool = False,
+) -> pd.DataFrame:
     if vendas.empty:
         return vendas.copy()
-    inicio = pd.Timestamp(filtros.get("inicio"))
-    fim = pd.Timestamp(filtros.get("fim"))
-    base = filtrar_periodo_faturamento(vendas, inicio, fim, apenas_faturados=False)
-    base = _aplicar_filtro_status(base, str(filtros.get("status_modo") or ""), filtros.get("status") or [])
+    inicio = pd.Timestamp(filtros.get("inicio")).normalize()
+    fim = pd.Timestamp(filtros.get("fim")).normalize() + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
+    base = vendas.copy()
+
+    data_faturamento = _datas_faturamento(base)
+    fallback_data_pedido = pd.Series(pd.NaT, index=base.index)
+    data_pedido = pd.to_datetime(
+        base["data_base"] if "data_base" in base.columns else base.get("data_do_pedido", fallback_data_pedido),
+        errors="coerce",
+    )
+    status = (
+        base["status_normalizado"].fillna("").astype(str)
+        if "status_normalizado" in base.columns
+        else pd.Series("", index=base.index)
+    )
+    if "pedido_sem_nota" in base.columns:
+        pedido_sem_nota = base["pedido_sem_nota"].fillna(False).astype(bool)
+    else:
+        nota_vazia = (
+            base["nota_fiscal"].fillna("").astype(str).str.strip().eq("")
+            if "nota_fiscal" in base.columns
+            else pd.Series(False, index=base.index)
+        )
+        pedido_sem_nota = nota_vazia & status.ne(STATUS_CANCELADO)
+    usar_data_pedido = pedido_sem_nota | status.eq(STATUS_CANCELADO) | data_faturamento.isna()
+    datas_operacionais = data_faturamento.where(~usar_data_pedido, data_pedido)
+    base = base[(datas_operacionais >= inicio) & (datas_operacionais <= fim)].copy()
+
+    if aplicar_status:
+        base = _aplicar_filtro_status(base, str(filtros.get("status_modo") or ""), filtros.get("status") or [])
 
     for coluna_filtro, coluna_base in [
         ("distribuidora", "distribuidora"),
