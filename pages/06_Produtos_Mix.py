@@ -1,0 +1,58 @@
+from __future__ import annotations
+
+import streamlit as st
+
+from src.calculos import formatar_tabela_metricas, gerar_resultado_produto
+from src.filtros import aplicar_filtros_globais, filtrar_busca
+from src.layout import dataframe_com_download, titulo_pagina
+from src.loader import carregar_dados_tratados
+from src.tratamento import TIPO_SEM_CLASSIFICACAO
+
+
+dados = carregar_dados_tratados()
+vendas = dados["vendas"]
+clientes = dados["clientes"]
+produtos_mix = dados["produtos_mix"]
+
+titulo_pagina(
+    "Produtos / Mix",
+    "Classificação dos produtos e desempenho por tipo de mix.",
+)
+
+vendas_f, clientes_f, _ = aplicar_filtros_globais(vendas, clientes, chave="produtos")
+
+sem_classificacao = vendas_f[vendas_f["tipo_mix"].eq(TIPO_SEM_CLASSIFICACAO)]["ean_limpo"].nunique()
+if produtos_mix.empty:
+    st.warning("Produtos ainda sem classificação. Cadastre o mix para liberar leituras confiáveis de prioritários e lançamentos.")
+elif sem_classificacao:
+    st.warning(f"Existem {sem_classificacao} EANs vendidos sem classificação. Corrija o template de produtos mix.")
+
+resultado = gerar_resultado_produto(vendas_f, produtos_mix)
+tipos = ["PRIORITARIO", "LANCAMENTO", "LINHA", "COMBATE", TIPO_SEM_CLASSIFICACAO]
+tipo_sel = st.multiselect("Filtrar tipo de mix", tipos, default=[])
+if tipo_sel:
+    resultado = resultado[resultado["tipo_mix"].isin(tipo_sel)].copy()
+
+busca = st.text_input("Buscar EAN ou produto")
+resultado = filtrar_busca(resultado, busca, ["ean", "produto", "tipo_mix"])
+
+colunas = [
+    "ean",
+    "produto",
+    "tipo_mix",
+    "ol_total",
+    "quantidade_vendida",
+    "clientes_compradores",
+    "consultores_que_venderam",
+]
+renomear = {
+    "ean": "EAN",
+    "produto": "Produto",
+    "tipo_mix": "Tipo mix",
+    "ol_total": "OL Sem Combate",
+    "quantidade_vendida": "Quantidade vendida",
+    "clientes_compradores": "Clientes compradores",
+    "consultores_que_venderam": "Consultores que venderam",
+}
+tabela = formatar_tabela_metricas(resultado[colunas]).rename(columns=renomear)
+dataframe_com_download(tabela, "produtos_mix", altura=520)

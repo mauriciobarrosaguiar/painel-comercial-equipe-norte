@@ -1,0 +1,242 @@
+from __future__ import annotations
+
+import pandas as pd
+import streamlit as st
+
+from src.datas import hoje_brasilia
+from src.tratamento import STATUS_CANCELADO, STATUS_FATURADOS
+
+
+def _opcoes(series: pd.Series) -> list[str]:
+    if series is None or series.empty:
+        return []
+    valores = series.dropna().astype(str).str.strip()
+    valores = valores[valores.ne("")]
+    return sorted(valores.unique().tolist())
+
+
+def _opcoes_consultores(clientes: pd.DataFrame, vendas: pd.DataFrame) -> list[str]:
+    fontes: list[pd.Series] = []
+    if "nome_rep" in clientes.columns:
+        fontes.append(clientes["nome_rep"])
+    if "consultor" in vendas.columns:
+        fontes.append(vendas["consultor"])
+    if not fontes:
+        return []
+    valores = pd.concat(fontes, ignore_index=True).dropna().astype(str).str.strip()
+    valores = valores[valores.ne("")]
+    valores = valores[~valores.str.contains(r"\s*/\s*", regex=True, na=False)]
+    normalizados: dict[str, str] = {}
+    for valor in valores:
+        chave = " ".join(valor.upper().split())
+        normalizados.setdefault(chave, valor)
+    return [normalizados[chave] for chave in sorted(normalizados)]
+
+
+def _meses_disponiveis(datas: pd.Series) -> list[str]:
+    datas_validas = pd.to_datetime(datas, errors="coerce").dropna()
+    if datas_validas.empty:
+        return []
+    periodos = datas_validas.dt.to_period("M").astype(str)
+    return sorted(periodos.unique().tolist())
+
+
+def _rotulo_mes(ano_mes: str) -> str:
+    try:
+        periodo = pd.Period(ano_mes, freq="M")
+    except Exception:
+        return str(ano_mes)
+    return periodo.to_timestamp().strftime("%m/%Y")
+
+
+def _limites_mes(ano_mes: str) -> tuple[pd.Timestamp, pd.Timestamp]:
+    periodo = pd.Period(ano_mes, freq="M")
+    return periodo.start_time.normalize(), periodo.end_time.normalize()
+
+
+def filtrar_busca(df: pd.DataFrame, termo: str, colunas: list[str] | None = None) -> pd.DataFrame:
+    if df.empty or not termo:
+        return df
+    termo_norm = termo.strip().lower()
+    colunas_busca = colunas or df.select_dtypes(include="object").columns.tolist()
+    mascara = pd.Series(False, index=df.index)
+    for coluna in colunas_busca:
+        if coluna in df.columns:
+            mascara = mascara | df[coluna].astype(str).str.lower().str.contains(termo_norm, na=False, regex=False)
+    return df[mascara].copy()
+
+
+def filtrar_vendas_operacionais(vendas: pd.DataFrame, clientes_filtrados: pd.DataFrame, filtros: dict[str, object]) -> pd.DataFrame:
+    if vendas.empty:
+        return vendas.copy()
+    base = vendas.copy()
+    inicio = pd.Timestamp(filtros.get("inicio"))
+    fim = pd.Timestamp(filtros.get("fim"))
+    base = base[
+        (pd.to_datetime(base["data_base"], errors="coerce") >= inicio)
+        & (pd.to_datetime(base["data_base"], errors="coerce") <= fim + pd.Timedelta(days=1) - pd.Timedelta(seconds=1))
+    ].copy()
+
+    for coluna_filtro, coluna_base in [
+        ("distribuidora", "distribuidora"),
+        ("uf", "uf"),
+        ("cidade", "cidade"),
+        ("grupo_sip", "grupo_sip"),
+        ("tipo_mix", "tipo_mix"),
+    ]:
+        valores = filtros.get(coluna_filtro) or []
+        if valores:
+            base = base[base[coluna_base].isin(valores)].copy()
+
+    consultores = filtros.get("consultor") or []
+    if consultores:
+        base = base[base["consultor"].isin(consultores)].copy()
+
+    if clientes_filtrados is not None and not clientes_filtrados.empty:
+        cnpjs = set(clientes_filtrados["cnpj_limpo"].dropna().astype(str))
+        if cnpjs:
+            base = base[base["cnpj_limpo"].astype(str).isin(cnpjs)].copy()
+
+    return base
+
+
+def aplicar_filtros_globais(
+    vendas: pd.DataFrame,
+    clientes: pd.DataFrame,
+    chave: str = "global",
+    mostrar_tipo_mix: bool = True,
+) -> tuple[pd.DataFrame, pd.DataFrame, dict[str, object]]:
+    vendas_filtradas = vendas.copy()
+    clientes_filtrados = clientes.copy()
+
+    datas = pd.to_datetime(vendas_filtradas.get("data_base"), errors="coerce")
+    data_min = datas.min()
+    data_max = datas.max()
+    hoje_data = hoje_brasilia()
+    hoje = pd.Timestamp(hoje_data)
+    inicio_mes_atual = pd.Timestamp(hoje_data.replace(day=1))
+    if pd.isna(data_min) or pd.isna(data_max):
+        data_min = inicio_mes_atual
+        data_max = hoje
+
+    meses_base = _meses_disponiveis(datas)
+    mes_atual = hoje.to_period("M").strftime("%Y-%m")
+    meses_opcoes = sorted(set(meses_base + [mes_atual]))
+    mes_padrao = mes_atual if mes_atual in meses_base else (meses_base[-1] if meses_base else mes_atual)
+    indice_mes = meses_opcoes.index(mes_padrao) if mes_padrao in meses_opcoes else 0
+
+    with st.sidebar.expander("Filtros comerciais", expanded=False):
+        mes_referencia = st.selectbox(
+            "Mês",
+            meses_opcoes,
+            index=indice_mes,
+            format_func=_rotulo_mes,
+            key=f"{chave}_mes_referencia",
+        )
+        inicio_mes, fim_mes = _limites_mes(mes_referencia)
+        fim_padrao = min(fim_mes, hoje) if mes_referencia == mes_atual else fim_mes
+        inicio_data = st.date_input(
+            "Data inicial",
+            value=inicio_mes.date(),
+            min_value=inicio_mes.date(),
+            max_value=fim_mes.date(),
+            format="DD/MM/YYYY",
+            key=f"{chave}_inicio_{mes_referencia}",
+        )
+        fim_data = st.date_input(
+            "Data final",
+            value=fim_padrao.date(),
+            min_value=inicio_mes.date(),
+            max_value=fim_mes.date(),
+            format="DD/MM/YYYY",
+            key=f"{chave}_fim_{mes_referencia}",
+        )
+        inicio, fim = pd.Timestamp(inicio_data), pd.Timestamp(fim_data)
+        if fim < inicio:
+            inicio, fim = fim, inicio
+
+        consultores = _opcoes_consultores(clientes_filtrados, vendas_filtradas)
+        consultor_sel = st.multiselect("Consultor", consultores, key=f"{chave}_consultor")
+
+        distribuidoras = _opcoes(vendas_filtradas.get("distribuidora", pd.Series(dtype=str)))
+        distribuidora_sel = st.multiselect("Distribuidora", distribuidoras, key=f"{chave}_distribuidora")
+
+        ufs = _opcoes(
+            pd.concat(
+                [clientes_filtrados.get("uf", pd.Series(dtype=str)), vendas_filtradas.get("uf", pd.Series(dtype=str))],
+                ignore_index=True,
+            )
+        )
+        uf_sel = st.multiselect("UF", ufs, key=f"{chave}_uf")
+
+        cidades = _opcoes(clientes_filtrados.get("cidade", pd.Series(dtype=str)))
+        cidade_sel = st.multiselect("Cidade", cidades, key=f"{chave}_cidade")
+
+        grupos = _opcoes(clientes_filtrados.get("grupo_sip", pd.Series(dtype=str)))
+        grupo_sel = st.multiselect("Redes", grupos, key=f"{chave}_grupo")
+
+        status_modo = st.radio(
+            "Status do pedido",
+            ["Apenas faturados", "Todos exceto cancelados", "Selecionar status"],
+            index=0,
+            key=f"{chave}_status_modo",
+        )
+        status_sel: list[str] = []
+        if status_modo == "Selecionar status":
+            status_opcoes = _opcoes(vendas_filtradas.get("status_normalizado", pd.Series(dtype=str)))
+            status_sel = st.multiselect("Escolha os status", status_opcoes, default=STATUS_FATURADOS, key=f"{chave}_status_sel")
+
+        tipo_mix_sel: list[str] = []
+        if mostrar_tipo_mix:
+            tipos = _opcoes(vendas_filtradas.get("tipo_mix", pd.Series(dtype=str)))
+            tipo_mix_sel = st.multiselect("Tipo de mix", tipos, key=f"{chave}_tipo_mix")
+
+    vendas_filtradas = vendas_filtradas[
+        (pd.to_datetime(vendas_filtradas["data_base"], errors="coerce") >= inicio)
+        & (pd.to_datetime(vendas_filtradas["data_base"], errors="coerce") <= fim + pd.Timedelta(days=1) - pd.Timedelta(seconds=1))
+    ].copy()
+
+    if status_modo == "Apenas faturados":
+        vendas_filtradas = vendas_filtradas[vendas_filtradas["status_normalizado"].isin(STATUS_FATURADOS)].copy()
+    elif status_modo == "Todos exceto cancelados":
+        vendas_filtradas = vendas_filtradas[vendas_filtradas["status_normalizado"].ne(STATUS_CANCELADO)].copy()
+    elif status_sel:
+        vendas_filtradas = vendas_filtradas[vendas_filtradas["status_normalizado"].isin(status_sel)].copy()
+
+    if consultor_sel:
+        clientes_filtrados = clientes_filtrados[clientes_filtrados["nome_rep"].isin(consultor_sel)].copy()
+        vendas_filtradas = vendas_filtradas[vendas_filtradas["consultor"].isin(consultor_sel)].copy()
+    if distribuidora_sel:
+        vendas_filtradas = vendas_filtradas[vendas_filtradas["distribuidora"].isin(distribuidora_sel)].copy()
+    if uf_sel:
+        clientes_filtrados = clientes_filtrados[clientes_filtrados["uf"].isin(uf_sel)].copy()
+        vendas_filtradas = vendas_filtradas[vendas_filtradas["uf"].isin(uf_sel)].copy()
+    if cidade_sel:
+        clientes_filtrados = clientes_filtrados[clientes_filtrados["cidade"].isin(cidade_sel)].copy()
+        vendas_filtradas = vendas_filtradas[vendas_filtradas["cidade"].isin(cidade_sel)].copy()
+    if grupo_sel:
+        clientes_filtrados = clientes_filtrados[clientes_filtrados["grupo_sip"].isin(grupo_sel)].copy()
+        vendas_filtradas = vendas_filtradas[vendas_filtradas["grupo_sip"].isin(grupo_sel)].copy()
+    if tipo_mix_sel:
+        vendas_filtradas = vendas_filtradas[vendas_filtradas["tipo_mix"].isin(tipo_mix_sel)].copy()
+
+    cnpjs_permitidos = set(clientes_filtrados["cnpj_limpo"].dropna().astype(str))
+    if cnpjs_permitidos:
+        vendas_filtradas = vendas_filtradas[vendas_filtradas["cnpj_limpo"].isin(cnpjs_permitidos)].copy()
+
+    filtros = {
+        "inicio": inicio,
+        "fim": fim,
+        "consultor": consultor_sel,
+        "distribuidora": distribuidora_sel,
+        "uf": uf_sel,
+        "cidade": cidade_sel,
+        "grupo_sip": grupo_sel,
+        "status_modo": status_modo,
+        "status": status_sel,
+        "tipo_mix": tipo_mix_sel,
+        "mes_referencia": mes_referencia,
+        "periodo_mes_completo": inicio.normalize() == inicio_mes and fim.normalize() == fim_mes,
+        "usar_metas_historicas": pd.Period(mes_referencia, freq="M") < hoje.to_period("M"),
+    }
+    return vendas_filtradas, clientes_filtrados, filtros

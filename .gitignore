@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+.codex-remote-attachments/
+.streamlit/secrets.toml
+data/*.xlsx
+data/metas_comerciais.json
+data/sip_grupos.json
+data/_persistencia_local/
+.app_storage/
+data/bussola_login.local.json
+data/bussola_extracoes/
+downloads_bussola/
+*.log
