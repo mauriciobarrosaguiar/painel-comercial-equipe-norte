@@ -100,7 +100,98 @@ def _meta_cnpjs_padrao(acao: dict) -> float:
     return _numero(acao.get("meta_cnpjs_padrao", 12), 12)
 
 
-def _metas_consultores_salvas(acao: dict) -> dict[str, dict[str, float]]:
+def _parse_metas_produtos(valor: object) -> list[dict[str, object]]:
+    if valor is None:
+        return []
+    if isinstance(valor, float) and pd.isna(valor):
+        return []
+
+    itens_brutos: list[object] = []
+    if isinstance(valor, list):
+        itens_brutos = valor
+    elif isinstance(valor, dict):
+        itens_brutos = [
+            {"ean": ean, **meta} if isinstance(meta, dict) else {"ean": ean, "meta_unidades": meta}
+            for ean, meta in valor.items()
+        ]
+
+    metas: list[dict[str, object]] = []
+    vistos: set[str] = set()
+    for item in itens_brutos:
+        if not isinstance(item, dict):
+            continue
+        ean = normalizar_ean(item.get("ean") or item.get("ean_limpo") or "")
+        if not ean or ean in vistos:
+            continue
+        vistos.add(ean)
+        metas.append(
+            {
+                "ean": ean,
+                "produto": str(item.get("produto", "") or "").strip(),
+                "meta_unidades": _numero(item.get("meta_unidades", 0), 0),
+            }
+        )
+    return metas
+
+
+def _metas_produtos_por_ean(metas_produtos: object) -> dict[str, float]:
+    return {
+        str(item["ean"]): _numero(item.get("meta_unidades", 0), 0)
+        for item in _parse_metas_produtos(metas_produtos)
+        if str(item.get("ean", "") or "").strip()
+    }
+
+
+def _produtos_meta_editor(eans: list[str], mapa_produtos: dict[str, dict[str, str]]) -> list[dict[str, str]]:
+    produtos: list[dict[str, str]] = []
+    for ean in eans:
+        ean_limpo = normalizar_ean(ean)
+        if not ean_limpo:
+            continue
+        info = mapa_produtos.get(ean_limpo, {})
+        produtos.append(
+            {
+                "ean": ean_limpo,
+                "produto": str(info.get("produto", "") or "").strip(),
+            }
+        )
+    return produtos
+
+
+def _coluna_meta_produto(item: dict[str, str]) -> str:
+    return f"meta_produto__{normalizar_ean(item.get('ean', ''))}"
+
+
+def _label_meta_produto(item: dict[str, str]) -> str:
+    produto = str(item.get("produto", "") or "").strip()
+    return produto or f"EAN {normalizar_ean(item.get('ean', ''))}"
+
+
+def _resumo_metas_produtos(produtos: pd.DataFrame, metas_produtos: object) -> str:
+    metas = _metas_produtos_por_ean(metas_produtos)
+    if not metas:
+        return ""
+
+    nomes: dict[str, str] = {}
+    if {"ean", "produto"}.issubset(produtos.columns):
+        for _, linha in produtos[["ean", "produto"]].drop_duplicates("ean").iterrows():
+            ean = normalizar_ean(linha.get("ean", ""))
+            produto = str(linha.get("produto", "") or "").strip()
+            if ean and produto:
+                nomes[ean] = produto
+
+    partes = []
+    for ean in produtos.get("ean", pd.Series(dtype=str)).astype(str):
+        meta = metas.get(ean)
+        if meta is None:
+            continue
+        partes.append(f"{nomes.get(ean, ean)}: {_numero_inteiro(meta)}")
+    if len(partes) > 4:
+        return "; ".join(partes[:4]) + f" +{len(partes) - 4}"
+    return "; ".join(partes)
+
+
+def _metas_consultores_salvas(acao: dict) -> dict[str, dict[str, object]]:
     metas = acao.get("metas_consultores", [])
     itens: list[dict] = []
     if isinstance(metas, dict):
@@ -114,7 +205,7 @@ def _metas_consultores_salvas(acao: dict) -> dict[str, dict[str, float]]:
     elif isinstance(metas, list):
         itens = [item for item in metas if isinstance(item, dict)]
 
-    saida: dict[str, dict[str, float]] = {}
+    saida: dict[str, dict[str, object]] = {}
     for item in itens:
         consultor = str(item.get("consultor", "") or "").strip()
         if not consultor or not bool(item.get("ativo", True)):
@@ -122,20 +213,30 @@ def _metas_consultores_salvas(acao: dict) -> dict[str, dict[str, float]]:
         saida[consultor] = {
             "meta_unidades": _numero(item.get("meta_unidades", _meta_unidades_padrao(acao)), 0),
             "meta_cnpjs": _numero(item.get("meta_cnpjs", _meta_cnpjs_padrao(acao)), 0),
+            "metas_produtos": _parse_metas_produtos(item.get("metas_produtos", [])),
         }
     return saida
 
 
-def _metas_consultores_dataframe(consultores: pd.DataFrame, meta_unidades: float, meta_cnpjs: float) -> pd.DataFrame:
+def _metas_consultores_dataframe(
+    consultores: pd.DataFrame,
+    meta_unidades: float,
+    meta_cnpjs: float,
+    produtos_meta: list[dict[str, str]] | None = None,
+) -> pd.DataFrame:
     nomes = consultores["consultor"].dropna().astype(str).str.strip().drop_duplicates().tolist() if not consultores.empty else []
-    return pd.DataFrame(
-        {
-            "ativo": True,
-            "consultor": nomes,
-            "meta_unidades": float(meta_unidades),
-            "meta_cnpjs": float(meta_cnpjs),
-        }
-    )
+    dados: dict[str, object] = {
+        "ativo": [True] * len(nomes),
+        "consultor": nomes,
+    }
+    produtos_meta = produtos_meta or []
+    if produtos_meta:
+        for item in produtos_meta:
+            dados[_coluna_meta_produto(item)] = [float(meta_unidades)] * len(nomes)
+    else:
+        dados["meta_unidades"] = [float(meta_unidades)] * len(nomes)
+    dados["meta_cnpjs"] = [float(meta_cnpjs)] * len(nomes)
+    return pd.DataFrame(dados)
 
 
 def _produtos_da_acao(acao: dict, catalogo: pd.DataFrame) -> pd.DataFrame:
@@ -291,9 +392,17 @@ def _tabela_consultor_molecula(acao: dict, resultado: pd.DataFrame, produtos: pd
     return pd.DataFrame(linhas)
 
 
-def _metricas_unidades_consultor(vendas_consultor: pd.DataFrame, produtos: pd.DataFrame, meta_unidades: float, tipo_meta: str) -> dict[str, object]:
+def _metricas_unidades_consultor(
+    vendas_consultor: pd.DataFrame,
+    produtos: pd.DataFrame,
+    meta_unidades: float,
+    tipo_meta: str,
+    metas_produtos: object | None = None,
+) -> dict[str, object]:
     quantidade_total = float(vendas_consultor["quantidade_base"].sum()) if not vendas_consultor.empty else 0.0
-    if meta_unidades <= 0:
+    metas_por_ean = _metas_produtos_por_ean(metas_produtos)
+    tem_meta_produtos = any(meta > 0 for meta in metas_por_ean.values())
+    if meta_unidades <= 0 and not tem_meta_produtos:
         return {
             "quantidade_meta_base": quantidade_total,
             "quantidade_vendida": quantidade_total,
@@ -306,18 +415,33 @@ def _metricas_unidades_consultor(vendas_consultor: pd.DataFrame, produtos: pd.Da
 
     if tipo_meta == "POR_PRODUTO" and not produtos.empty:
         por_ean = vendas_consultor.groupby("ean_limpo")["quantidade_base"].sum() if not vendas_consultor.empty else pd.Series(dtype=float)
-        quantidades = [float(por_ean.get(ean, 0) or 0) for ean in produtos["ean"].astype(str)]
-        produtos_batidos = sum(1 for quantidade in quantidades if quantidade >= meta_unidades)
-        falta = sum(max(meta_unidades - quantidade, 0) for quantidade in quantidades)
-        atingimento = min((quantidade / meta_unidades for quantidade in quantidades), default=0.0)
+        alvos = []
+        for ean in produtos["ean"].astype(str):
+            meta_ean = metas_por_ean.get(ean, meta_unidades)
+            if meta_ean <= 0:
+                continue
+            alvos.append((float(por_ean.get(ean, 0) or 0), meta_ean))
+        if not alvos:
+            return {
+                "quantidade_meta_base": quantidade_total,
+                "quantidade_vendida": quantidade_total,
+                "falta_unidades": 0.0,
+                "atingimento_unidades": 0.0,
+                "produtos_batidos": 0,
+                "produtos_meta": 0,
+                "unidades_ok": True,
+            }
+        produtos_batidos = sum(1 for quantidade, meta_ean in alvos if quantidade >= meta_ean)
+        falta = sum(max(meta_ean - quantidade, 0) for quantidade, meta_ean in alvos)
+        atingimento = min((quantidade / meta_ean for quantidade, meta_ean in alvos), default=0.0)
         return {
-            "quantidade_meta_base": min(quantidades) if quantidades else 0.0,
+            "quantidade_meta_base": min((quantidade for quantidade, _ in alvos), default=0.0),
             "quantidade_vendida": quantidade_total,
             "falta_unidades": float(falta),
             "atingimento_unidades": float(atingimento),
             "produtos_batidos": int(produtos_batidos),
-            "produtos_meta": int(len(quantidades)),
-            "unidades_ok": produtos_batidos == len(quantidades),
+            "produtos_meta": int(len(alvos)),
+            "unidades_ok": produtos_batidos == len(alvos),
         }
 
     return {
@@ -341,9 +465,11 @@ def _tabela_meta_consultores(acao: dict, vendas_filtradas: pd.DataFrame, produto
                 "SETOR",
                 "CONSULTOR",
                 "META QTD",
+                "METAS POR PRODUTO",
                 "QTD VENDIDA",
                 "QTD BASE META",
                 "FALTA QTD",
+                "PRODUTOS BATIDOS",
                 "META CNPJ",
                 "CNPJS POSITIVADOS",
                 "FALTA CNPJ",
@@ -367,18 +493,20 @@ def _tabela_meta_consultores(acao: dict, vendas_filtradas: pd.DataFrame, produto
         metas = metas_individuais.get(nome, {})
         meta_unidades = _numero(metas.get("meta_unidades", meta_unidades_padrao), 0)
         meta_cnpjs = _numero(metas.get("meta_cnpjs", meta_cnpjs_padrao), 0)
+        metas_produtos = metas.get("metas_produtos", [])
         vendas_consultor = vendas_filtradas[vendas_filtradas["consultor"].astype(str).eq(nome)].copy() if not vendas_filtradas.empty else pd.DataFrame()
         comprou = vendas_consultor[
             (pd.to_numeric(vendas_consultor.get("quantidade_base", 0), errors="coerce").fillna(0) > 0)
             | (pd.to_numeric(vendas_consultor.get("valor_vendido_sem_imposto", 0), errors="coerce").fillna(0) > 0)
         ].copy() if not vendas_consultor.empty else pd.DataFrame()
         cnpjs = int(comprou["cnpj_limpo"].nunique()) if not comprou.empty and "cnpj_limpo" in comprou.columns else 0
-        unidades = _metricas_unidades_consultor(vendas_consultor, produtos, meta_unidades, tipo_meta)
+        unidades = _metricas_unidades_consultor(vendas_consultor, produtos, meta_unidades, tipo_meta, metas_produtos)
         falta_cnpjs = int(max(meta_cnpjs - cnpjs, 0)) if meta_cnpjs > 0 else 0
         ating_cnpjs = (cnpjs / meta_cnpjs) if meta_cnpjs > 0 else 0.0
         cnpjs_ok = cnpjs >= meta_cnpjs if meta_cnpjs > 0 else True
         atingimentos = []
-        if meta_unidades > 0:
+        meta_unidades_ativa = meta_unidades > 0 or (tipo_meta == "POR_PRODUTO" and int(unidades.get("produtos_meta", 0) or 0) > 0)
+        if meta_unidades_ativa:
             atingimentos.append(float(unidades["atingimento_unidades"]))
         if meta_cnpjs > 0:
             atingimentos.append(float(ating_cnpjs))
@@ -389,9 +517,11 @@ def _tabela_meta_consultores(acao: dict, vendas_filtradas: pd.DataFrame, produto
                 "SETOR": str(consultor["setor"]),
                 "CONSULTOR": nome,
                 "META QTD": int(round(meta_unidades)),
+                "METAS POR PRODUTO": _resumo_metas_produtos(produtos, metas_produtos),
                 "QTD VENDIDA": int(round(float(unidades["quantidade_vendida"]))),
                 "QTD BASE META": int(round(float(unidades["quantidade_meta_base"]))),
                 "FALTA QTD": int(round(float(unidades["falta_unidades"]))),
+                "PRODUTOS BATIDOS": f"{int(unidades.get('produtos_batidos', 0) or 0)}/{int(unidades.get('produtos_meta', 0) or 0)}",
                 "META CNPJ": int(round(meta_cnpjs)),
                 "CNPJS POSITIVADOS": cnpjs,
                 "FALTA CNPJ": falta_cnpjs,
@@ -457,6 +587,7 @@ with st.expander("Cadastrar nova ação", expanded=not bool(acoes)):
     eans_manuais = st.text_area("EANs adicionais, se precisar", placeholder="Um EAN por linha")
     eans_preview = _montar_eans_preview(selecionados, eans_manuais, catalogo)
     mapa_produtos = _produto_por_ean(catalogo)
+    produtos_meta_preview = _produtos_meta_editor(eans_preview, mapa_produtos)
     familias_preview = []
     for ean in eans_preview:
         info = mapa_produtos.get(ean, {})
@@ -482,30 +613,57 @@ with st.expander("Cadastrar nova ação", expanded=not bool(acoes)):
     metas_consultores = []
     if escopo_meta == "POR_CONSULTOR":
         consultores_edicao = _consultores_base(clientes, vendas)
-        metas_base = _metas_consultores_dataframe(consultores_edicao, meta_unidades_padrao, meta_cnpjs_padrao)
+        usar_metas_produtos = tipo_meta_unidades == "POR_PRODUTO" and bool(produtos_meta_preview)
+        metas_base = _metas_consultores_dataframe(
+            consultores_edicao,
+            meta_unidades_padrao,
+            meta_cnpjs_padrao,
+            produtos_meta_preview if usar_metas_produtos else [],
+        )
+        column_config = {
+            "ativo": st.column_config.CheckboxColumn("Usar", default=True),
+            "consultor": st.column_config.TextColumn("Consultor"),
+        }
+        if usar_metas_produtos:
+            for item in produtos_meta_preview:
+                column_config[_coluna_meta_produto(item)] = st.column_config.NumberColumn(
+                    f"Meta (Un.) {_label_meta_produto(item)}",
+                    min_value=0,
+                    step=1,
+                )
+        else:
+            column_config["meta_unidades"] = st.column_config.NumberColumn("Meta unidades", min_value=0, step=1)
+        column_config["meta_cnpjs"] = st.column_config.NumberColumn("Meta CNPJs", min_value=0, step=1)
         metas_editadas = st.data_editor(
             metas_base,
             use_container_width=True,
             hide_index=True,
             disabled=["consultor"],
-            column_config={
-                "ativo": st.column_config.CheckboxColumn("Usar", default=True),
-                "consultor": st.column_config.TextColumn("Consultor"),
-                "meta_unidades": st.column_config.NumberColumn("Meta unidades", min_value=0, step=1),
-                "meta_cnpjs": st.column_config.NumberColumn("Meta CNPJs", min_value=0, step=1),
-            },
-            key="foco_metas_consultores",
+            column_config=column_config,
+            key=f"foco_metas_consultores_{tipo_meta_unidades}_{'_'.join(eans_preview)}",
         )
-        metas_consultores = [
-            {
-                "consultor": str(linha.get("consultor", "") or "").strip(),
-                "ativo": bool(linha.get("ativo", True)),
-                "meta_unidades": _numero(linha.get("meta_unidades", meta_unidades_padrao), 0),
+        for _, linha in metas_editadas.iterrows():
+            consultor = str(linha.get("consultor", "") or "").strip()
+            if not bool(linha.get("ativo", True)) or not consultor:
+                continue
+            meta_unidades_linha = _numero(linha.get("meta_unidades", meta_unidades_padrao), 0)
+            item_meta = {
+                "consultor": consultor,
+                "ativo": True,
+                "meta_unidades": meta_unidades_linha,
                 "meta_cnpjs": _numero(linha.get("meta_cnpjs", meta_cnpjs_padrao), 0),
             }
-            for _, linha in metas_editadas.iterrows()
-            if bool(linha.get("ativo", True)) and str(linha.get("consultor", "") or "").strip()
-        ]
+            if usar_metas_produtos:
+                item_meta["metas_produtos"] = [
+                    {
+                        "ean": normalizar_ean(produto.get("ean", "")),
+                        "produto": str(produto.get("produto", "") or "").strip(),
+                        "meta_unidades": _numero(linha.get(_coluna_meta_produto(produto), meta_unidades_linha), 0),
+                    }
+                    for produto in produtos_meta_preview
+                    if normalizar_ean(produto.get("ean", ""))
+                ]
+            metas_consultores.append(item_meta)
 
     objetivo_padrao = int(meta_unidades_padrao)
     objetivos_molecula = {familia: int(meta_unidades_padrao) for familia in familias_preview}
