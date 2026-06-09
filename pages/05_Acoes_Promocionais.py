@@ -59,7 +59,56 @@ def _catalogo_produtos(produtos_mix: pd.DataFrame, vendas: pd.DataFrame) -> pd.D
     return base.sort_values(["produto", "ean"]).reset_index(drop=True)
 
 
-def _metas_consultores_json(tabela: pd.DataFrame) -> str:
+def _eans_extra(texto: str) -> list[str]:
+    eans = [normalizar_ean(linha) for linha in str(texto or "").splitlines()]
+    return [ean for ean in eans if ean]
+
+
+def _produtos_meta_editor(produtos_sel: list[str], label_para_produto: dict, eans_extra: list[str]) -> list[dict[str, str]]:
+    produtos: list[dict[str, str]] = []
+    vistos: set[str] = set()
+
+    for label in produtos_sel:
+        item = label_para_produto.get(label, {})
+        ean = normalizar_ean(item.get("ean", ""))
+        if not ean or ean in vistos:
+            continue
+        vistos.add(ean)
+        produtos.append(
+            {
+                "ean": ean,
+                "produto": str(item.get("produto", "") or "").strip(),
+            }
+        )
+
+    for ean in eans_extra:
+        ean_limpo = normalizar_ean(ean)
+        if not ean_limpo or ean_limpo in vistos:
+            continue
+        vistos.add(ean_limpo)
+        produtos.append({"ean": ean_limpo, "produto": ""})
+
+    return produtos
+
+
+def _coluna_meta_produto(item: dict[str, str]) -> str:
+    return f"meta_produto__{normalizar_ean(item.get('ean', ''))}"
+
+
+def _numero_editor(valor: object, padrao: float = 0.0) -> float:
+    try:
+        numero = float(valor if valor is not None else padrao)
+    except (TypeError, ValueError):
+        numero = float(padrao or 0)
+    return 0.0 if pd.isna(numero) else numero
+
+
+def _metas_consultores_json(
+    tabela: pd.DataFrame,
+    produtos_meta: list[dict[str, str]] | None = None,
+    meta_unidades_padrao: float = 0.0,
+    meta_cnpjs_padrao: float = 0.0,
+) -> str:
     if tabela is None or tabela.empty:
         return ""
     base = tabela.copy()
@@ -67,16 +116,36 @@ def _metas_consultores_json(tabela: pd.DataFrame) -> str:
     base = base[base["ativo"]].copy()
     if base.empty:
         return ""
+
+    produtos_meta = produtos_meta or []
+    colunas_produtos = [
+        (item, _coluna_meta_produto(item))
+        for item in produtos_meta
+        if normalizar_ean(item.get("ean", ""))
+    ]
+
     registros = []
     for _, linha in base.iterrows():
-        registros.append(
-            {
-                "consultor": str(linha.get("consultor", "")).strip(),
-                "ativo": True,
-                "meta_unidades": float(linha.get("meta_unidades", 0) or 0),
-                "meta_cnpjs": float(linha.get("meta_cnpjs", 0) or 0),
-            }
-        )
+        consultor = str(linha.get("consultor", "")).strip()
+        if not consultor:
+            continue
+        meta_unidades_linha = _numero_editor(linha.get("meta_unidades", meta_unidades_padrao), meta_unidades_padrao)
+        registro = {
+            "consultor": consultor,
+            "ativo": True,
+            "meta_unidades": meta_unidades_linha,
+            "meta_cnpjs": _numero_editor(linha.get("meta_cnpjs", meta_cnpjs_padrao), meta_cnpjs_padrao),
+        }
+        if colunas_produtos:
+            registro["metas_produtos"] = [
+                {
+                    "ean": normalizar_ean(item.get("ean", "")),
+                    "produto": str(item.get("produto", "") or "").strip(),
+                    "meta_unidades": _numero_editor(linha.get(coluna, meta_unidades_linha), meta_unidades_linha),
+                }
+                for item, coluna in colunas_produtos
+            ]
+        registros.append(registro)
     return json.dumps(registros, ensure_ascii=False)
 
 
@@ -176,6 +245,11 @@ def _status_classe(status: object) -> str:
 
 def _texto_qtd(acao: pd.Series) -> tuple[str, str]:
     meta = float(acao.get("meta_unidades", 0) or 0)
+    if str(acao.get("tipo_meta_unidades", "")).upper() == "POR_PRODUTO":
+        resumo_produtos = str(acao.get("meta_produtos_resumo", "") or "").strip()
+        if resumo_produtos and int(acao.get("produtos_meta", 0) or 0) > 0:
+            valor = f"{int(acao.get('produtos_batidos', 0) or 0)}/{int(acao.get('produtos_meta', 0) or 0)}"
+            return valor, f"Produtos batidos | {resumo_produtos}"
     if meta <= 0:
         return _numero_card(acao.get("quantidade_vendida", 0)), "Sem meta de unidades"
     if str(acao.get("tipo_meta_unidades", "")).upper() == "POR_PRODUTO":
@@ -230,6 +304,7 @@ titulo_pagina("Foco Semanal", "Produtos da ação agrupados por molécula, consu
 
 vendas_f, clientes_f, _ = aplicar_filtros_globais(vendas, clientes, chave="acoes", mostrar_tipo_mix=False)
 consultores = _consultores_disponiveis(clientes_f, vendas_f)
+consultores_cadastro = _consultores_disponiveis(clientes, vendas) or consultores
 catalogo = _catalogo_produtos(produtos_mix, vendas)
 label_para_produto = catalogo.set_index("label").to_dict("index") if not catalogo.empty else {}
 
@@ -241,6 +316,8 @@ with st.expander("Cadastrar nova ação", expanded=acoes.empty):
 
     produtos_sel = st.multiselect("Produtos da ação", options=catalogo["label"].tolist() if not catalogo.empty else [])
     eans_extra_txt = st.text_area("EANs adicionais, se precisar", placeholder="Um EAN por linha")
+    eans_extra_preview = _eans_extra(eans_extra_txt)
+    produtos_meta = _produtos_meta_editor(produtos_sel, label_para_produto, eans_extra_preview)
 
     m1, m2, m3 = st.columns([1, 1, 1.2])
     meta_unidades = m1.number_input("Meta mínima de unidades", min_value=0.0, step=1.0, value=12.0)
@@ -260,33 +337,45 @@ with st.expander("Cadastrar nova ação", expanded=acoes.empty):
     escopo_meta = "POR_CONSULTOR" if escopo_label == "Meta separada por consultor" else "PADRAO"
     metas_editadas = pd.DataFrame()
     if escopo_meta == "POR_CONSULTOR":
-        metas_base = pd.DataFrame(
-            {
-                "ativo": True,
-                "consultor": consultores,
-                "meta_unidades": float(meta_unidades),
-                "meta_cnpjs": float(meta_cnpjs),
-            }
-        )
+        metas_base_dados: dict[str, object] = {
+            "ativo": [True] * len(consultores_cadastro),
+            "consultor": consultores_cadastro,
+        }
+        column_config = {
+            "ativo": st.column_config.CheckboxColumn("Usar", default=True),
+            "consultor": st.column_config.TextColumn("Consultor"),
+        }
+        if tipo_meta == "POR_PRODUTO" and produtos_meta:
+            for item in produtos_meta:
+                coluna_produto = _coluna_meta_produto(item)
+                label_produto = item.get("produto") or f"EAN {item.get('ean', '')}"
+                metas_base_dados[coluna_produto] = [float(meta_unidades)] * len(consultores_cadastro)
+                column_config[coluna_produto] = st.column_config.NumberColumn(
+                    f"Meta (Un.) {label_produto}",
+                    min_value=0,
+                    step=1,
+                )
+        else:
+            metas_base_dados["meta_unidades"] = [float(meta_unidades)] * len(consultores_cadastro)
+            column_config["meta_unidades"] = st.column_config.NumberColumn("Meta unidades", min_value=0, step=1)
+        metas_base_dados["meta_cnpjs"] = [float(meta_cnpjs)] * len(consultores_cadastro)
+        column_config["meta_cnpjs"] = st.column_config.NumberColumn("Meta CNPJs", min_value=0, step=1)
+
+        metas_base = pd.DataFrame(metas_base_dados)
         metas_editadas = st.data_editor(
             metas_base,
             use_container_width=True,
             hide_index=True,
             disabled=["consultor"],
-            column_config={
-                "ativo": st.column_config.CheckboxColumn("Usar", default=True),
-                "consultor": st.column_config.TextColumn("Consultor"),
-                "meta_unidades": st.column_config.NumberColumn("Meta unidades", min_value=0, step=1),
-                "meta_cnpjs": st.column_config.NumberColumn("Meta CNPJs", min_value=0, step=1),
-            },
+            column_config=column_config,
         )
 
     salvar = st.button("Salvar foco semanal", use_container_width=True)
 
     if salvar:
-        eans_extra = [normalizar_ean(linha) for linha in eans_extra_txt.splitlines()]
-        eans_extra = [ean for ean in eans_extra if ean]
+        eans_extra = _eans_extra(eans_extra_txt)
         produtos_df = pd.DataFrame([label_para_produto[label] for label in produtos_sel]) if produtos_sel else pd.DataFrame()
+        produtos_meta_final = _produtos_meta_editor(produtos_sel, label_para_produto, eans_extra)
         erros = []
         if not nome.strip():
             erros.append("Informe o nome da ação.")
@@ -294,7 +383,16 @@ with st.expander("Cadastrar nova ação", expanded=acoes.empty):
             erros.append("A data final precisa ser maior ou igual à data inicial.")
         if produtos_df.empty and not eans_extra:
             erros.append("Selecione pelo menos um produto ou informe EANs adicionais.")
-        meta_consultores = _metas_consultores_json(metas_editadas) if escopo_meta == "POR_CONSULTOR" else ""
+        meta_consultores = (
+            _metas_consultores_json(
+                metas_editadas,
+                produtos_meta_final if tipo_meta == "POR_PRODUTO" else [],
+                float(meta_unidades),
+                float(meta_cnpjs),
+            )
+            if escopo_meta == "POR_CONSULTOR"
+            else ""
+        )
         if escopo_meta == "POR_CONSULTOR" and not meta_consultores:
             erros.append("Marque pelo menos um consultor para a meta separada.")
 
@@ -358,6 +456,7 @@ with st.expander("Detalhes do foco semanal", expanded=False):
         "data_inicio",
         "data_fim",
         "meta_unidades",
+        "meta_produtos_resumo",
         "quantidade_vendida",
         "quantidade_meta_base",
         "falta_unidades",
@@ -380,6 +479,7 @@ with st.expander("Detalhes do foco semanal", expanded=False):
             "data_inicio": "Data início",
             "data_fim": "Data fim",
             "meta_unidades": "Meta unidades",
+            "meta_produtos_resumo": "Metas por produto",
             "quantidade_vendida": "Qtd vendida",
             "quantidade_meta_base": "Qtd usada na meta",
             "falta_unidades": "Falta unidades",

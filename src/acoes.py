@@ -5,7 +5,7 @@ import json
 import numpy as np
 import pandas as pd
 
-from src.tratamento import STATUS_FATURADOS, TIPO_SEM_CLASSIFICACAO
+from src.tratamento import STATUS_FATURADOS, TIPO_SEM_CLASSIFICACAO, normalizar_ean
 
 
 COLUNAS_ANALISE_ACOES = [
@@ -20,6 +20,7 @@ COLUNAS_ANALISE_ACOES = [
     "consultor",
     "status",
     "meta_unidades",
+    "meta_produtos_resumo",
     "meta_cnpjs",
     "tipo_meta_unidades",
     "escopo_meta",
@@ -123,6 +124,79 @@ def _parse_meta_consultores(valor: object) -> list[dict[str, object]]:
     return itens
 
 
+def _parse_metas_produtos(valor: object) -> list[dict[str, object]]:
+    if valor is None:
+        return []
+    if isinstance(valor, float) and pd.isna(valor):
+        return []
+
+    itens_brutos: list[object] = []
+    if isinstance(valor, list):
+        itens_brutos = valor
+    elif isinstance(valor, dict):
+        itens_brutos = [
+            {"ean": ean, **meta} if isinstance(meta, dict) else {"ean": ean, "meta_unidades": meta}
+            for ean, meta in valor.items()
+        ]
+
+    metas: list[dict[str, object]] = []
+    vistos: set[str] = set()
+    for item in itens_brutos:
+        if not isinstance(item, dict):
+            continue
+        ean = normalizar_ean(item.get("ean") or item.get("ean_limpo") or "")
+        if not ean or ean in vistos:
+            continue
+        vistos.add(ean)
+        metas.append(
+            {
+                "ean": ean,
+                "produto": _texto(item.get("produto")),
+                "meta_unidades": _numero(item.get("meta_unidades", 0)),
+            }
+        )
+    return metas
+
+
+def _metas_produtos_por_ean(metas_produtos: object) -> dict[str, float]:
+    return {
+        str(item["ean"]): _numero(item.get("meta_unidades", 0))
+        for item in _parse_metas_produtos(metas_produtos)
+        if _texto(item.get("ean"))
+    }
+
+
+def _numero_resumo(valor: object) -> str:
+    numero = _numero(valor)
+    if abs(numero - round(numero)) < 0.001:
+        return str(int(round(numero)))
+    return f"{numero:.1f}".replace(".", ",")
+
+
+def _resumo_metas_produtos(grupo: pd.DataFrame, eans: list[str], metas_produtos: object) -> str:
+    metas = _metas_produtos_por_ean(metas_produtos)
+    if not metas:
+        return ""
+
+    nomes: dict[str, str] = {}
+    if {"ean_limpo", "produto"}.issubset(grupo.columns):
+        for _, linha in grupo[["ean_limpo", "produto"]].drop_duplicates("ean_limpo").iterrows():
+            ean = _texto(linha.get("ean_limpo"))
+            produto = _texto(linha.get("produto"))
+            if ean and produto:
+                nomes[ean] = produto
+
+    partes = []
+    for ean in eans:
+        if ean not in metas:
+            continue
+        partes.append(f"{nomes.get(ean, ean)}: {_numero_resumo(metas[ean])}")
+
+    if len(partes) > 4:
+        return "; ".join(partes[:4]) + f" +{len(partes) - 4}"
+    return "; ".join(partes)
+
+
 def _metas_consultores(
     grupo: pd.DataFrame,
     vendas: pd.DataFrame,
@@ -152,6 +226,7 @@ def _metas_consultores(
                     "consultor": nome,
                     "meta_unidades": _numero(item.get("meta_unidades", meta_unidades)),
                     "meta_cnpjs": _numero(item.get("meta_cnpjs", meta_cnpjs)),
+                    "metas_produtos": _parse_metas_produtos(item.get("metas_produtos", [])),
                     "agregado": False,
                 }
             )
@@ -164,6 +239,7 @@ def _metas_consultores(
                 "consultor": nome,
                 "meta_unidades": meta_unidades,
                 "meta_cnpjs": meta_cnpjs,
+                "metas_produtos": [],
                 "agregado": False,
             }
             for nome in consultores_linha
@@ -176,12 +252,13 @@ def _metas_consultores(
                 "consultor": nome,
                 "meta_unidades": meta_unidades,
                 "meta_cnpjs": meta_cnpjs,
+                "metas_produtos": [],
                 "agregado": False,
             }
             for nome in permitidos
         ]
 
-    return [{"consultor": "Todos", "meta_unidades": meta_unidades, "meta_cnpjs": meta_cnpjs, "agregado": True}]
+    return [{"consultor": "Todos", "meta_unidades": meta_unidades, "meta_cnpjs": meta_cnpjs, "metas_produtos": [], "agregado": True}]
 
 
 def _chave_grupo(linha: pd.Series) -> str:
@@ -207,9 +284,17 @@ def _vendas_periodo(vendas_produto: pd.DataFrame, data_inicio: pd.Timestamp, dat
     return antes, durante
 
 
-def _metricas_unidades(durante: pd.DataFrame, eans: list[str], meta_unidades: float, tipo_meta: str) -> dict[str, object]:
+def _metricas_unidades(
+    durante: pd.DataFrame,
+    eans: list[str],
+    meta_unidades: float,
+    tipo_meta: str,
+    metas_produtos: object | None = None,
+) -> dict[str, object]:
     quantidade_total = float(durante["quantidade_base"].sum()) if not durante.empty else 0.0
-    if meta_unidades <= 0:
+    metas_por_ean = _metas_produtos_por_ean(metas_produtos)
+    tem_meta_produtos = any(meta > 0 for ean, meta in metas_por_ean.items() if not eans or ean in eans)
+    if meta_unidades <= 0 and not tem_meta_produtos:
         return {
             "quantidade_meta_base": quantidade_total,
             "quantidade_vendida": quantidade_total,
@@ -222,18 +307,33 @@ def _metricas_unidades(durante: pd.DataFrame, eans: list[str], meta_unidades: fl
 
     if tipo_meta == "POR_PRODUTO" and eans:
         qtd_por_ean = durante.groupby("ean_limpo")["quantidade_base"].sum() if not durante.empty else pd.Series(dtype=float)
-        quantidades = [float(qtd_por_ean.get(ean, 0) or 0) for ean in eans]
-        produtos_batidos = sum(1 for qtd in quantidades if qtd >= meta_unidades)
-        falta = sum(max(meta_unidades - qtd, 0) for qtd in quantidades)
-        atingimento = min((qtd / meta_unidades for qtd in quantidades), default=0.0)
+        alvos = []
+        for ean in eans:
+            meta_ean = metas_por_ean.get(ean, meta_unidades)
+            if meta_ean <= 0:
+                continue
+            alvos.append((float(qtd_por_ean.get(ean, 0) or 0), meta_ean))
+        if not alvos:
+            return {
+                "quantidade_meta_base": quantidade_total,
+                "quantidade_vendida": quantidade_total,
+                "falta_unidades": 0.0,
+                "atingimento_unidades": 0.0,
+                "produtos_batidos": 0,
+                "produtos_meta": 0,
+                "unidades_ok": True,
+            }
+        produtos_batidos = sum(1 for qtd, meta_ean in alvos if qtd >= meta_ean)
+        falta = sum(max(meta_ean - qtd, 0) for qtd, meta_ean in alvos)
+        atingimento = min((qtd / meta_ean for qtd, meta_ean in alvos), default=0.0)
         return {
-            "quantidade_meta_base": min(quantidades) if quantidades else 0.0,
+            "quantidade_meta_base": min((qtd for qtd, _ in alvos), default=0.0),
             "quantidade_vendida": quantidade_total,
             "falta_unidades": float(falta),
             "atingimento_unidades": float(atingimento),
             "produtos_batidos": produtos_batidos,
-            "produtos_meta": len(eans),
-            "unidades_ok": produtos_batidos == len(eans),
+            "produtos_meta": len(alvos),
+            "unidades_ok": produtos_batidos == len(alvos),
         }
 
     atingimento = quantidade_total / meta_unidades
@@ -260,10 +360,12 @@ def _linha_analise(
     agregado = bool(meta.get("agregado", False))
     meta_unidades = _numero(meta.get("meta_unidades", primeira.get("meta_unidades", 0)))
     meta_cnpjs = _numero(meta.get("meta_cnpjs", primeira.get("meta_cnpjs", 0)))
+    metas_produtos = meta.get("metas_produtos", [])
     tipo_meta = _texto(primeira.get("tipo_meta_unidades", "SOMANDO")).upper() or "SOMANDO"
     vendas_consultor = vendas_produto if agregado else vendas_produto[vendas_produto["consultor"].astype(str).eq(consultor)].copy()
     antes, durante = _vendas_periodo(vendas_consultor, data_inicio, data_fim)
     eans = _unicos_texto(grupo.get("ean_limpo", pd.Series(dtype=str)))
+    meta_produtos_resumo = _resumo_metas_produtos(grupo, eans, metas_produtos)
 
     ol_antes = float(antes["valor_vendido_sem_imposto"].sum()) if not antes.empty else 0.0
     ol_durante = float(durante["valor_vendido_sem_imposto"].sum()) if not durante.empty else 0.0
@@ -271,13 +373,14 @@ def _linha_analise(
     comprou = durante[(durante["quantidade_base"].fillna(0) > 0) | (durante["valor_vendido_sem_imposto"].fillna(0) > 0)].copy()
     cnpjs = int(comprou["cnpj_limpo"].nunique()) if not comprou.empty else 0
 
-    unidades = _metricas_unidades(durante, eans, meta_unidades, tipo_meta)
+    unidades = _metricas_unidades(durante, eans, meta_unidades, tipo_meta, metas_produtos)
     falta_cnpjs = int(max(meta_cnpjs - cnpjs, 0)) if meta_cnpjs > 0 else 0
     ating_cnpjs = (cnpjs / meta_cnpjs) if meta_cnpjs > 0 else 0.0
     cnpjs_ok = cnpjs >= meta_cnpjs if meta_cnpjs > 0 else True
-    metas_ativas = meta_unidades > 0 or meta_cnpjs > 0
+    meta_unidades_ativa = meta_unidades > 0 or (tipo_meta == "POR_PRODUTO" and int(unidades.get("produtos_meta", 0) or 0) > 0)
+    metas_ativas = meta_unidades_ativa or meta_cnpjs > 0
     atingimentos = []
-    if meta_unidades > 0:
+    if meta_unidades_ativa:
         atingimentos.append(float(unidades["atingimento_unidades"]))
     if meta_cnpjs > 0:
         atingimentos.append(float(ating_cnpjs))
@@ -308,6 +411,7 @@ def _linha_analise(
         "consultor": consultor,
         "status": _texto(primeira.get("status")),
         "meta_unidades": meta_unidades,
+        "meta_produtos_resumo": meta_produtos_resumo,
         "meta_cnpjs": meta_cnpjs,
         "tipo_meta_unidades": tipo_meta,
         "escopo_meta": _texto(primeira.get("escopo_meta", "PADRAO")) or "PADRAO",
@@ -383,6 +487,11 @@ def analisar_acoes_promocionais(
                         "data_fim": data_fim,
                         "consultor": _texto(meta.get("consultor")) or "Todos",
                         "meta_unidades": _numero(meta.get("meta_unidades", primeira.get("meta_unidades", 0))),
+                        "meta_produtos_resumo": _resumo_metas_produtos(
+                            grupo,
+                            _unicos_texto(grupo.get("ean_limpo", pd.Series(dtype=str))),
+                            meta.get("metas_produtos", []),
+                        ),
                         "meta_cnpjs": _numero(meta.get("meta_cnpjs", primeira.get("meta_cnpjs", 0))),
                         "tipo_meta_unidades": _texto(primeira.get("tipo_meta_unidades", "SOMANDO")) or "SOMANDO",
                         "escopo_meta": _texto(primeira.get("escopo_meta", "PADRAO")) or "PADRAO",
