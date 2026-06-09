@@ -9,7 +9,12 @@
   "erro": "",
   "etapa": "concluido",
   "traceback": "",
-  "iniciado_em": "2026-06-08T09:02:35.369938-03:00",
-  "finalizado_em": "2026-06-08T09:36:16.027778-03:00",
+  "iniciado_em": "2026-06-09T09:08:12.504815-03:00",
+  "finalizado_em": "2026-06-09T09:42:18.305310-03:00",
+  "cnpjs_candidatos": [
+    "22183946000173",
+    "22183946000335",
+    "22183946000416"
+  ],
   "arquivo": "data/mercadofarma/parciais/mercadofarma_MT.csv"
 }
