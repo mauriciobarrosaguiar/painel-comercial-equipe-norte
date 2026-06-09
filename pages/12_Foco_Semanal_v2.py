@@ -22,9 +22,6 @@ ajuste_vendas = '''    base = base[
         & base["status_normalizado"].ne(STATUS_CANCELADO)
     ].copy()
 
-    # Correção do Foco Semanal:
-    # 1) Venda lançada sem nota entra pela quantidade solicitada.
-    # 2) Visão de atendimento fica separada pela quantidade atendida/faturada.
     for coluna in [
         "quantidade_base",
         "quantidade_solicitada",
@@ -105,16 +102,7 @@ source = source.replace(alvo_agreg, ajuste_agreg, 1)
 inserir_funcao = '''
 
 def _atendimento_formatado(resultado: pd.DataFrame) -> pd.DataFrame:
-    colunas = [
-        "Consultor",
-        "Molécula",
-        "EAN",
-        "Produto",
-        "Qtd vendida/pedida",
-        "Qtd atendida",
-        "Qtd pendente",
-        "% atendido",
-    ]
+    colunas = ["Consultor", "Molécula", "EAN", "Produto", "Qtd vendida/pedida", "Qtd atendida", "Qtd pendente", "% atendido"]
     if resultado.empty:
         return pd.DataFrame(columns=colunas)
     tabela = resultado.copy()
@@ -122,28 +110,21 @@ def _atendimento_formatado(resultado: pd.DataFrame) -> pd.DataFrame:
         if coluna not in tabela.columns:
             tabela[coluna] = 0
         tabela[coluna] = pd.to_numeric(tabela[coluna], errors="coerce").fillna(0)
-    tabela["percentual_atendido"] = np.where(
-        tabela["quantidade_vendida"].gt(0),
-        tabela["quantidade_atendida"] / tabela["quantidade_vendida"],
-        0,
-    )
+    tabela["percentual_atendido"] = np.where(tabela["quantidade_vendida"].gt(0), tabela["quantidade_atendida"] / tabela["quantidade_vendida"], 0)
     tabela = tabela.sort_values(["consultor", "molecula", "produto"]).reset_index(drop=True)
-    tabela["quantidade_vendida"] = tabela["quantidade_vendida"].map(lambda valor: f"{float(valor):,.0f}".replace(",", "."))
-    tabela["quantidade_atendida"] = tabela["quantidade_atendida"].map(lambda valor: f"{float(valor):,.0f}".replace(",", "."))
-    tabela["quantidade_pendente"] = tabela["quantidade_pendente"].map(lambda valor: f"{float(valor):,.0f}".replace(",", "."))
+    for coluna in ["quantidade_vendida", "quantidade_atendida", "quantidade_pendente"]:
+        tabela[coluna] = tabela[coluna].map(lambda valor: f"{float(valor):,.0f}".replace(",", "."))
     tabela["percentual_atendido"] = tabela["percentual_atendido"].apply(formatar_percentual)
-    return tabela.rename(
-        columns={
-            "consultor": "Consultor",
-            "molecula": "Molécula",
-            "ean": "EAN",
-            "produto": "Produto",
-            "quantidade_vendida": "Qtd vendida/pedida",
-            "quantidade_atendida": "Qtd atendida",
-            "quantidade_pendente": "Qtd pendente",
-            "percentual_atendido": "% atendido",
-        }
-    )[colunas]
+    return tabela.rename(columns={
+        "consultor": "Consultor",
+        "molecula": "Molécula",
+        "ean": "EAN",
+        "produto": "Produto",
+        "quantidade_vendida": "Qtd vendida/pedida",
+        "quantidade_atendida": "Qtd atendida",
+        "quantidade_pendente": "Qtd pendente",
+        "percentual_atendido": "% atendido",
+    })[colunas]
 
 
 def _incluir_atendimento_consultor(tabela: pd.DataFrame, vendas_filtradas: pd.DataFrame) -> pd.DataFrame:
@@ -216,25 +197,15 @@ if alvo_tabela not in source:
     raise RuntimeError("Nao foi possivel adicionar a tabela de atendimento: trecho da tela nao encontrado.")
 source = source.replace(alvo_tabela, ajuste_tabela, 1)
 
-source = source.replace(
-    '    total_valor = float(resultado["valor_vendido"].sum()) if not resultado.empty else 0\n',
-    '    total_valor = float(resultado["valor_vendido"].sum()) if not resultado.empty else 0\n    total_atendido = float(resultado["quantidade_atendida"].sum()) if not resultado.empty and "quantidade_atendida" in resultado.columns else 0\n',
-    1,
-)
-source = source.replace(
-    '    m1, m2, m3, m4 = st.columns(4)\n',
-    '    m1, m2, m3, m4, m5 = st.columns(5)\n',
-    1,
-)
-source = source.replace(
-    '''    with m2:
+source = source.replace('    total_valor = float(resultado["valor_vendido"].sum()) if not resultado.empty else 0\n', '    total_valor = float(resultado["valor_vendido"].sum()) if not resultado.empty else 0\n    total_atendido = float(resultado["quantidade_atendida"].sum()) if not resultado.empty and "quantidade_atendida" in resultado.columns else 0\n', 1)
+source = source.replace('    m1, m2, m3, m4 = st.columns(4)\n', '    m1, m2, m3, m4, m5 = st.columns(5)\n', 1)
+source = source.replace('''    with m2:
         card_metrica("Valor vendido", formatar_moeda(total_valor))
     with m3:
         card_metrica("CNPJs positivados", str(total_cnpjs))
     with m4:
         card_metrica("Moléculas na ação", str(moleculas))
-''',
-    '''    with m2:
+''', '''    with m2:
         card_metrica("Quantidade atendida", f"{total_atendido:,.0f}".replace(",", "."))
     with m3:
         card_metrica("Valor vendido", formatar_moeda(total_valor))
@@ -242,8 +213,6 @@ source = source.replace(
         card_metrica("CNPJs positivados", str(total_cnpjs))
     with m5:
         card_metrica("Moléculas na ação", str(moleculas))
-''',
-    1,
-)
+''', 1)
 
 exec(compile(source, str(ORIGINAL), "exec"), {"__name__": "__main__", "__file__": str(ORIGINAL)})
