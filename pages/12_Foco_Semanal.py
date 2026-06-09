@@ -218,6 +218,35 @@ def _metas_consultores_salvas(acao: dict) -> dict[str, dict[str, object]]:
     return saida
 
 
+def _usa_metas_produtos_por_consultor(acao: dict) -> bool:
+    if _tipo_meta_unidades(acao) != "POR_PRODUTO" or _escopo_meta(acao) != "POR_CONSULTOR":
+        return False
+    return any(meta.get("metas_produtos") for meta in _metas_consultores_salvas(acao).values())
+
+
+def _colunas_tabela_meta_consultores(acao: dict) -> list[str]:
+    colunas = ["SETOR", "CONSULTOR"]
+    if not _usa_metas_produtos_por_consultor(acao):
+        colunas.append("META QTD")
+    colunas.extend(
+        [
+            "METAS POR PRODUTO",
+            "QTD VENDIDA",
+            "QTD BASE META",
+            "FALTA QTD",
+            "PRODUTOS BATIDOS",
+            "META CNPJ",
+            "CNPJS POSITIVADOS",
+            "FALTA CNPJ",
+            "ATING. QTD",
+            "ATING. CNPJ",
+            "ATING. GERAL",
+            "STATUS",
+        ]
+    )
+    return colunas
+
+
 def _metas_consultores_dataframe(
     consultores: pd.DataFrame,
     meta_unidades: float,
@@ -456,29 +485,13 @@ def _metricas_unidades_consultor(
 
 
 def _tabela_meta_consultores(acao: dict, vendas_filtradas: pd.DataFrame, produtos: pd.DataFrame, clientes: pd.DataFrame, vendas: pd.DataFrame) -> pd.DataFrame:
+    colunas_saida = _colunas_tabela_meta_consultores(acao)
+    ocultar_meta_qtd = _usa_metas_produtos_por_consultor(acao)
     consultores = _consultores_base(clientes, vendas)
     if consultores.empty and not vendas_filtradas.empty:
         consultores = _consultores_base(pd.DataFrame(), vendas_filtradas)
     if consultores.empty:
-        return pd.DataFrame(
-            columns=[
-                "SETOR",
-                "CONSULTOR",
-                "META QTD",
-                "METAS POR PRODUTO",
-                "QTD VENDIDA",
-                "QTD BASE META",
-                "FALTA QTD",
-                "PRODUTOS BATIDOS",
-                "META CNPJ",
-                "CNPJS POSITIVADOS",
-                "FALTA CNPJ",
-                "ATING. QTD",
-                "ATING. CNPJ",
-                "ATING. GERAL",
-                "STATUS",
-            ]
-        )
+        return pd.DataFrame(columns=colunas_saida)
 
     tipo_meta = _tipo_meta_unidades(acao)
     metas_individuais = _metas_consultores_salvas(acao)
@@ -512,26 +525,26 @@ def _tabela_meta_consultores(acao: dict, vendas_filtradas: pd.DataFrame, produto
             atingimentos.append(float(ating_cnpjs))
         ating_geral = min(atingimentos) if atingimentos else 0.0
         status = "BATIDA" if bool(unidades["unidades_ok"]) and cnpjs_ok and atingimentos else "EM ANDAMENTO"
-        linhas.append(
-            {
-                "SETOR": str(consultor["setor"]),
-                "CONSULTOR": nome,
-                "META QTD": int(round(meta_unidades)),
-                "METAS POR PRODUTO": _resumo_metas_produtos(produtos, metas_produtos),
-                "QTD VENDIDA": int(round(float(unidades["quantidade_vendida"]))),
-                "QTD BASE META": int(round(float(unidades["quantidade_meta_base"]))),
-                "FALTA QTD": int(round(float(unidades["falta_unidades"]))),
-                "PRODUTOS BATIDOS": f"{int(unidades.get('produtos_batidos', 0) or 0)}/{int(unidades.get('produtos_meta', 0) or 0)}",
-                "META CNPJ": int(round(meta_cnpjs)),
-                "CNPJS POSITIVADOS": cnpjs,
-                "FALTA CNPJ": falta_cnpjs,
-                "ATING. QTD": formatar_percentual(unidades["atingimento_unidades"]),
-                "ATING. CNPJ": formatar_percentual(ating_cnpjs),
-                "ATING. GERAL": formatar_percentual(ating_geral),
-                "STATUS": status,
-            }
-        )
-    return pd.DataFrame(linhas)
+        linha = {
+            "SETOR": str(consultor["setor"]),
+            "CONSULTOR": nome,
+            "METAS POR PRODUTO": _resumo_metas_produtos(produtos, metas_produtos),
+            "QTD VENDIDA": int(round(float(unidades["quantidade_vendida"]))),
+            "QTD BASE META": int(round(float(unidades["quantidade_meta_base"]))),
+            "FALTA QTD": int(round(float(unidades["falta_unidades"]))),
+            "PRODUTOS BATIDOS": f"{int(unidades.get('produtos_batidos', 0) or 0)}/{int(unidades.get('produtos_meta', 0) or 0)}",
+            "META CNPJ": int(round(meta_cnpjs)),
+            "CNPJS POSITIVADOS": cnpjs,
+            "FALTA CNPJ": falta_cnpjs,
+            "ATING. QTD": formatar_percentual(unidades["atingimento_unidades"]),
+            "ATING. CNPJ": formatar_percentual(ating_cnpjs),
+            "ATING. GERAL": formatar_percentual(ating_geral),
+            "STATUS": status,
+        }
+        if not ocultar_meta_qtd:
+            linha["META QTD"] = int(round(meta_unidades))
+        linhas.append(linha)
+    return pd.DataFrame(linhas, columns=colunas_saida)
 
 
 def _detalhe_formatado(resultado: pd.DataFrame) -> pd.DataFrame:
@@ -741,11 +754,16 @@ for acao in acoes:
 
     st.markdown('<div class="consultor-card">', unsafe_allow_html=True)
     st.markdown(f"<div class='consultor-name'>{escape(str(acao.get('nome', 'Foco semanal')))}</div>", unsafe_allow_html=True)
+    if _usa_metas_produtos_por_consultor(acao):
+        texto_meta = "Meta: unidades por produto e consultor"
+    else:
+        texto_meta = (
+            f"Meta: {_numero_inteiro(_meta_unidades_padrao(acao))} unidades "
+            f"({'por produto' if _tipo_meta_unidades(acao) == 'POR_PRODUTO' else 'somando produtos'})"
+        )
     st.caption(
         f"Período: {inicio.strftime('%d/%m/%Y')} até {fim.strftime('%d/%m/%Y')} | "
-        f"Meta: {_numero_inteiro(_meta_unidades_padrao(acao))} unidades "
-        f"({'por produto' if _tipo_meta_unidades(acao) == 'POR_PRODUTO' else 'somando produtos'}) "
-        f"e {_numero_inteiro(_meta_cnpjs_padrao(acao))} CNPJs"
+        f"{texto_meta} | CNPJs: {_numero_inteiro(_meta_cnpjs_padrao(acao))}"
     )
 
     m1, m2, m3, m4 = st.columns(4)
