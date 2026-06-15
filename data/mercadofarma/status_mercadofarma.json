@@ -1,5 +1,5 @@
 {
-  "gerado_em": "2026-06-12T13:15:54.156478-03:00",
+  "gerado_em": "2026-06-15T10:40:02.465064-03:00",
   "arquivo": "data/mercadofarma/mercadofarma_consolidado.csv",
   "arquivo_excel": "data/mercadofarma/mercadofarma_consolidado.xlsx",
   "ufs_atualizadas": [
@@ -9,7 +9,7 @@
     "PI",
     "TO"
   ],
-  "total_linhas": 5428,
+  "total_linhas": 5945,
   "status": [
     {
       "uf": "MA",
@@ -22,8 +22,8 @@
       "erro": "",
       "etapa": "concluido",
       "traceback": "",
-      "iniciado_em": "2026-06-12T12:40:23.828222-03:00",
-      "finalizado_em": "2026-06-12T13:10:54.100165-03:00",
+      "iniciado_em": "2026-06-15T10:05:09.586333-03:00",
+      "finalizado_em": "2026-06-15T10:34:01.795656-03:00",
       "cnpjs_candidatos": [
         "25682880000154",
         "14569758000150",
@@ -271,8 +271,8 @@
       "erro": "",
       "etapa": "concluido",
       "traceback": "",
-      "iniciado_em": "2026-06-12T12:40:28.391245-03:00",
-      "finalizado_em": "2026-06-12T13:15:24.589008-03:00",
+      "iniciado_em": "2026-06-15T10:05:19.193654-03:00",
+      "finalizado_em": "2026-06-15T10:39:22.212322-03:00",
       "cnpjs_candidatos": [
         "22183946000173",
         "22183946000335",
@@ -291,8 +291,8 @@
       "erro": "",
       "etapa": "concluido",
       "traceback": "",
-      "iniciado_em": "2026-06-12T12:40:28.843470-03:00",
-      "finalizado_em": "2026-06-12T13:13:27.834814-03:00",
+      "iniciado_em": "2026-06-15T10:05:14.322098-03:00",
+      "finalizado_em": "2026-06-15T10:38:26.133111-03:00",
       "cnpjs_candidatos": [
         "33659604000101",
         "33659604000799",
@@ -311,8 +311,8 @@
       "erro": "",
       "etapa": "concluido",
       "traceback": "",
-      "iniciado_em": "2026-06-12T12:40:22.336889-03:00",
-      "finalizado_em": "2026-06-12T13:09:16.707785-03:00",
+      "iniciado_em": "2026-06-15T10:05:14.935962-03:00",
+      "finalizado_em": "2026-06-15T10:33:54.216267-03:00",
       "cnpjs_candidatos": [
         "45592059000154",
         "05311730000127",
@@ -536,8 +536,8 @@
       "erro": "",
       "etapa": "concluido",
       "traceback": "",
-      "iniciado_em": "2026-06-12T12:40:27.351982-03:00",
-      "finalizado_em": "2026-06-12T13:06:11.850508-03:00",
+      "iniciado_em": "2026-06-15T10:05:16.152039-03:00",
+      "finalizado_em": "2026-06-15T10:31:00.408521-03:00",
       "cnpjs_candidatos": [
         "34558660000104",
         "34799538000120",
