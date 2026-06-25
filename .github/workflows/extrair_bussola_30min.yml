@@ -1,0 +1,49 @@
+name: Extrair Bussola a cada 30 minutos
+
+on:
+  schedule:
+    - cron: "7,37 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: extrair-bussola-automatica
+  cancel-in-progress: false
+
+jobs:
+  extrair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
+      GITHUB_REPO: mauriciobarrosaguiar/painel-comercial-equipe-norte
+      GITHUB_STORAGE_BRANCH: app-storage
+      GITHUB_SOURCE_BRANCH: main
+      GITHUB_STORE_DIR: .app_storage
+      PERSISTENCE_KEY: ${{ secrets.PERSISTENCE_KEY }}
+
+    steps:
+      - name: Baixar repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Instalar dependencias
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Conferir Chrome
+        run: |
+          google-chrome --version || chromium --version || chromium-browser --version || true
+
+      - name: Rodar extracao automatica da Bussola
+        run: |
+          python jobs/extrair_bussola_auto.py
