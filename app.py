@@ -8,7 +8,7 @@ import sys
 import streamlit as st
 
 
-APP_RUNTIME_VERSION = "2026-06-04-templates-bases"
+APP_RUNTIME_VERSION = "2026-06-26-protecao-bussola-zerada"
 ROOT = Path(__file__).resolve().parent
 
 PAGINAS = [
