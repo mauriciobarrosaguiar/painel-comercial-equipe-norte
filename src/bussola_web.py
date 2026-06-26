@@ -19,22 +19,14 @@ from src.tratamento import (
 )
 
 
-COLUNAS_VALOR_FALLBACK = [
-    "valor_faturado",
-    "total_atendido_sem_imposto",
-    "valor_total_solicitado_sem_imposto",
-    "valor_total_solicitado_com_imposto",
-    "total_atendido_com_imposto",
-]
-
 ALIASES_BUSSOLA = {
     "status_pedido": ["STATUS", "STATUS DO PEDIDO", "SITUACAO DO PEDIDO", "SITUAÇÃO DO PEDIDO"],
     "nota_fiscal": ["NF", "NOTA", "NOTA FISCAL", "NUMERO NF", "NÚMERO NF"],
     "pedido_id": ["PEDIDO", "ID PEDIDO", "NUMERO PEDIDO", "NÚMERO PEDIDO", "NUMERO DO PEDIDO", "NÚMERO DO PEDIDO"],
-    "data_do_pedido": ["DATA", "DATA PEDIDO", "DATA DE PEDIDO", "DATA DO PEDIDO", "DT PEDIDO"],
+    "data_do_pedido": ["DATA", "DATA PEDIDO", "DATA DE PEDIDO", "DATA DO PEDIDO", "DT PEDIDO", "EMISSAO", "EMISSÃO"],
     "data_de_faturamento": ["DATA FATURAMENTO", "DATA DE FATURAMENTO", "DATA DO FATURAMENTO", "DT FATURAMENTO"],
     "representante": ["REPRESENTANTE", "CONSULTOR", "NOME REP", "NOME REPRESENTANTE"],
-    "cnpj_pdv": ["CNPJ", "CNPJ PDV", "CNPJ DO PDV", "DOCUMENTO PDV"],
+    "cnpj_pdv": ["CNPJ", "CNPJ PDV", "CNPJ DO PDV", "DOCUMENTO PDV", "RAZAO SOCIAL CNPJ", "RAZÃO SOCIAL CNPJ"],
     "centro_distribuicao": ["CENTRO DISTRIBUICAO", "CENTRO DISTRIBUIÇÃO", "DISTRIBUIDORA", "CD"],
     "uf_centro_distribuicao": ["UF CENTRO DISTRIBUICAO", "UF CENTRO DISTRIBUIÇÃO", "UF CD"],
     "ean": ["EAN", "CODIGO DE BARRAS", "CÓDIGO DE BARRAS", "COD BARRAS", "GTIN"],
@@ -46,11 +38,11 @@ ALIASES_BUSSOLA = {
     "quantidade_cancelada": ["QTD CANCELADA", "QUANTIDADE CANCELADA"],
     "preco_unitario_com_imposto": ["PRECO UNITARIO COM IMPOSTO", "PREÇO UNITÁRIO COM IMPOSTO"],
     "preco_unitario_sem_imposto": ["PRECO UNITARIO SEM IMPOSTO", "PREÇO UNITÁRIO SEM IMPOSTO", "PRECO SEM IMPOSTO", "PREÇO SEM IMPOSTO"],
-    "valor_total_solicitado_com_imposto": ["VALOR TOTAL SOLICITADO COM IMPOSTO", "TOTAL SOLICITADO COM IMPOSTO"],
+    "valor_total_solicitado_com_imposto": ["VALOR TOTAL SOLICITADO COM IMPOSTO", "TOTAL SOLICITADO COM IMPOSTO", "TOTAL SOLIC"],
     "valor_total_solicitado_sem_imposto": ["VALOR TOTAL SOLICITADO SEM IMPOSTO", "TOTAL SOLICITADO SEM IMPOSTO"],
     "total_atendido_sem_imposto": ["TOTAL ATENDIDO SEM IMPOSTO", "VALOR ATENDIDO SEM IMPOSTO"],
     "total_atendido_com_imposto": ["TOTAL ATENDIDO COM IMPOSTO", "VALOR ATENDIDO COM IMPOSTO"],
-    "valor_faturado": ["VALOR FATURADO", "FATURADO", "TOTAL FATURADO", "VALOR TOTAL FATURADO", "VALOR FATURADO SEM IMPOSTO"],
+    "valor_faturado": ["VALOR FATURADO", "TOTAL FATURADO", "VALOR TOTAL FATURADO", "VALOR FATURADO SEM IMPOSTO", "TOTAL FAT"],
 }
 
 
@@ -70,65 +62,50 @@ def _aplicar_aliases_bussola(df: pd.DataFrame) -> pd.DataFrame:
     return garantir_colunas(base, COLUNAS_BUSSOLA)
 
 
-def _serie_valor_fallback(base: pd.DataFrame) -> pd.Series:
-    valores = pd.Series(0.0, index=base.index, dtype=float)
-    for coluna in COLUNAS_VALOR_FALLBACK:
-        if coluna not in base.columns:
-            continue
-        serie = base[coluna].apply(converter_numero).astype(float)
-        valores = valores.where(valores.gt(0), serie)
-
-    if "quantidade_faturada" in base.columns and "preco_unitario_sem_imposto" in base.columns:
-        qtd = base["quantidade_faturada"].apply(converter_numero).astype(float)
-        preco = base["preco_unitario_sem_imposto"].apply(converter_numero).astype(float)
-        calculado = qtd * preco
-        valores = valores.where(valores.gt(0), calculado)
-
-    if "quantidade_atendida" in base.columns and "preco_unitario_sem_imposto" in base.columns:
-        qtd = base["quantidade_atendida"].apply(converter_numero).astype(float)
-        preco = base["preco_unitario_sem_imposto"].apply(converter_numero).astype(float)
-        calculado = qtd * preco
-        valores = valores.where(valores.gt(0), calculado)
-
-    return valores.fillna(0.0).astype(float)
-
-
 def _preparar_exportacao_para_painel(df: pd.DataFrame, origem: str) -> pd.DataFrame:
     if df is None or df.empty:
         raise RuntimeError(f"{origem}: a extração não retornou linhas. A base anterior foi preservada.")
 
     base = _aplicar_aliases_bussola(df)
-    base["valor_faturado"] = _serie_valor_fallback(base)
 
-    if "quantidade_faturada" in base.columns and "quantidade_atendida" in base.columns:
-        qtd_fat = base["quantidade_faturada"].apply(converter_numero).astype(float)
-        qtd_at = base["quantidade_atendida"].apply(converter_numero).astype(float)
-        base["quantidade_faturada"] = qtd_fat.where(qtd_fat.gt(0), qtd_at)
+    # Regra principal: o painel deve calcular faturamento somente pela coluna valor_faturado.
+    # Não usar Total Atendido, Total Solicitado, Valor Bruto ou quantidade x preço como fallback.
+    base["valor_faturado"] = base["valor_faturado"].apply(converter_numero).astype(float)
 
-    if "data_de_faturamento" in base.columns and "data_do_pedido" in base.columns:
-        data_fat = serie_data(base["data_de_faturamento"])
-        data_ped = serie_data(base["data_do_pedido"])
-        sem_faturamento = data_fat.isna() & data_ped.notna()
-        base.loc[sem_faturamento, "data_de_faturamento"] = base.loc[sem_faturamento, "data_do_pedido"]
+    for coluna in [
+        "quantidade_solicitada",
+        "quantidade_atendida",
+        "quantidade_faturada",
+        "quantidade_cancelada",
+        "preco_unitario_com_imposto",
+        "preco_unitario_sem_imposto",
+        "desconto_digitado",
+        "desconto_aplicado_em_nota",
+        "valor_total_solicitado_com_imposto",
+        "valor_total_solicitado_sem_imposto",
+        "total_atendido_sem_imposto",
+        "total_atendido_com_imposto",
+    ]:
+        if coluna in base.columns:
+            base[coluna] = base[coluna].apply(converter_numero).astype(float)
 
     base["pedido_id"] = base["pedido_id"].apply(normalizar_texto)
     base["cnpj_pdv"] = base["cnpj_pdv"].apply(normalizar_texto)
     base["ean"] = base["ean"].apply(normalizar_texto)
     base["produto"] = base["produto"].apply(normalizar_texto)
 
-    sem_valor = int(base["valor_faturado"].fillna(0).le(0).sum())
     com_valor = int(base["valor_faturado"].fillna(0).gt(0).sum())
-    datas_validas = int(serie_data(base["data_de_faturamento"]).notna().sum())
+    datas_pedido_validas = int(serie_data(base["data_do_pedido"]).notna().sum())
     pedidos_validos = int(base["pedido_id"].astype(str).str.strip().ne("").sum())
 
     if com_valor <= 0:
         raise RuntimeError(
-            f"{origem}: a extração retornou {len(base)} linhas, mas todos os valores ficaram zerados. "
-            "Isso normalmente indica mudança de coluna/formato no CSV da Bússola. A base anterior foi preservada."
+            f"{origem}: a extração retornou {len(base)} linhas, mas a coluna valor_faturado veio toda zerada. "
+            "A base anterior foi preservada."
         )
-    if datas_validas <= 0:
+    if datas_pedido_validas <= 0:
         raise RuntimeError(
-            f"{origem}: a extração retornou {len(base)} linhas, mas nenhuma data válida foi encontrada. "
+            f"{origem}: a extração retornou {len(base)} linhas, mas nenhuma data de pedido/emissão válida foi encontrada. "
             "A base anterior foi preservada."
         )
     if pedidos_validos <= 0:
@@ -136,9 +113,6 @@ def _preparar_exportacao_para_painel(df: pd.DataFrame, origem: str) -> pd.DataFr
             f"{origem}: a extração retornou {len(base)} linhas, mas nenhum pedido válido foi encontrado. "
             "A base anterior foi preservada."
         )
-
-    if sem_valor > 0:
-        base["alerta_linha_sem_valor"] = base["valor_faturado"].fillna(0).le(0)
 
     return base.reset_index(drop=True)
 
