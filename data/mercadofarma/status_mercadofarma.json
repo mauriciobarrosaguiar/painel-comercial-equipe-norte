@@ -1,5 +1,5 @@
 {
-  "gerado_em": "2026-07-10T13:33:53.676790-03:00",
+  "gerado_em": "2026-07-10T15:16:03.077889-03:00",
   "arquivo": "data/mercadofarma/mercadofarma_consolidado.csv",
   "arquivo_excel": "data/mercadofarma/mercadofarma_consolidado.xlsx",
   "ufs_atualizadas": [
@@ -8,7 +8,7 @@
     "PA",
     "TO"
   ],
-  "total_linhas": 6054,
+  "total_linhas": 6061,
   "status": [
     {
       "uf": "MA",
@@ -333,8 +333,8 @@
       "erro": "",
       "etapa": "concluido",
       "traceback": "",
-      "iniciado_em": "2026-07-10T12:58:21.715721-03:00",
-      "finalizado_em": "2026-07-10T13:25:08.869295-03:00",
+      "iniciado_em": "2026-07-10T14:48:17.549473-03:00",
+      "finalizado_em": "2026-07-10T15:15:24.449467-03:00",
       "cnpjs_candidatos": [
         "34558660000104",
         "34799538000120",
