@@ -8,7 +8,7 @@ import sys
 import streamlit as st
 
 
-APP_RUNTIME_VERSION = "2026-06-26-valor-faturado-emissao"
+APP_RUNTIME_VERSION = "2026-07-17-fuso-brasilia-fixo"
 ROOT = Path(__file__).resolve().parent
 
 PAGINAS = [
