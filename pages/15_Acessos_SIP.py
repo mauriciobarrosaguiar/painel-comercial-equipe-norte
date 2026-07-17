@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import date, timedelta
+import os
 
 import streamlit as st
 
@@ -9,7 +10,13 @@ from src.layout import titulo_pagina
 from src.sip_store import atualizar_acesso_publico_sip, carregar_sips, normalizar_grupo_sip
 
 
-APP_PUBLIC_URL = "https://painelequipeale.streamlit.app/"
+def _url_publica_sip() -> str:
+    try:
+        configurada = str(st.secrets.get("PUBLIC_SIP_URL", "") or "").strip()
+    except Exception:
+        configurada = ""
+    configurada = configurada or str(os.environ.get("PUBLIC_SIP_URL", "") or "").strip()
+    return (configurada or "https://painelequipeale-sip.streamlit.app/").rstrip("/") + "/"
 
 
 titulo_pagina("Acessos SIP", "Controle os links externos compartilhados com cada cliente.")
@@ -57,10 +64,10 @@ if tem_expiracao:
         key=f"acesso_expira_{grupo['id']}",
     )
 
-link_relativo = f"?sip={grupo['id']}"
-link_completo = f"{APP_PUBLIC_URL}{link_relativo}"
+link_completo = f"{_url_publica_sip()}?sip={grupo['id']}"
 st.markdown("#### Link atual")
 st.code(link_completo, language="text")
+st.caption("O link usa o aplicativo público separado. O painel interno pode permanecer privado.")
 
 c1, c2 = st.columns(2)
 if c1.button("Salvar regras de acesso", width="stretch", key=f"salvar_acesso_{grupo['id']}"):
