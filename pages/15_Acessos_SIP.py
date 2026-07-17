@@ -9,6 +9,9 @@ from src.layout import titulo_pagina
 from src.sip_store import atualizar_acesso_publico_sip, carregar_sips, normalizar_grupo_sip
 
 
+APP_PUBLIC_URL = "https://painelequipeale.streamlit.app/"
+
+
 titulo_pagina("Acessos SIP", "Controle os links externos compartilhados com cada cliente.")
 
 grupos = [normalizar_grupo_sip(grupo) for grupo in carregar_sips()]
@@ -55,8 +58,9 @@ if tem_expiracao:
     )
 
 link_relativo = f"?sip={grupo['id']}"
+link_completo = f"{APP_PUBLIC_URL}{link_relativo}"
 st.markdown("#### Link atual")
-st.code(link_relativo, language="text")
+st.code(link_completo, language="text")
 
 c1, c2 = st.columns(2)
 if c1.button("Salvar regras de acesso", width="stretch", key=f"salvar_acesso_{grupo['id']}"):
@@ -88,6 +92,6 @@ if c2.button(
     st.rerun()
 
 if ativo:
-    st.link_button("Abrir visão externa da SIP", link_relativo, width="stretch")
+    st.link_button("Abrir visão externa da SIP", link_completo, width="stretch")
 else:
     st.info("O acesso está desativado. Ative e salve para liberar o link.")
