@@ -8,7 +8,7 @@ import sys
 import streamlit as st
 
 
-APP_RUNTIME_VERSION = "2026-07-17-menu-seguranca-sip"
+APP_RUNTIME_VERSION = "2026-07-17-corrige-css-visivel"
 ROOT = Path(__file__).resolve().parent
 
 PAGINAS_POR_AREA = {
@@ -52,34 +52,66 @@ def _layout():
     return importlib.import_module("src.layout")
 
 
+def _neutralizar_css_markdown_problematico(layout) -> None:
+    """Impede que o bloco CSS complementar seja interpretado como texto pelo Markdown."""
+    if hasattr(layout, "_aplicar_css_responsivo"):
+        layout._aplicar_css_responsivo = lambda: None
+
+
 def _aplicar_ajustes_mobile() -> None:
     st.markdown(
-        """
-        <style>
-        @media (max-width: 640px) {
-            div[data-testid="stHorizontalBlock"] {
-                flex-wrap: wrap !important;
-                gap: .65rem !important;
-            }
-            div[data-testid="stHorizontalBlock"] > div[data-testid="stColumn"] {
-                min-width: calc(50% - .4rem) !important;
-                width: calc(50% - .4rem) !important;
-                flex: 1 1 calc(50% - .4rem) !important;
-            }
-            [data-testid="stSidebar"] .stSelectbox,
-            [data-testid="stSidebar"] .stRadio {
-                margin-bottom: .35rem !important;
-            }
-        }
-        @media (max-width: 430px) {
-            div[data-testid="stHorizontalBlock"] > div[data-testid="stColumn"] {
-                min-width: 100% !important;
-                width: 100% !important;
-                flex-basis: 100% !important;
-            }
-        }
-        </style>
-        """,
+        """<style>
+@media (max-width: 992px) {
+    .block-container {
+        padding-top: 1.4rem !important;
+        padding-left: 1rem !important;
+        padding-right: 1rem !important;
+    }
+    .page-title { font-size: 1.5rem !important; }
+}
+@media (max-width: 640px) {
+    .block-container {
+        padding-top: 1rem !important;
+        padding-left: .65rem !important;
+        padding-right: .65rem !important;
+    }
+    .page-title { font-size: 1.25rem !important; line-height: 1.25 !important; }
+    .norte-subtitle { font-size: .85rem !important; }
+    div[data-testid="stHorizontalBlock"] {
+        flex-wrap: wrap !important;
+        gap: .65rem !important;
+    }
+    div[data-testid="stHorizontalBlock"] > div[data-testid="stColumn"] {
+        min-width: calc(50% - .4rem) !important;
+        width: calc(50% - .4rem) !important;
+        flex: 1 1 calc(50% - .4rem) !important;
+    }
+    [data-testid="stDataFrame"], [data-testid="stTable"] {
+        overflow-x: auto !important;
+    }
+    .stButton > button, .stDownloadButton > button {
+        width: 100% !important;
+        min-height: 44px !important;
+    }
+    [data-testid="stSidebar"] .stSelectbox,
+    [data-testid="stSidebar"] .stRadio {
+        margin-bottom: .35rem !important;
+    }
+}
+@media (max-width: 430px) {
+    div[data-testid="stHorizontalBlock"] > div[data-testid="stColumn"] {
+        min-width: 100% !important;
+        width: 100% !important;
+        flex-basis: 100% !important;
+    }
+}
+@media print {
+    [data-testid="stSidebar"], [data-testid="stToolbar"], header[data-testid="stHeader"] {
+        display: none !important;
+    }
+    .stApp { background: #fff !important; }
+}
+</style>""",
         unsafe_allow_html=True,
     )
 
@@ -87,6 +119,7 @@ def _aplicar_ajustes_mobile() -> None:
 def main() -> None:
     _preparar_runtime()
     layout = _layout()
+    _neutralizar_css_markdown_problematico(layout)
     layout.configurar_pagina()
     _aplicar_ajustes_mobile()
 
