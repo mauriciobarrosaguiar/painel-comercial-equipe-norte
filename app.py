@@ -1,14 +1,12 @@
 from __future__ import annotations
 
-import importlib
 from pathlib import Path
 import runpy
-import sys
 
 import streamlit as st
+import src.layout as layout
 
 
-APP_RUNTIME_VERSION = "2026-07-17-corrige-css-visivel"
 ROOT = Path(__file__).resolve().parent
 
 PAGINAS_POR_AREA = {
@@ -39,21 +37,8 @@ PAGINAS_POR_AREA = {
 }
 
 
-def _preparar_runtime() -> None:
-    if st.session_state.get("_painel_runtime_version") == APP_RUNTIME_VERSION:
-        return
-    for nome in list(sys.modules):
-        if nome.startswith("src.") or nome == "bussola_extrator":
-            sys.modules.pop(nome, None)
-    st.session_state["_painel_runtime_version"] = APP_RUNTIME_VERSION
-
-
-def _layout():
-    return importlib.import_module("src.layout")
-
-
-def _neutralizar_css_markdown_problematico(layout) -> None:
-    """Impede que o bloco CSS complementar seja interpretado como texto pelo Markdown."""
+def _neutralizar_css_markdown_problematico() -> None:
+    """Evita que o CSS complementar antigo seja renderizado como texto."""
     if hasattr(layout, "_aplicar_css_responsivo"):
         layout._aplicar_css_responsivo = lambda: None
 
@@ -117,9 +102,7 @@ def _aplicar_ajustes_mobile() -> None:
 
 
 def main() -> None:
-    _preparar_runtime()
-    layout = _layout()
-    _neutralizar_css_markdown_problematico(layout)
+    _neutralizar_css_markdown_problematico()
     layout.configurar_pagina()
     _aplicar_ajustes_mobile()
 
