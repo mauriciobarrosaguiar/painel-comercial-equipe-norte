@@ -9,7 +9,7 @@ from src.layout import botao_download_excel, card_metrica, dataframe_com_downloa
 from src.loader import carregar_dados_tratados
 from src.mercado_farma import formatar_tabela_mercado, mercado_farma_atual, melhor_preco_por_ean
 from src.sip_calculos import calcular_indicadores_sip
-from src.sip_store import carregar_sips, normalizar_chave_sip, normalizar_grupo_sip
+from src.sip_store import buscar_sip_publica
 from src.tratamento import STATUS_CANCELADO, STATUS_FATURADOS, formatar_data, formatar_moeda, formatar_percentual
 
 
@@ -110,13 +110,11 @@ dados = carregar_dados_tratados()
 vendas = dados["vendas"]
 clientes = dados["clientes"]
 sip_id = str(st.query_params.get("sip", "") or "").strip()
-sip_chave = normalizar_chave_sip(sip_id)
-grupos = [normalizar_grupo_sip(grupo) for grupo in carregar_sips()]
-grupo = next((item for item in grupos if normalizar_chave_sip(item.get("id") or item.get("nome")) == sip_chave), None)
+grupo, erro_acesso = buscar_sip_publica(sip_id)
 
 if not grupo:
     titulo_pagina("Painel SIP")
-    st.error("SIP não encontrada ou link inválido.")
+    st.error(erro_acesso or "SIP não encontrada ou link inválido.")
     st.stop()
 
 titulo_pagina(f"Painel SIP - {grupo['nome']}")
@@ -124,9 +122,9 @@ titulo_pagina(f"Painel SIP - {grupo['nome']}")
 hoje = hoje_brasilia()
 inicio_padrao = hoje.replace(day=1)
 p1, p2, p3 = st.columns(3)
-data_inicial = p1.date_input("Data inicial", value=inicio_padrao, format="DD/MM/YYYY", key=f"pub_sip_inicio_{sip_chave}")
-data_final = p2.date_input("Data final", value=hoje, format="DD/MM/YYYY", key=f"pub_sip_fim_{sip_chave}")
-status_sel = p3.selectbox("Status do pedido", ["Todos", "Faturados", "Sem nota", "Cancelados"], key=f"pub_sip_status_{sip_chave}")
+data_inicial = p1.date_input("Data inicial", value=inicio_padrao, format="DD/MM/YYYY", key=f"pub_sip_inicio_{sip_id}")
+data_final = p2.date_input("Data final", value=hoje, format="DD/MM/YYYY", key=f"pub_sip_fim_{sip_id}")
+status_sel = p3.selectbox("Status do pedido", ["Todos", "Faturados", "Sem nota", "Cancelados"], key=f"pub_sip_status_{sip_id}")
 
 resultado_sip = calcular_indicadores_sip(vendas, clientes, grupo, data_inicial, data_final, status_sel)
 grupo = resultado_sip["grupo"]
@@ -218,74 +216,3 @@ with st.expander(f"Vendas por CNPJ — {cnpjs_com_venda} CNPJs com venda", expan
     dataframe_com_download(detalhe, f"vendas_cnpj_{grupo['id']}", altura=340)
 
 mercado = mercado_farma_atual()
-ufs_sip = sorted({str(uf).upper() for uf in membros_sip["uf"].dropna().astype(str)}) if not membros_sip.empty else []
-mercado_sip = mercado[mercado["uf"].isin(ufs_sip)].copy() if not mercado.empty else mercado
-melhores_base = melhor_preco_por_ean(mercado_sip) if not mercado_sip.empty else pd.DataFrame()
-with st.expander(f"Produtos com preço e estoque — {len(melhores_base)} produtos disponíveis", expanded=False):
-    if mercado_sip.empty:
-        st.info("Ainda não existe base de Mercado Farma para as UFs desta SIP.")
-    else:
-        busca = st.text_input("Buscar produto, EAN ou distribuidora", key=f"pub_sip_busca_{sip_id}")
-        mercado_filtrado = mercado_sip.copy()
-        if busca:
-            termo = busca.strip().lower()
-            mercado_filtrado = mercado_filtrado[
-                mercado_filtrado["produto"].astype(str).str.lower().str.contains(termo, na=False, regex=False)
-                | mercado_filtrado["ean"].astype(str).str.lower().str.contains(termo, na=False, regex=False)
-                | mercado_filtrado["distribuidora"].astype(str).str.lower().str.contains(termo, na=False, regex=False)
-            ].copy()
-
-        melhores = melhor_preco_por_ean(mercado_filtrado)
-        for fatia in [melhores.iloc[i : i + 3] for i in range(0, min(len(melhores), 30), 3)]:
-            cols = st.columns(3)
-            for col, (_, item) in zip(cols, fatia.iterrows()):
-                with col:
-                    produto_card(item)
-
-        e1, e2 = st.columns(2)
-        with e1:
-            botao_download_excel(formatar_tabela_mercado(mercado_filtrado), f"produtos_preco_estoque_{grupo['id']}.xlsx", "Extrair produtos por UF")
-        with e2:
-            botao_download_excel(formatar_tabela_mercado(melhores), f"melhores_precos_{grupo['id']}.xlsx", "Extrair melhores preços")
-
-with st.expander("Histórico de compras — produtos comprados no período", expanded=False):
-    if vendas_sip.empty:
-        st.info("Sem compras no período selecionado.")
-    else:
-        historico = (
-            vendas_sip.groupby(["ean_limpo", "produto", "tipo_mix"], dropna=False)
-            .agg(quantidade=("quantidade_base", "sum"), valor=("valor_vendido_sem_imposto", "sum"))
-            .reset_index()
-            .sort_values("valor", ascending=False)
-        )
-        historico_visual = historico.rename(
-            columns={"ean_limpo": "EAN", "produto": "Produto", "tipo_mix": "Tipo mix", "quantidade": "Quantidade", "valor": "Valor"}
-        )
-        historico_visual["Valor"] = historico_visual["Valor"].apply(formatar_moeda)
-        dataframe_com_download(historico_visual, f"historico_compras_{grupo['id']}", altura=320)
-
-with st.expander("Oportunidades / produtos sugeridos", expanded=False):
-    sem_compra = membros_sip[membros_sip["ol_sem_combate"] <= 0].copy() if not membros_sip.empty else pd.DataFrame()
-    if sem_compra.empty:
-        st.info("Nenhum CNPJ sem compra no período selecionado.")
-    else:
-        sugestoes = sem_compra[["cnpj_limpo", "nome_pdv", "cidade", "uf", "status_comercial"]].rename(
-            columns={"cnpj_limpo": "CNPJ", "nome_pdv": "Cliente", "cidade": "Cidade", "uf": "UF", "status_comercial": "Status"}
-        )
-        dataframe_com_download(sugestoes, f"oportunidades_{grupo['id']}", altura=260)
-
-recados = grupo.get("recados", [])
-if recados:
-    st.subheader("Recados e alinhamentos")
-    for recado in recados:
-        st.markdown(
-            f"""
-            <div class="recado-card">
-                <div class="recado-title">{recado.get('titulo', 'Recado')}</div>
-                <span class="recado-status {classe_status_recado(str(recado.get('status', 'Pendente')))}">{recado.get('status', 'Pendente')}</span>
-                {imagem_recado_html(recado)}
-                <div class="recado-comment">{recado.get('comentario', '')}</div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
