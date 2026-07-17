@@ -2,20 +2,13 @@ from __future__ import annotations
 
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import pandas as pd
 
 
-def _carregar_fuso_brasilia():
-    """Carrega o fuso de Brasília com fallback seguro para ambientes sem base tzdata."""
-    try:
-        return ZoneInfo("America/Sao_Paulo")
-    except ZoneInfoNotFoundError:
-        return timezone(timedelta(hours=-3), name="America/Sao_Paulo")
-
-
-FUSO_BRASILIA = _carregar_fuso_brasilia()
+# Brasília permanece em UTC-3. Usar um fuso fixo evita que o painel dependa
+# da base IANA/tzdata do sistema operacional do Streamlit Cloud durante o boot.
+FUSO_BRASILIA = timezone(timedelta(hours=-3), name="America/Sao_Paulo")
 
 
 def agora_brasilia() -> datetime:
