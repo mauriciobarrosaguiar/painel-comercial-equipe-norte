@@ -626,6 +626,84 @@ def aplicar_css() -> None:
         """,
         unsafe_allow_html=True,
     )
+    _aplicar_css_responsivo()
+
+
+def _aplicar_css_responsivo() -> None:
+    """Regras extras para responsividade em telas menores e acessibilidade."""
+    st.markdown(
+        """
+        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+        <style>
+        /* Acessibilidade: foco visível em elementos interativos */
+        :focus-visible {
+            outline: 3px solid var(--norte-green) !important;
+            outline-offset: 2px !important;
+            border-radius: 6px;
+        }
+
+        /* Hover suave em cards de métrica */
+        .norte-metric {
+            transition: transform .18s ease, box-shadow .18s ease;
+        }
+        .norte-metric:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 24px rgba(13, 59, 42, 0.12);
+        }
+
+        /* Tablet */
+        @media (max-width: 992px) {
+            .block-container {
+                padding-top: 1.4rem !important;
+                padding-left: 1rem !important;
+                padding-right: 1rem !important;
+            }
+            .page-title { font-size: 1.5rem !important; }
+        }
+
+        /* Mobile */
+        @media (max-width: 640px) {
+            .block-container {
+                padding-top: 1rem !important;
+                padding-left: .65rem !important;
+                padding-right: .65rem !important;
+            }
+            .page-title { font-size: 1.25rem !important; line-height: 1.25 !important; }
+            .norte-subtitle { font-size: .85rem !important; }
+
+            /* KPIs empilham verticalmente com melhor espaçamento */
+            .norte-metric {
+                padding: .85rem .95rem !important;
+            }
+            .norte-metric .metric-label { font-size: .72rem !important; }
+            .norte-metric .metric-value { font-size: 1.15rem !important; }
+
+            /* Tabelas com scroll horizontal em vez de estourar o layout */
+            [data-testid="stDataFrame"], [data-testid="stTable"] {
+                overflow-x: auto !important;
+            }
+
+            /* Reduz padding do hero */
+            .norte-hero { padding: .8rem 1rem !important; }
+
+            /* Botões ocupam largura total no mobile para melhor toque */
+            .stButton > button, .stDownloadButton > button {
+                width: 100% !important;
+                min-height: 44px !important;
+            }
+        }
+
+        /* Impressão limpa */
+        @media print {
+            [data-testid="stSidebar"], [data-testid="stToolbar"], header[data-testid="stHeader"] {
+                display: none !important;
+            }
+            .stApp { background: #fff !important; }
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 def ocultar_sidebar_publica() -> None:
