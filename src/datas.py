@@ -1,13 +1,21 @@
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
-from zoneinfo import ZoneInfo
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import pandas as pd
 
 
-FUSO_BRASILIA = ZoneInfo("America/Sao_Paulo")
+def _carregar_fuso_brasilia():
+    """Carrega o fuso de Brasília com fallback seguro para ambientes sem base tzdata."""
+    try:
+        return ZoneInfo("America/Sao_Paulo")
+    except ZoneInfoNotFoundError:
+        return timezone(timedelta(hours=-3), name="America/Sao_Paulo")
+
+
+FUSO_BRASILIA = _carregar_fuso_brasilia()
 
 
 def agora_brasilia() -> datetime:
