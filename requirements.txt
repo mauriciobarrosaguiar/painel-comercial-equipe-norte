@@ -8,3 +8,4 @@ webdriver-manager
 requests
 cryptography
 playwright
+tzdata
