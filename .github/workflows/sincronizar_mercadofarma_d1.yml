@@ -7,6 +7,7 @@ on:
       - main
     paths:
       - "scripts/importar_mercadofarma_d1.py"
+      - "scripts/importar_mercadofarma_d1_filtrado.py"
       - ".github/workflows/sincronizar_mercadofarma_d1.yml"
   workflow_run:
     workflows:
@@ -44,9 +45,10 @@ jobs:
           python -m pip install --upgrade pip
           pip install pandas requests
 
-      - name: Importar consolidado Mercado Farma no D1
+      - name: Importar somente produtos autorizados no D1
         env:
+          PYTHONPATH: ${{ github.workspace }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_D1_DATABASE: painel-equipe-norte-db
-        run: python scripts/importar_mercadofarma_d1.py
+        run: python scripts/importar_mercadofarma_d1_filtrado.py
