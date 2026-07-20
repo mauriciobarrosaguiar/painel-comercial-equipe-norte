@@ -6,7 +6,7 @@ const digitos=(v)=>texto(v).replace(/\D/g,'')
 const alto=(v)=>texto(v).normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ').toUpperCase()
 const numero=(v)=>{if(typeof v==='number')return Number.isFinite(v)?v:0;let s=texto(v).replace(/R\$/g,'').replace(/%/g,'').replace(/\s/g,'');if(s.includes(',')&&s.includes('.'))s=s.replace(/\./g,'').replace(',','.');else if(s.includes(','))s=s.replace(',','.');const n=Number(s);return Number.isFinite(n)?n:0}
 const ativo=(v)=>!/(INATIV|CANCEL|ENCERR|BLOQUE)/.test(alto(v))
-const mix=(v)=>{const s=alto(v);if(s.includes('COMBATE'))return'COMBATE';if(s.includes('PRIORIT'))return'PRIORITARIO';if(s.includes('LANC'))return'LANCAMENTO';if(s.includes('LINHA'))return'LINHA';return'SEM CLASSIFICACAO'}
+const mix=(v)=>{const s=alto(v);if(s.includes('PRIORIT'))return'PRIORITARIO';if(s.includes('LANC'))return'LANCAMENTO';if(/\b(?:SEM|NAO)\s+COMBATE\b/.test(s))return'LINHA';if(s.includes('COMBATE'))return'COMBATE';if(s.includes('LINHA'))return'LINHA';return'SEM CLASSIFICACAO'}
 
 async function idEstavel(prefixo,...partes){
   const bytes=new TextEncoder().encode(partes.map(texto).join('|'))
