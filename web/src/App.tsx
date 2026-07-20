@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import IntegrationSettings from './IntegrationSettings'
 
 type ModuleCard = {
   title: string
@@ -20,6 +21,7 @@ type DashboardData = {
 }
 
 type DatabaseState = 'carregando' | 'conectado' | 'erro'
+type Page = 'dashboard' | 'administracao'
 
 const modules: ModuleCard[] = [
   { title: 'Visão Geral', description: 'Indicadores, metas, projeções e desempenho da equipe.', icon: '▦', status: 'Primeira etapa' },
@@ -31,7 +33,7 @@ const modules: ModuleCard[] = [
   { title: 'SIP / Redes', description: 'Grupos, redes, acessos e resultados consolidados.', icon: '⬡' },
   { title: 'Histórico', description: 'Comparativos mensais e evolução dos principais indicadores.', icon: '◫' },
   { title: 'Automações', description: 'Extrações do Bússola e Mercado Farma com status em tempo real.', icon: '⚙' },
-  { title: 'Administração', description: 'Usuários, metas, produtos, permissões e configurações.', icon: '☷' },
+  { title: 'Administração', description: 'Usuários, integrações, metas, produtos e configurações.', icon: '☷' },
 ]
 
 const initialDashboard: DashboardData = {
@@ -49,6 +51,7 @@ const initialDashboard: DashboardData = {
 const numberFormatter = new Intl.NumberFormat('pt-BR')
 
 function App() {
+  const [page, setPage] = useState<Page>('dashboard')
   const [dashboard, setDashboard] = useState<DashboardData>(initialDashboard)
   const [databaseState, setDatabaseState] = useState<DatabaseState>('carregando')
 
@@ -61,30 +64,20 @@ function App() {
           fetch('/api/health', { cache: 'no-store' }),
           fetch('/api/dashboard', { cache: 'no-store' }),
         ])
-
-        if (!healthResponse.ok || !dashboardResponse.ok) {
-          throw new Error('API indisponível')
-        }
-
+        if (!healthResponse.ok || !dashboardResponse.ok) throw new Error('API indisponível')
         const health = await healthResponse.json() as { database?: string }
         const data = await dashboardResponse.json() as DashboardData
-
         if (active) {
           setDashboard(data)
           setDatabaseState(health.database === 'ok' ? 'conectado' : 'erro')
         }
       } catch {
-        if (active) {
-          setDatabaseState('erro')
-        }
+        if (active) setDatabaseState('erro')
       }
     }
 
     void loadDashboard()
-
-    return () => {
-      active = false
-    }
+    return () => { active = false }
   }, [])
 
   const statusText = databaseState === 'conectado'
@@ -100,102 +93,76 @@ function App() {
     { label: 'Clientes com venda', value: numberFormatter.format(dashboard.clientes_com_venda), detail: statusText },
   ], [dashboard, statusText])
 
+  function openModule(title: string) {
+    if (title === 'Administração') {
+      setPage('administracao')
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+    }
+  }
+
   return (
     <div className="app-shell">
       <header className="topbar">
-        <div className="brand">
+        <button className="brand brand-button" type="button" onClick={() => setPage('dashboard')}>
           <div className="brand-mark">N</div>
-          <div>
-            <strong>Painel Comercial</strong>
-            <span>Equipe Norte</span>
-          </div>
-        </div>
+          <div><strong>Painel Comercial</strong><span>Equipe Norte</span></div>
+        </button>
         <div className="topbar-actions">
           <span className="environment-badge">Nova versão</span>
           <button className="profile-button" type="button" aria-label="Perfil do usuário">MB</button>
         </div>
       </header>
 
-      <main className="content">
-        <section className="hero">
-          <div>
-            <span className="eyebrow">Gestão comercial</span>
-            <h1>Bom dia, Maurício</h1>
-            <p>Acompanhe a operação da Equipe Norte em um único lugar.</p>
-          </div>
-          <div className="hero-actions">
-            <button className="secondary-button" type="button">Últimas atualizações</button>
-            <button className="primary-button" type="button">Central de automações</button>
-          </div>
-        </section>
+      {page === 'administracao' ? (
+        <IntegrationSettings onBack={() => setPage('dashboard')} />
+      ) : (
+        <main className="content">
+          <section className="hero">
+            <div>
+              <span className="eyebrow">Gestão comercial</span>
+              <h1>Bom dia, Maurício</h1>
+              <p>Acompanhe a operação da Equipe Norte em um único lugar.</p>
+            </div>
+            <div className="hero-actions">
+              <button className="secondary-button" type="button">Últimas atualizações</button>
+              <button className="primary-button" type="button">Central de automações</button>
+            </div>
+          </section>
 
-        <section className="filters" aria-label="Filtros do painel">
-          <label>
-            <span>Período</span>
-            <select defaultValue="mes-atual">
-              <option value="mes-atual">Mês atual</option>
-              <option value="mes-anterior">Mês anterior</option>
-              <option value="personalizado">Personalizado</option>
-            </select>
-          </label>
-          <label>
-            <span>Consultor</span>
-            <select defaultValue="todos">
-              <option value="todos">Todos os consultores</option>
-            </select>
-          </label>
-          <label>
-            <span>UF</span>
-            <select defaultValue="todas">
-              <option value="todas">Todas as UFs</option>
-              <option>MA</option>
-              <option>MT</option>
-              <option>PA</option>
-              <option>PI</option>
-              <option>TO</option>
-            </select>
-          </label>
-        </section>
+          <section className="filters" aria-label="Filtros do painel">
+            <label><span>Período</span><select defaultValue="mes-atual"><option value="mes-atual">Mês atual</option><option value="mes-anterior">Mês anterior</option><option value="personalizado">Personalizado</option></select></label>
+            <label><span>Consultor</span><select defaultValue="todos"><option value="todos">Todos os consultores</option></select></label>
+            <label><span>UF</span><select defaultValue="todas"><option value="todas">Todas as UFs</option><option>MA</option><option>MT</option><option>PA</option><option>PI</option><option>TO</option></select></label>
+          </section>
 
-        <section className="summary-grid" aria-label="Resumo de resultados">
-          {summary.map((item) => (
-            <article className="summary-card" key={item.label}>
-              <span>{item.label}</span>
-              <strong>{databaseState === 'carregando' ? '—' : item.value}</strong>
-              <small>{item.detail}</small>
-            </article>
-          ))}
-        </section>
+          <section className="summary-grid" aria-label="Resumo de resultados">
+            {summary.map((item) => (
+              <article className="summary-card" key={item.label}>
+                <span>{item.label}</span>
+                <strong>{databaseState === 'carregando' ? '—' : item.value}</strong>
+                <small>{item.detail}</small>
+              </article>
+            ))}
+          </section>
 
-        <section className="section-heading">
-          <div>
-            <span className="eyebrow">Acesso rápido</span>
-            <h2>Módulos do painel</h2>
-          </div>
-          <span className="development-note">{statusText}</span>
-        </section>
+          <section className="section-heading">
+            <div><span className="eyebrow">Acesso rápido</span><h2>Módulos do painel</h2></div>
+            <span className="development-note">{statusText}</span>
+          </section>
 
-        <section className="modules-grid">
-          {modules.map((module) => (
-            <button className="module-card" key={module.title} type="button">
-              <div className="module-card-top">
-                <span className="module-icon" aria-hidden="true">{module.icon}</span>
-                {module.status && <span className="module-status">{module.status}</span>}
-              </div>
-              <div>
-                <h3>{module.title}</h3>
-                <p>{module.description}</p>
-              </div>
-              <span className="module-link">Abrir módulo <b>→</b></span>
-            </button>
-          ))}
-        </section>
-      </main>
+          <section className="modules-grid">
+            {modules.map((module) => (
+              <button className="module-card" key={module.title} type="button" onClick={() => openModule(module.title)}>
+                <div className="module-card-top"><span className="module-icon" aria-hidden="true">{module.icon}</span>{module.status && <span className="module-status">{module.status}</span>}</div>
+                <div><h3>{module.title}</h3><p>{module.description}</p></div>
+                <span className="module-link">Abrir módulo <b>→</b></span>
+              </button>
+            ))}
+          </section>
+        </main>
+      )}
 
-      <footer>
-        <span>Painel Comercial · Equipe Norte</span>
-        <span>Versão SaaS em construção</span>
-      </footer>
+      <footer><span>Painel Comercial · Equipe Norte</span><span>Versão SaaS em construção</span></footer>
     </div>
   )
 }
