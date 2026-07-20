@@ -80,6 +80,20 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: npx wrangler@4.112.0 d1 migrations apply DB --remote --config wrangler.jsonc
 
+      - name: Configurar chave administrativa do Pages
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          PAINEL_ADMIN_KEY: ${{ secrets.PAINEL_ADMIN_KEY }}
+        shell: bash
+        run: |
+          if [ -z "${PAINEL_ADMIN_KEY:-}" ]; then
+            echo "::warning::PAINEL_ADMIN_KEY ainda não foi adicionado aos Secrets do GitHub."
+          else
+            printf '%s' "$PAINEL_ADMIN_KEY" | npx wrangler@4.112.0 pages secret put PAINEL_ADMIN_KEY --project-name painel-equipe-norte
+            echo "Chave administrativa configurada no Cloudflare Pages."
+          fi
+
       - name: Publicar Pages Functions com D1
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
