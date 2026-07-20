@@ -1,0 +1,58 @@
+.total-ol-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 24px;
+  margin-top: 18px;
+  padding: 16px 20px;
+  background: linear-gradient(110deg, #fff, #f5fbf8);
+  border: 1px solid #cfe4da;
+  border-radius: 17px;
+  box-shadow: 0 8px 24px #182e4a0c;
+}
+
+.total-ol-card span,
+.total-ol-card small {
+  display: block;
+}
+
+.total-ol-card span {
+  color: #43536a;
+  font-size: 0.78rem;
+  font-weight: 750;
+}
+
+.total-ol-card small {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 0.74rem;
+}
+
+.total-ol-card > strong {
+  color: var(--navy);
+  font-size: clamp(1.5rem, 3vw, 2rem);
+}
+
+.total-ol-combate {
+  padding-left: 24px;
+  border-left: 1px solid #d6e5de;
+}
+
+.total-ol-combate b {
+  display: block;
+  margin-top: 5px;
+  color: #5e335d;
+}
+
+@media (max-width: 680px) {
+  .total-ol-card {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .total-ol-combate {
+    padding: 12px 0 0;
+    border-top: 1px solid #d6e5de;
+    border-left: 0;
+  }
+}

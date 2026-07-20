@@ -1,5 +1,6 @@
 import { FormEvent, useState } from 'react'
 import BaseManagement from './BaseManagement'
+import CalculationAudit from './CalculationAudit'
 
 type IntegrationStatus = {
   configurada: boolean
@@ -142,6 +143,7 @@ export default function IntegrationSettings({ onBack }: Props) {
       </section>
 
       <BaseManagement adminKey={adminKey} enabled={Boolean(status)} />
+      <CalculationAudit adminKey={adminKey} enabled={Boolean(status)} />
     </main>
   )
 }

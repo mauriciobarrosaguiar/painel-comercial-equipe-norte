@@ -7,6 +7,7 @@ from src.tratamento import (
     STATUS_CANCELADO,
     STATUS_FATURADOS,
     TIPO_SEM_CLASSIFICACAO,
+    TIPOS_SEM_COMBATE,
     formatar_data,
     formatar_moeda,
     formatar_percentual,
@@ -35,7 +36,7 @@ def _metricas_vendas(vendas: pd.DataFrame) -> dict[str, float]:
             "ticket_medio": 0.0,
         }
     validas = _vendas_validas(vendas)
-    sem_combate = validas[validas["tipo_mix"].ne("COMBATE")]
+    sem_combate = validas[validas["tipo_mix"].isin(TIPOS_SEM_COMBATE)]
     ol_sem_combate = float(sem_combate["valor_vendido_sem_imposto"].sum())
     ol_prioritarios = float(validas.loc[validas["tipo_mix"].eq("PRIORITARIO"), "valor_vendido_sem_imposto"].sum())
     ol_lancamentos = float(validas.loc[validas["tipo_mix"].eq("LANCAMENTO"), "valor_vendido_sem_imposto"].sum())
@@ -54,11 +55,7 @@ def _metricas_vendas(vendas: pd.DataFrame) -> dict[str, float]:
 def calcular_indicadores(vendas: pd.DataFrame, clientes: pd.DataFrame | None = None) -> dict[str, float]:
     metricas = _metricas_vendas(vendas)
     validas = _vendas_validas(vendas)
-    ol_cliente = (
-        validas[validas["tipo_mix"].ne("COMBATE")]
-        .groupby("cnpj_limpo")["valor_vendido_sem_imposto"]
-        .sum()
-    )
+    ol_cliente = validas.groupby("cnpj_limpo")["valor_vendido_sem_imposto"].sum()
     clientes_positivados = int(ol_cliente[ol_cliente.gt(0)].index.nunique())
     clientes_ativos = 0
     if clientes is not None and not clientes.empty:
@@ -113,8 +110,7 @@ def calcular_resumo_operacional(vendas: pd.DataFrame, clientes: pd.DataFrame | N
         else "valor_vendido_sem_imposto"
     )
 
-    sem_combate = validas[validas["tipo_mix"].ne("COMBATE")]
-    ol_cliente = sem_combate.groupby("cnpj_limpo")["valor_vendido_sem_imposto"].sum()
+    ol_cliente = validas.groupby("cnpj_limpo")["valor_vendido_sem_imposto"].sum()
     clientes_com_venda = int(ol_cliente[ol_cliente.gt(0)].index.nunique())
 
     if clientes is not None and not clientes.empty:
@@ -141,7 +137,7 @@ def _agregar_vendas_por_chave(vendas: pd.DataFrame, chaves: list[str]) -> pd.Dat
     if vendas.empty:
         return pd.DataFrame(columns=chaves)
     validas = _vendas_validas(vendas)
-    sem_combate = validas[validas["tipo_mix"].ne("COMBATE")]
+    sem_combate = validas[validas["tipo_mix"].isin(TIPOS_SEM_COMBATE)]
 
     total = sem_combate.groupby(chaves, dropna=False).agg(
         ol_sem_combate=("valor_vendido_sem_imposto", "sum"),

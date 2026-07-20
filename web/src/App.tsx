@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import IntegrationSettings from './IntegrationSettings'
 import ConsultantsModule from './ConsultantsModule'
+import './dashboard.css'
 
 type ModuleCard = {
   title: string
@@ -24,10 +25,13 @@ type AppliedFilters = {
 }
 
 type DashboardData = {
+  ol_total_faturado: number
   ol_sem_combate: number
+  ol_combate: number
   ol_prioritarios: number
   ol_lancamentos: number
   clientes_com_venda: number
+  clientes_sem_venda: number
   clientes_ativos: number
   consultores_ativos: number
   vendas_faturadas: number
@@ -58,10 +62,13 @@ const modules: ModuleCard[] = [
 ]
 
 const initialDashboard: DashboardData = {
+  ol_total_faturado: 0,
   ol_sem_combate: 0,
+  ol_combate: 0,
   ol_prioritarios: 0,
   ol_lancamentos: 0,
   clientes_com_venda: 0,
+  clientes_sem_venda: 0,
   clientes_ativos: 0,
   consultores_ativos: 0,
   vendas_faturadas: 0,
@@ -104,6 +111,17 @@ function monthBounds(offset: number) {
 }
 
 const currentMonth = monthBounds(0)
+
+function formatUpdatedAt(value: string) {
+  if (!value) return 'Atualização ainda não concluída'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return 'Horário de atualização indisponível'
+  return `Atualizado em ${new Intl.DateTimeFormat('pt-BR', {
+    dateStyle: 'short',
+    timeStyle: 'short',
+    timeZone: 'America/Sao_Paulo',
+  }).format(date)}`
+}
 
 function App() {
   const [page, setPage] = useState<Page>('dashboard')
@@ -181,7 +199,7 @@ function App() {
     { label: 'OL sem combate', value: currencyFormatter.format(dashboard.ol_sem_combate), detail: activeFilterText },
     { label: 'OL prioritários', value: currencyFormatter.format(dashboard.ol_prioritarios), detail: activeFilterText },
     { label: 'OL lançamentos', value: currencyFormatter.format(dashboard.ol_lancamentos), detail: activeFilterText },
-    { label: 'Clientes com venda', value: numberFormatter.format(dashboard.clientes_com_venda), detail: activeFilterText },
+    { label: 'Clientes com venda', value: numberFormatter.format(dashboard.clientes_com_venda), detail: `${numberFormatter.format(dashboard.clientes_sem_venda)} sem venda · ${activeFilterText}` },
   ], [dashboard, activeFilterText])
 
   function goTo(nextPage: Page) {
@@ -258,6 +276,18 @@ function App() {
                 <label><span>Data final</span><input type="date" value={customEnd} onChange={(event) => setCustomEnd(event.target.value)} /></label>
               </>
             )}
+          </section>
+
+          <section className="total-ol-card" aria-label="OL total faturado">
+            <div>
+              <span>OL total faturado</span>
+              <small>{activeFilterText} · {formatUpdatedAt(dashboard.atualizado_em)}</small>
+            </div>
+            <strong>{databaseState === 'carregando' ? '—' : currencyFormatter.format(dashboard.ol_total_faturado)}</strong>
+            <div className="total-ol-combate">
+              <span>OL combate</span>
+              <b>{databaseState === 'carregando' ? '—' : currencyFormatter.format(dashboard.ol_combate)}</b>
+            </div>
           </section>
 
           <section className="summary-grid" aria-label="Resumo de resultados">

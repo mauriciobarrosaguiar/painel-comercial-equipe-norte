@@ -13,6 +13,10 @@ permissions:
   contents: read
   deployments: write
 
+concurrency:
+  group: deploy-painel-producao
+  cancel-in-progress: false
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -31,7 +35,7 @@ jobs:
           node-version: "22"
 
       - name: Instalar dependências
-        run: npm install
+        run: npm ci --ignore-scripts
 
       - name: Compilar painel
         run: npm run build

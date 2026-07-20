@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from typing import Any
 from uuid import uuid4
 
@@ -85,71 +86,103 @@ def migrar_metas_seguro(database_id: str) -> int:
         ]
     )
 
-    # O registro-pai precisa existir antes das metas caso o banco possua FK de importação.
-    legado.d1.executar(
-        database_id,
-        """
-        INSERT INTO importacoes
-          (id,tipo,nome_arquivo,total_registros,status,erro,criado_em)
-        VALUES (?,?,?,?,?,?,?)
-        ON CONFLICT(id) DO UPDATE SET
-          total_registros=excluded.total_registros,
-          status=excluded.status,
-          erro=excluded.erro
-        """,
+    consultores_json = json.dumps(
         [
-            importacao_id,
-            "METAS_COMERCIAIS",
-            f"metas legadas ({ano_mes})",
-            0,
-            "executando",
-            "",
-            timestamp,
+            {
+                "id": linha[0],
+                "consultor_id": linha[3],
+                "ol_sem_combate": linha[4],
+                "ol_prioritarios": linha[5],
+                "ol_lancamentos": linha[6],
+                "clientes_positivados": linha[7],
+            }
+            for linha in linhas_metas
+            if linha[3] is not None
         ],
+        ensure_ascii=False,
     )
+    gerente = next(linha for linha in linhas_metas if linha[3] is None)
 
-    legado.d1.executar(database_id, "DELETE FROM metas WHERE ano_mes=?", [ano_mes])
-
-    # Insere cada meta separadamente. Para o gerente, o SQL usa NULL real,
-    # evitando que o conector converta None em texto vazio e viole a FK.
-    for linha in linhas_metas:
-        escopo = str(linha[2])
-        if linha[3] is None:
-            parametros = linha[:3] + linha[4:]
-            legado.d1.executar(
-                database_id,
-                """
-                INSERT INTO metas (
-                  id,ano_mes,escopo,consultor_id,ol_sem_combate,
-                  ol_prioritarios,ol_lancamentos,clientes_positivados,
-                  importacao_id,atualizado_em
-                ) VALUES (?,?,?,NULL,?,?,?,?,?,?)
-                """,
-                parametros,
+    # O lote é atômico: preserva a versão anterior, grava a nova e só então
+    # remove metas que deixaram de existir no arquivo oficial.
+    consultas = [
+        {
+            "sql": """
+            INSERT INTO importacoes
+              (id,tipo,nome_arquivo,total_registros,status,erro,criado_em)
+            VALUES (?,?,?,?,?,?,?)
+            """,
+            "params": [
+                importacao_id,
+                "METAS_COMERCIAIS",
+                f"metas legadas ({ano_mes})",
+                len(linhas_metas),
+                "concluido",
+                "",
+                timestamp,
+            ],
+        },
+        {
+            "sql": """
+            INSERT INTO metas_historico (
+              meta_id,ano_mes,escopo,consultor_id,ol_sem_combate,
+              ol_prioritarios,ol_lancamentos,clientes_positivados,
+              importacao_anterior_id,nova_importacao_id,substituida_em
             )
-        else:
-            legado.d1.executar(
-                database_id,
-                """
-                INSERT INTO metas (
-                  id,ano_mes,escopo,consultor_id,ol_sem_combate,
-                  ol_prioritarios,ol_lancamentos,clientes_positivados,
-                  importacao_id,atualizado_em
-                ) VALUES (?,?,?,?,?,?,?,?,?,?)
-                """,
-                linha,
+            SELECT id,ano_mes,escopo,consultor_id,ol_sem_combate,
+                   ol_prioritarios,ol_lancamentos,clientes_positivados,
+                   importacao_id,?,?
+              FROM metas WHERE ano_mes=?
+            """,
+            "params": [importacao_id, timestamp, ano_mes],
+        },
+        {
+            "sql": """
+            INSERT INTO metas (
+              id,ano_mes,escopo,consultor_id,ol_sem_combate,
+              ol_prioritarios,ol_lancamentos,clientes_positivados,
+              importacao_id,atualizado_em
             )
-        print(f"Meta migrada: {escopo} - {linha[1]}")
-
-    legado.d1.executar(
-        database_id,
-        """
-        UPDATE importacoes
-           SET total_registros=?, status='concluido', erro=''
-         WHERE id=?
-        """,
-        [len(linhas_metas), importacao_id],
-    )
+            SELECT json_extract(value,'$.id'),?,'consultor',
+                   json_extract(value,'$.consultor_id'),
+                   json_extract(value,'$.ol_sem_combate'),
+                   json_extract(value,'$.ol_prioritarios'),
+                   json_extract(value,'$.ol_lancamentos'),
+                   json_extract(value,'$.clientes_positivados'),?,?
+              FROM json_each(?) WHERE 1
+            ON CONFLICT(id) DO UPDATE SET
+              ol_sem_combate=excluded.ol_sem_combate,
+              ol_prioritarios=excluded.ol_prioritarios,
+              ol_lancamentos=excluded.ol_lancamentos,
+              clientes_positivados=excluded.clientes_positivados,
+              importacao_id=excluded.importacao_id,
+              atualizado_em=excluded.atualizado_em
+            """,
+            "params": [ano_mes, importacao_id, timestamp, consultores_json],
+        },
+        {
+            "sql": """
+            INSERT INTO metas (
+              id,ano_mes,escopo,consultor_id,ol_sem_combate,
+              ol_prioritarios,ol_lancamentos,clientes_positivados,
+              importacao_id,atualizado_em
+            ) VALUES (?,?,?,NULL,?,?,?,?,?,?)
+            ON CONFLICT(id) DO UPDATE SET
+              ol_sem_combate=excluded.ol_sem_combate,
+              ol_prioritarios=excluded.ol_prioritarios,
+              ol_lancamentos=excluded.ol_lancamentos,
+              clientes_positivados=excluded.clientes_positivados,
+              importacao_id=excluded.importacao_id,
+              atualizado_em=excluded.atualizado_em
+            """,
+            "params": gerente[:3] + gerente[4:],
+        },
+        {
+            "sql": "DELETE FROM metas WHERE ano_mes=? AND COALESCE(importacao_id,'')<>?",
+            "params": [ano_mes, importacao_id],
+        },
+    ]
+    legado.d1.executar_lotes(database_id, consultas, tamanho=len(consultas))
 
     print(f"Metas migradas com segurança: {len(linhas_metas)} registros para {ano_mes}.")
     return len(linhas_metas)

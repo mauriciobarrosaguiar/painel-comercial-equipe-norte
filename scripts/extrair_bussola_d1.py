@@ -14,6 +14,7 @@ import requests
 
 from bussola_extrator import executar as executar_extracao
 from src.bussola_web import _preparar_exportacao_para_painel
+from src.tratamento import normalizar_data_iso
 
 ROOT = Path(__file__).resolve().parents[1]
 RUNTIME_DIR = ROOT / ".runtime_bussola"
@@ -71,12 +72,7 @@ def numero(valor: Any) -> float:
 
 
 def data_iso(valor: Any) -> str | None:
-    if valor is None or texto(valor) == "":
-        return None
-    data = pd.to_datetime(valor, errors="coerce", dayfirst=True)
-    if pd.isna(data):
-        return None
-    return data.date().isoformat()
+    return normalizar_data_iso(valor)
 
 
 def id_estavel(prefixo: str, *partes: str) -> str:

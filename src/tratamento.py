@@ -12,6 +12,7 @@ from src.datas import hoje_brasilia
 
 
 TIPOS_MIX_VALIDOS = ["PRIORITARIO", "LANCAMENTO", "LINHA", "COMBATE"]
+TIPOS_SEM_COMBATE = ["PRIORITARIO", "LANCAMENTO", "LINHA"]
 TIPO_SEM_CLASSIFICACAO = "SEM CLASSIFICACAO"
 STATUS_FATURADOS = ["FATURADO", "FATURADO PARCIAL", "FATURADO RECUPERADO"]
 STATUS_CANCELADO = "CANCELADO"
@@ -223,6 +224,20 @@ def serie_data(serie: pd.Series) -> pd.Series:
     return datas
 
 
+def normalizar_data_iso(valor: object) -> str | None:
+    """Converte datas para ISO sem inverter mês e dia de entradas já normalizadas."""
+    if _texto_vazio(valor):
+        return None
+    texto = _texto_plano(valor)
+    if re.match(r"^\d{4}-\d{2}-\d{2}(?:[T\s]|$)", texto):
+        data = pd.to_datetime(texto[:10], format="%Y-%m-%d", errors="coerce")
+    else:
+        data = pd.to_datetime(valor, errors="coerce", dayfirst=True)
+    if pd.isna(data):
+        return None
+    return data.date().isoformat()
+
+
 def garantir_colunas(df: pd.DataFrame, colunas: list[str], valor_padrao: object = "") -> pd.DataFrame:
     base = df.copy()
     for coluna in colunas:
@@ -251,12 +266,14 @@ def normalizar_tipo_mix(valor: object) -> str:
     texto = texto.replace("LANCAMENTOS", "LANCAMENTO")
     if not texto:
         return TIPO_SEM_CLASSIFICACAO
-    if "COMBATE" in texto:
-        return "COMBATE"
     if "PRIORITARIO" in texto:
         return "PRIORITARIO"
     if "LANCAMENTO" in texto:
         return "LANCAMENTO"
+    if re.search(r"\b(?:SEM|NAO)\s+COMBATE\b", texto):
+        return "LINHA"
+    if "COMBATE" in texto:
+        return "COMBATE"
     if "LINHA" in texto:
         return "LINHA"
     return TIPO_SEM_CLASSIFICACAO

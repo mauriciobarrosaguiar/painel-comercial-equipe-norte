@@ -8,6 +8,7 @@ from uuid import uuid4
 import pandas as pd
 
 from scripts import extrair_bussola_d1 as legacy
+from src.tratamento import deduplicar_exportacao_bussola
 
 
 texto = legacy.texto
@@ -43,7 +44,10 @@ def sincronizar() -> None:
     )
 
     try:
-        base = legacy.extrair_base(usuario, segredo)
+        base_extraida = legacy.extrair_base(usuario, segredo)
+        total_extraido = len(base_extraida)
+        base = deduplicar_exportacao_bussola(base_extraida)
+        duplicatas_ignoradas = total_extraido - len(base)
 
         legacy.executar(
             database_id,
@@ -237,41 +241,74 @@ def sincronizar() -> None:
             ),
         )
 
+        # O lote é atômico no D1: versões anteriores ficam inativas, nunca apagadas.
         legacy.executar_lotes(
             database_id,
             [
                 {
-                    "sql": "DELETE FROM itens_pedido WHERE pedido_id IN (SELECT id FROM pedidos WHERE origem='BUSSOLA')",
+                    "sql": "UPDATE itens_pedido SET ativo=0 WHERE pedido_id IN (SELECT id FROM pedidos WHERE origem='BUSSOLA' AND ativo=1)",
                     "params": [],
                 },
-                {"sql": "DELETE FROM pedidos WHERE origem='BUSSOLA'", "params": []},
+                {"sql": "UPDATE pedidos SET ativo=0 WHERE origem='BUSSOLA' AND ativo=1", "params": []},
                 {
                     "sql": """
                     INSERT INTO pedidos
                       (id,pedido_origem,nota_fiscal,cliente_id,consultor_id,
                        centro_distribuicao,uf_centro_distribuicao,data_pedido,
-                       data_faturamento,status,valor_faturado,origem,atualizado_em)
+                       data_faturamento,status,valor_faturado,origem,atualizado_em,
+                       ativo,ultima_extracao_id)
                     SELECT s.id,s.pedido_origem,s.nota_fiscal,s.cliente_id,c.consultor_id,
                            s.centro_distribuicao,s.uf_centro_distribuicao,s.data_pedido,
-                           s.data_faturamento,s.status,s.valor_faturado,'BUSSOLA',s.atualizado_em
+                           s.data_faturamento,s.status,s.valor_faturado,'BUSSOLA',s.atualizado_em,
+                           1,?
                       FROM bussola_pedidos_staging_v2 s
                       LEFT JOIN clientes c ON c.id=s.cliente_id AND c.carteira_importada=1
                      WHERE s.run_id=?
+                    ON CONFLICT(id) DO UPDATE SET
+                      pedido_origem=excluded.pedido_origem,
+                      nota_fiscal=excluded.nota_fiscal,
+                      cliente_id=excluded.cliente_id,
+                      consultor_id=excluded.consultor_id,
+                      centro_distribuicao=excluded.centro_distribuicao,
+                      uf_centro_distribuicao=excluded.uf_centro_distribuicao,
+                      data_pedido=excluded.data_pedido,
+                      data_faturamento=excluded.data_faturamento,
+                      status=excluded.status,
+                      valor_faturado=excluded.valor_faturado,
+                      atualizado_em=excluded.atualizado_em,
+                      ativo=1,
+                      ultima_extracao_id=excluded.ultima_extracao_id
                     """,
-                    "params": [run_uuid],
+                    "params": [extracao_id, run_uuid],
                 },
                 {
                     "sql": """
                     INSERT INTO itens_pedido
                       (id,pedido_id,produto_id,ean,descricao,quantidade_solicitada,
                        quantidade_atendida,quantidade_faturada,quantidade_cancelada,
-                       preco_unitario_sem_imposto,preco_unitario_com_imposto,valor_faturado)
+                       preco_unitario_sem_imposto,preco_unitario_com_imposto,valor_faturado,
+                       ativo,ultima_extracao_id)
                     SELECT id,pedido_id,produto_id,ean,descricao,quantidade_solicitada,
                            quantidade_atendida,quantidade_faturada,quantidade_cancelada,
-                           preco_unitario_sem_imposto,preco_unitario_com_imposto,valor_faturado
+                           preco_unitario_sem_imposto,preco_unitario_com_imposto,valor_faturado,
+                           1,?
                       FROM bussola_itens_staging_v2 WHERE run_id=?
+                    ON CONFLICT(id) DO UPDATE SET
+                      pedido_id=excluded.pedido_id,
+                      produto_id=excluded.produto_id,
+                      ean=excluded.ean,
+                      descricao=excluded.descricao,
+                      quantidade_solicitada=excluded.quantidade_solicitada,
+                      quantidade_atendida=excluded.quantidade_atendida,
+                      quantidade_faturada=excluded.quantidade_faturada,
+                      quantidade_cancelada=excluded.quantidade_cancelada,
+                      preco_unitario_sem_imposto=excluded.preco_unitario_sem_imposto,
+                      preco_unitario_com_imposto=excluded.preco_unitario_com_imposto,
+                      valor_faturado=excluded.valor_faturado,
+                      ativo=1,
+                      ultima_extracao_id=excluded.ultima_extracao_id
                     """,
-                    "params": [run_uuid],
+                    "params": [extracao_id, run_uuid],
                 },
             ],
         )
@@ -282,6 +319,8 @@ def sincronizar() -> None:
         resumo = json.dumps(
             {
                 "linhas": int(len(base)),
+                "linhas_extraidas": int(total_extraido),
+                "duplicatas_ignoradas": int(duplicatas_ignoradas),
                 "pedidos": int(len(linhas_pedidos)),
                 "itens": int(len(linhas_itens)),
                 "regra_carteira": "PAINEL_EQUIPE_NORTE",
@@ -308,11 +347,18 @@ def sincronizar() -> None:
         legacy.executar(
             database_id,
             "UPDATE extracoes SET status='concluido',total_registros=?,mensagem=?,finalizado_em=? WHERE id=?",
-            [len(base), f"{len(linhas_pedidos)} pedidos e {len(linhas_itens)} itens sincronizados.", timestamp, extracao_id],
+            [
+                len(base),
+                f"{len(linhas_pedidos)} pedidos e {len(linhas_itens)} itens sincronizados; "
+                f"{duplicatas_ignoradas} duplicatas ignoradas.",
+                timestamp,
+                extracao_id,
+            ],
         )
         print(
             f"Bússola sincronizado corretamente: {len(linhas_pedidos)} pedidos, "
-            f"{len(linhas_itens)} itens e {len(base)} linhas."
+            f"{len(linhas_itens)} itens, {len(base)} linhas e "
+            f"{duplicatas_ignoradas} duplicatas ignoradas."
         )
     except Exception as exc:
         finalizado = pd.Timestamp.now(tz="America/Sao_Paulo").isoformat()

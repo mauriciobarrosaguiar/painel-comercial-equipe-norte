@@ -1,9 +1,10 @@
+import { ITEM_ATIVO, MIX_SEM_COMBATE, PEDIDO_FATURADO } from '../_lib/commercial.js'
+
 const HEADERS = {
   'content-type': 'application/json; charset=UTF-8',
   'cache-control': 'no-store, no-cache, must-revalidate',
 }
 
-const FATURADO = "UPPER(COALESCE(pe.status,'')) LIKE '%FATURAD%' AND UPPER(COALESCE(pe.status,'')) NOT LIKE '%CANCEL%'"
 const PERIODOS = new Set(['mes-atual', 'mes-anterior', 'todo-periodo', 'personalizado'])
 const json = (data, status = 200) => new Response(JSON.stringify(data), { status, headers: HEADERS })
 const iso = (y, m, d) => `${String(y).padStart(4, '0')}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
@@ -79,7 +80,7 @@ export async function onRequestGet({ request, env }) {
       clienteParams.push(uf)
     }
 
-    const pedidoJoin = ['pe.cliente_id=cl.id', FATURADO]
+    const pedidoJoin = ['pe.cliente_id=cl.id', PEDIDO_FATURADO]
     const pedidoParams = []
     if (faixa.inicio && faixa.fim) {
       pedidoJoin.push('DATE(COALESCE(pe.data_faturamento,pe.data_pedido)) BETWEEN DATE(?) AND DATE(?)')
@@ -93,7 +94,9 @@ export async function onRequestGet({ request, env }) {
         COALESCE(c.uf,'') AS uf_cadastro,
         COUNT(DISTINCT cl.id) AS clientes_ativos,
         COUNT(DISTINCT CASE WHEN pe.id IS NOT NULL AND COALESCE(ip.valor_faturado,0)>0 THEN cl.id END) AS clientes_com_venda,
-        COALESCE(SUM(CASE WHEN UPPER(COALESCE(pr.tipo_mix,'SEM CLASSIFICACAO'))<>'COMBATE' THEN ip.valor_faturado ELSE 0 END),0) AS ol_sem_combate,
+        COALESCE(SUM(ip.valor_faturado),0) AS ol_total_faturado,
+        COALESCE(SUM(CASE WHEN ${MIX_SEM_COMBATE} THEN ip.valor_faturado ELSE 0 END),0) AS ol_sem_combate,
+        COALESCE(SUM(CASE WHEN UPPER(TRIM(COALESCE(pr.tipo_mix,'')))='COMBATE' THEN ip.valor_faturado ELSE 0 END),0) AS ol_combate,
         COALESCE(SUM(CASE WHEN UPPER(COALESCE(pr.tipo_mix,''))='PRIORITARIO' THEN ip.valor_faturado ELSE 0 END),0) AS ol_prioritarios,
         COALESCE(SUM(CASE WHEN UPPER(COALESCE(pr.tipo_mix,''))='LANCAMENTO' THEN ip.valor_faturado ELSE 0 END),0) AS ol_lancamentos,
         COALESCE(m.ol_sem_combate,0) AS meta_ol_sem_combate,
@@ -103,7 +106,7 @@ export async function onRequestGet({ request, env }) {
       FROM consultores c
       LEFT JOIN clientes cl ON ${clienteJoin.join(' AND ')}
       LEFT JOIN pedidos pe ON ${pedidoJoin.join(' AND ')}
-      LEFT JOIN itens_pedido ip ON ip.pedido_id=pe.id
+      LEFT JOIN itens_pedido ip ON ip.pedido_id=pe.id AND ${ITEM_ATIVO}
       LEFT JOIN produtos pr ON pr.id=ip.produto_id
       LEFT JOIN metas m ON m.consultor_id=c.id AND m.escopo='consultor' AND m.ano_mes=?
       WHERE c.ativo=1 AND c.origem='PAINEL_EQUIPE'
@@ -134,6 +137,7 @@ export async function onRequestGet({ request, env }) {
       const clientesAtivos = numero(item.clientes_ativos)
       const clientesComVenda = numero(item.clientes_com_venda)
       const olSemCombate = numero(item.ol_sem_combate)
+      const olTotalFaturado = numero(item.ol_total_faturado)
       const metaOlSemCombate = numero(item.meta_ol_sem_combate)
       const olPrioritarios = numero(item.ol_prioritarios)
       const olLancamentos = numero(item.ol_lancamentos)
@@ -145,7 +149,9 @@ export async function onRequestGet({ request, env }) {
         clientes_ativos: clientesAtivos,
         clientes_com_venda: clientesComVenda,
         clientes_sem_venda: Math.max(0, clientesAtivos - clientesComVenda),
+        ol_total_faturado: olTotalFaturado,
         ol_sem_combate: olSemCombate,
+        ol_combate: numero(item.ol_combate),
         ol_prioritarios: olPrioritarios,
         ol_lancamentos: olLancamentos,
         meta_ol_sem_combate: metaOlSemCombate,
@@ -160,14 +166,18 @@ export async function onRequestGet({ request, env }) {
 
     const gerente = gerenteResult.results?.[0] || {}
     const totais = consultores.reduce((acc, item) => ({
+      ol_total_faturado: acc.ol_total_faturado + item.ol_total_faturado,
       ol_sem_combate: acc.ol_sem_combate + item.ol_sem_combate,
+      ol_combate: acc.ol_combate + item.ol_combate,
       ol_prioritarios: acc.ol_prioritarios + item.ol_prioritarios,
       ol_lancamentos: acc.ol_lancamentos + item.ol_lancamentos,
       clientes_ativos: acc.clientes_ativos + item.clientes_ativos,
       clientes_com_venda: acc.clientes_com_venda + item.clientes_com_venda,
       clientes_sem_venda: acc.clientes_sem_venda + item.clientes_sem_venda,
     }), {
+      ol_total_faturado: 0,
       ol_sem_combate: 0,
+      ol_combate: 0,
       ol_prioritarios: 0,
       ol_lancamentos: 0,
       clientes_ativos: 0,

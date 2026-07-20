@@ -4,14 +4,6 @@ on:
   workflow_dispatch:
   schedule:
     - cron: "*/30 * * * *"
-  push:
-    branches:
-      - main
-    paths:
-      - "scripts/extrair_bussola_d1.py"
-      - "scripts/extrair_bussola_d1_corrigido.py"
-      - ".github/workflows/bussola-d1.yml"
-      - "requirements.txt"
 
 permissions:
   contents: read

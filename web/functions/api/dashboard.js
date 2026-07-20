@@ -1,9 +1,10 @@
+import { ITEM_FATURADO, MIX_SEM_COMBATE } from '../_lib/commercial.js'
+
 const HEADERS = {
   'content-type': 'application/json; charset=UTF-8',
   'cache-control': 'no-store, no-cache, must-revalidate',
 }
 
-const FATURADO = "UPPER(COALESCE(pe.status,'')) LIKE '%FATURAD%' AND UPPER(COALESCE(pe.status,'')) NOT LIKE '%CANCEL%'"
 const PERIODOS = new Set(['mes-atual', 'mes-anterior', 'todo-periodo', 'personalizado'])
 const json = (data, status = 200) => new Response(JSON.stringify(data), { status, headers: HEADERS })
 const stmt = (env, sql, params = []) => params.length ? env.DB.prepare(sql).bind(...params) : env.DB.prepare(sql)
@@ -49,7 +50,7 @@ function filtros(params) {
 
   // O total geral vem diretamente dos pedidos faturados do Bússola.
   // A carteira oficial só é obrigatória quando o usuário filtra por consultor ou UF.
-  const cond = [FATURADO]
+  const cond = [ITEM_FATURADO]
   const valores = []
 
   if (p.inicio && p.fim) {
@@ -67,7 +68,7 @@ function filtros(params) {
   }
 
   // Clientes com venda sempre são contados pela carteira oficial.
-  const condClientesVenda = [FATURADO, 'cl.carteira_importada=1', 'cl.ativo=1', 'ip.valor_faturado>0']
+  const condClientesVenda = [ITEM_FATURADO, 'cl.carteira_importada=1', 'cl.ativo=1', 'ip.valor_faturado>0']
   const valoresClientesVenda = []
   if (p.inicio && p.fim) {
     condClientesVenda.push('DATE(COALESCE(pe.data_faturamento, pe.data_pedido)) BETWEEN DATE(?) AND DATE(?)')
@@ -113,7 +114,7 @@ export async function onRequestGet({ request, env }) {
   try {
     const f = filtros(new URL(request.url).searchParams)
     const consultas = [
-      stmt(env, `SELECT COALESCE(SUM(ip.valor_faturado),0) total ${JOINS} WHERE ${f.where} AND UPPER(COALESCE(pr.tipo_mix,'SEM CLASSIFICACAO'))<>'COMBATE'`, f.valores),
+      stmt(env, `SELECT COALESCE(SUM(ip.valor_faturado),0) total ${JOINS} WHERE ${f.where} AND ${MIX_SEM_COMBATE}`, f.valores),
       stmt(env, `SELECT COALESCE(SUM(ip.valor_faturado),0) total ${JOINS} WHERE ${f.where} AND UPPER(COALESCE(pr.tipo_mix,''))='PRIORITARIO'`, f.valores),
       stmt(env, `SELECT COALESCE(SUM(ip.valor_faturado),0) total ${JOINS} WHERE ${f.where} AND UPPER(COALESCE(pr.tipo_mix,''))='LANCAMENTO'`, f.valores),
       stmt(env, `SELECT COUNT(DISTINCT pe.cliente_id) total ${JOINS} WHERE ${f.clientSaleWhere}`, f.clientSaleValues),
@@ -124,7 +125,8 @@ export async function onRequestGet({ request, env }) {
       stmt(env, "SELECT id,nome FROM consultores WHERE ativo=1 AND origem='PAINEL_EQUIPE' AND TRIM(nome)<>'' ORDER BY nome COLLATE NOCASE"),
       stmt(env, "SELECT DISTINCT UPPER(TRIM(uf)) uf FROM clientes WHERE carteira_importada=1 AND ativo=1 AND LENGTH(TRIM(COALESCE(uf,'')))=2 ORDER BY uf"),
       stmt(env, "SELECT (SELECT COUNT(*) FROM clientes WHERE carteira_importada=1) clientes_carteira,(SELECT COUNT(*) FROM produtos WHERE UPPER(COALESCE(tipo_mix,''))<>'SEM CLASSIFICACAO') produtos_mix,(SELECT COUNT(*) FROM produtos WHERE mercado_farma_ativo=1) produtos_mercado_farma,(SELECT COUNT(*) FROM metas WHERE escopo='consultor') metas"),
-      stmt(env, `SELECT COUNT(DISTINCT pe.id) pedidos, COUNT(ip.id) itens, COALESCE(SUM(ip.valor_faturado),0) valor_total, MIN(COALESCE(pe.data_faturamento,pe.data_pedido)) data_min, MAX(COALESCE(pe.data_faturamento,pe.data_pedido)) data_max ${JOINS} WHERE ${FATURADO}`),
+      stmt(env, `SELECT COUNT(DISTINCT pe.id) pedidos, COUNT(ip.id) itens, COALESCE(SUM(ip.valor_faturado),0) valor_total, MIN(COALESCE(pe.data_faturamento,pe.data_pedido)) data_min, MAX(COALESCE(pe.data_faturamento,pe.data_pedido)) data_max ${JOINS} WHERE ${ITEM_FATURADO}`),
+      stmt(env, `SELECT COALESCE(SUM(ip.valor_faturado),0) total ${JOINS} WHERE ${f.where} AND UPPER(TRIM(COALESCE(pr.tipo_mix,'')))='COMBATE'`, f.valores),
     ]
 
     const r = await env.DB.batch(consultas)
@@ -135,12 +137,14 @@ export async function onRequestGet({ request, env }) {
 
     return json({
       ol_sem_combate: Number(r[0]?.results?.[0]?.total || 0),
+      ol_combate: Number(r[12]?.results?.[0]?.total || 0),
       ol_prioritarios: Number(r[1]?.results?.[0]?.total || 0),
       ol_lancamentos: Number(r[2]?.results?.[0]?.total || 0),
       clientes_com_venda: comVenda,
       clientes_sem_venda: Math.max(0, ativos - comVenda),
       clientes_ativos: ativos,
       consultores_ativos: Number(r[5]?.results?.[0]?.total || 0),
+      ol_total_faturado: Number(r[6]?.results?.[0]?.total || 0),
       vendas_faturadas: Number(r[6]?.results?.[0]?.total || 0),
       automacoes_executando: Number(r[7]?.results?.[0]?.total || 0),
       bases: {
