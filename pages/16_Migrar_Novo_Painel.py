@@ -29,7 +29,7 @@ with col1:
     st.caption(str(persistencia.get("detalhe", "")))
 with col2:
     st.metric("Envio ao GitHub", "Pronto" if config.get("pronto") else "Configuração pendente")
-    st.caption("A chave criptográfica é enviada somente para esta execução da migração.")
+    st.caption("A chave criptográfica é protegida como Secret do GitHub antes da execução.")
 
 st.subheader("Bases encontradas")
 status_bases: list[bool] = []
