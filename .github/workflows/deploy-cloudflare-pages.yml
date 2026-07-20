@@ -1,5 +1,6 @@
 name: Deploy Painel no Cloudflare Pages
 
+# Reexecução após configurar PAINEL_ADMIN_KEY
 on:
   workflow_dispatch:
   push:
