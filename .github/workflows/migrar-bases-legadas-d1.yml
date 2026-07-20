@@ -1,0 +1,58 @@
+name: Migrar bases legadas para D1
+
+on:
+  workflow_dispatch:
+    inputs:
+      ano_mes:
+        description: "Mês das metas no formato AAAA-MM"
+        required: false
+        default: "2026-07"
+  push:
+    branches:
+      - main
+    paths:
+      - "scripts/migrar_bases_legadas_d1.py"
+      - ".github/workflows/migrar-bases-legadas-d1.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: migrar-bases-legadas-d1
+  cancel-in-progress: false
+
+jobs:
+  migrar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Baixar repositório
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Instalar dependências
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      - name: Migrar carteira produtos e metas
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPO: ${{ github.repository }}
+          GITHUB_BRANCH: main
+          GITHUB_SOURCE_BRANCH: main
+          GITHUB_STORAGE_BRANCH: app-storage
+          GITHUB_STORE_DIR: .app_storage
+          PERSISTENCE_KEY: ${{ secrets.PERSISTENCE_KEY }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_D1_DATABASE: painel-equipe-norte-db
+          MIGRACAO_ANO_MES: ${{ inputs.ano_mes || '2026-07' }}
+        run: python scripts/migrar_bases_legadas_d1.py
