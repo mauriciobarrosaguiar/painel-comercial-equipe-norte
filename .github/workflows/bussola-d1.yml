@@ -50,6 +50,7 @@ jobs:
 
       - name: Extrair Bússola e sincronizar D1
         env:
+          PYTHONPATH: ${{ github.workspace }}
           PAINEL_BASE_URL: https://painel-equipe-norte.pages.dev
           PAINEL_ADMIN_KEY: ${{ secrets.PAINEL_ADMIN_KEY }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
