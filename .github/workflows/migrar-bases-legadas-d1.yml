@@ -12,6 +12,7 @@ on:
       - main
     paths:
       - "scripts/migrar_bases_legadas_d1.py"
+      - "web/migrations/**"
       - ".github/workflows/migrar-bases-legadas-d1.yml"
 
 permissions:
