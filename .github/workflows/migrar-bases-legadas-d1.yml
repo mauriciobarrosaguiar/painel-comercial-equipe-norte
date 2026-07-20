@@ -7,16 +7,6 @@ on:
         description: "Mês das metas no formato AAAA-MM"
         required: false
         default: "2026-07"
-  push:
-    branches:
-      - main
-    paths:
-      - "scripts/migrar_bases_legadas_d1.py"
-      - "scripts/migrar_bases_legadas_seguro.py"
-      - "scripts/migrar_sips_d1.py"
-      - "src/sip_migracao.py"
-      - "web/migrations/**"
-      - ".github/workflows/migrar-bases-legadas-d1.yml"
 
 permissions:
   contents: read
