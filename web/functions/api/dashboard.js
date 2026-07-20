@@ -10,35 +10,56 @@ function json(data, status = 200) {
   })
 }
 
+const STATUS_FATURADO = `
+  UPPER(COALESCE(pe.status, '')) LIKE '%FATURAD%'
+  AND UPPER(COALESCE(pe.status, '')) NOT LIKE '%CANCEL%'
+`
+
 export async function onRequestGet({ env }) {
   try {
     const resultados = await env.DB.batch([
       env.DB.prepare(`
-        SELECT COUNT(*) AS total
+        SELECT COALESCE(SUM(ip.valor_faturado), 0) AS total
         FROM itens_pedido ip
-        LEFT JOIN produtos p ON p.id = ip.produto_id
-        WHERE UPPER(COALESCE(p.tipo_mix, '')) LIKE '%SEM COMBATE%'
+        JOIN pedidos pe ON pe.id = ip.pedido_id
+        LEFT JOIN produtos pr ON pr.id = ip.produto_id
+        WHERE ${STATUS_FATURADO}
+          AND UPPER(COALESCE(pr.tipo_mix, 'SEM CLASSIFICACAO')) <> 'COMBATE'
       `),
       env.DB.prepare(`
-        SELECT COUNT(*) AS total
+        SELECT COALESCE(SUM(ip.valor_faturado), 0) AS total
         FROM itens_pedido ip
-        LEFT JOIN produtos p ON p.id = ip.produto_id
-        WHERE UPPER(COALESCE(p.tipo_mix, '')) LIKE '%PRIORIT%'
+        JOIN pedidos pe ON pe.id = ip.pedido_id
+        LEFT JOIN produtos pr ON pr.id = ip.produto_id
+        WHERE ${STATUS_FATURADO}
+          AND UPPER(COALESCE(pr.tipo_mix, '')) = 'PRIORITARIO'
       `),
       env.DB.prepare(`
-        SELECT COUNT(*) AS total
+        SELECT COALESCE(SUM(ip.valor_faturado), 0) AS total
         FROM itens_pedido ip
-        LEFT JOIN produtos p ON p.id = ip.produto_id
-        WHERE UPPER(COALESCE(p.tipo_mix, '')) LIKE '%LANC%'
+        JOIN pedidos pe ON pe.id = ip.pedido_id
+        LEFT JOIN produtos pr ON pr.id = ip.produto_id
+        WHERE ${STATUS_FATURADO}
+          AND UPPER(COALESCE(pr.tipo_mix, '')) = 'LANCAMENTO'
       `),
       env.DB.prepare(`
-        SELECT COUNT(DISTINCT cliente_id) AS total
-        FROM pedidos
-        WHERE cliente_id IS NOT NULL AND valor_faturado > 0
+        SELECT COUNT(DISTINCT pe.cliente_id) AS total
+        FROM pedidos pe
+        JOIN itens_pedido ip ON ip.pedido_id = pe.id
+        LEFT JOIN produtos pr ON pr.id = ip.produto_id
+        WHERE pe.cliente_id IS NOT NULL
+          AND ${STATUS_FATURADO}
+          AND ip.valor_faturado > 0
+          AND UPPER(COALESCE(pr.tipo_mix, 'SEM CLASSIFICACAO')) <> 'COMBATE'
       `),
       env.DB.prepare('SELECT COUNT(*) AS total FROM clientes WHERE ativo = 1'),
       env.DB.prepare('SELECT COUNT(*) AS total FROM consultores WHERE ativo = 1'),
-      env.DB.prepare('SELECT COALESCE(SUM(valor_faturado), 0) AS total FROM pedidos'),
+      env.DB.prepare(`
+        SELECT COALESCE(SUM(ip.valor_faturado), 0) AS total
+        FROM itens_pedido ip
+        JOIN pedidos pe ON pe.id = ip.pedido_id
+        WHERE ${STATUS_FATURADO}
+      `),
       env.DB.prepare("SELECT COUNT(*) AS total FROM extracoes WHERE status = 'executando'"),
     ])
 
