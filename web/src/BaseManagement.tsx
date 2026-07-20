@@ -1,5 +1,5 @@
 import { ChangeEvent, useEffect, useMemo, useState } from 'react'
-import * as XLSX from 'xlsx'
+import { readSheet } from 'read-excel-file/browser'
 
 type BaseType = 'painel' | 'metas' | 'produtos_mix' | 'produtos_mercado_farma'
 type RowData = Record<string, unknown>
@@ -69,11 +69,13 @@ function parseMetas(matrix: unknown[][], headerIndex: number) {
   }).filter(rowHasData)
 }
 async function parseWorkbook(file: File, type: BaseType) {
-  const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array' })
-  const sheetName = workbook.SheetNames[0]
-  if (!sheetName) throw new Error('A planilha não possui nenhuma aba.')
-  const sheet = workbook.Sheets[sheetName]
-  const matrix = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: '', raw: false })
+  if (file.size > 20 * 1024 * 1024) throw new Error('O arquivo excede o limite seguro de 20 MB.')
+  const extension = file.name.toLowerCase().split('.').pop()
+  if (extension === 'xls') throw new Error('O formato .xls antigo não é aceito por segurança. Salve o arquivo como .xlsx ou .csv.')
+  if (extension !== 'xlsx' && extension !== 'csv') throw new Error('Use uma planilha .xlsx ou .csv.')
+  const matrix = extension === 'csv'
+    ? parseDelimited(await file.text())
+    : await readSheet(file)
   const headerIndex = findHeader(matrix, type)
   if (headerIndex < 0) throw new Error('Não encontrei os cabeçalhos esperados nessa planilha.')
   if (type === 'metas') return parseMetas(matrix, headerIndex)
@@ -83,6 +85,44 @@ async function parseWorkbook(file: File, type: BaseType) {
     headers.forEach((header, column) => { row[header] = values?.[column] ?? '' })
     return row
   }).filter(rowHasData)
+}
+function parseDelimited(contents: string) {
+  const firstLine = contents.split(/\r?\n/, 1)[0] || ''
+  const separators = [',', ';', '\t']
+  const separator = separators.reduce((best, current) =>
+    firstLine.split(current).length > firstLine.split(best).length ? current : best, ';')
+  const rows: unknown[][] = []
+  let row: string[] = []
+  let cell = ''
+  let quoted = false
+
+  for (let index = 0; index < contents.length; index += 1) {
+    const character = contents[index]
+    if (character === '"') {
+      if (quoted && contents[index + 1] === '"') {
+        cell += '"'
+        index += 1
+      } else {
+        quoted = !quoted
+      }
+    } else if (!quoted && character === separator) {
+      row.push(cell)
+      cell = ''
+    } else if (!quoted && (character === '\n' || character === '\r')) {
+      if (character === '\r' && contents[index + 1] === '\n') index += 1
+      row.push(cell)
+      rows.push(row)
+      row = []
+      cell = ''
+    } else {
+      cell += character
+    }
+  }
+  if (cell || row.length) {
+    row.push(cell)
+    rows.push(row)
+  }
+  return rows
 }
 function validateRows(type: BaseType, rows: RowData[]) {
   if (!rows.length) throw new Error('O arquivo possui apenas cabeçalhos ou não contém linhas válidas.')
@@ -176,7 +216,7 @@ export default function BaseManagement({ adminKey, enabled }: Props) {
               {base.type === 'metas' && <label className="month-field"><span>Mês das metas</span><input type="month" value={month} onChange={(event) => setMonth(event.target.value)} /></label>}
               {state.error && <div className="alert alert-error">{state.error}</div>}
               {state.message && <div className="alert alert-success">{state.message}</div>}
-              <label className={`file-button ${state.loading ? 'disabled' : ''}`}><input type="file" accept=".xlsx,.xls,.csv" disabled={state.loading} onChange={(event) => void importFile(base.type, event)} />{state.loading ? 'Lendo e importando…' : counts[base.type] > 0 ? 'Substituir planilha' : 'Selecionar planilha'}</label>
+              <label className={`file-button ${state.loading ? 'disabled' : ''}`}><input type="file" accept=".xlsx,.csv" disabled={state.loading} onChange={(event) => void importFile(base.type, event)} />{state.loading ? 'Lendo e importando…' : counts[base.type] > 0 ? 'Substituir planilha' : 'Selecionar planilha'}</label>
             </article>
           )
         })}
