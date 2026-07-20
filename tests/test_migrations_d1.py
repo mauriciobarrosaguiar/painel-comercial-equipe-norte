@@ -9,6 +9,15 @@ MIGRATIONS = Path(__file__).resolve().parents[1] / "web" / "migrations"
 EXTRATOR = Path(__file__).resolve().parents[1] / "scripts" / "extrair_bussola_d1_corrigido.py"
 
 
+def _aplicar_migrations(connection: sqlite3.Connection) -> None:
+    arquivos = sorted(
+        MIGRATIONS.glob("*.sql"),
+        key=lambda path: int(path.stem.split("_", 1)[0]),
+    )
+    for arquivo in arquivos:
+        connection.executescript(arquivo.read_text(encoding="utf-8"))
+
+
 def _sql_do_extrator(trecho: str) -> str:
     arvore = ast.parse(EXTRATOR.read_text(encoding="utf-8"))
     candidatos = [
@@ -22,15 +31,7 @@ def _sql_do_extrator(trecho: str) -> str:
 
 def test_migrations_criam_controle_de_versao_da_bussola() -> None:
     connection = sqlite3.connect(":memory:")
-    for name in [
-        "0001_schema_inicial.sql",
-        "0002_credenciais_bussola.sql",
-        "0004_bases_comerciais.sql",
-        "0005_controle_importacoes.sql",
-        "9999_adiciona_erro_importacoes.sql",
-        "10000_preserva_historico_bussola.sql",
-    ]:
-        connection.executescript((MIGRATIONS / name).read_text(encoding="utf-8"))
+    _aplicar_migrations(connection)
 
     pedidos = {row[1] for row in connection.execute("PRAGMA table_info(pedidos)")}
     itens = {row[1] for row in connection.execute("PRAGMA table_info(itens_pedido)")}
@@ -39,19 +40,13 @@ def test_migrations_criam_controle_de_versao_da_bussola() -> None:
     assert {"ativo", "ultima_extracao_id"} <= pedidos
     assert {"ativo", "ultima_extracao_id"} <= itens
     assert "idx_pedidos_data_faturamento" in indices
+    tabelas = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    assert {"auditorias_calculos", "metas_historico", "sips", "redes", "sip_clientes", "sip_recados"} <= tabelas
 
 
 def test_sincronizacao_bussola_atualiza_sem_apagar_historico() -> None:
     connection = sqlite3.connect(":memory:")
-    for name in [
-        "0001_schema_inicial.sql",
-        "0002_credenciais_bussola.sql",
-        "0004_bases_comerciais.sql",
-        "0005_controle_importacoes.sql",
-        "9999_adiciona_erro_importacoes.sql",
-        "10000_preserva_historico_bussola.sql",
-    ]:
-        connection.executescript((MIGRATIONS / name).read_text(encoding="utf-8"))
+    _aplicar_migrations(connection)
 
     connection.executescript(_sql_do_extrator("CREATE TABLE IF NOT EXISTS bussola_pedidos_staging_v2"))
     connection.execute("INSERT INTO consultores(id,nome,origem) VALUES('c1','Consultor','PAINEL_EQUIPE')")
