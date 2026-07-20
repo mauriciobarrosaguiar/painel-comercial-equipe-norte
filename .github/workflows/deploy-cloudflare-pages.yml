@@ -1,6 +1,5 @@
 name: Deploy Painel no Cloudflare Pages
 
-# Reexecução após configurar PAINEL_ADMIN_KEY
 on:
   workflow_dispatch:
   push:
@@ -81,6 +80,33 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: npx wrangler@4.112.0 d1 migrations apply DB --remote --config wrangler.jsonc
 
+      - name: Definir main como branch de produção
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail-with-body --silent --show-error \
+            --request PATCH \
+            "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/pages/projects/painel-equipe-norte" \
+            --header "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            --header "Content-Type: application/json" \
+            --data '{"production_branch":"main"}' \
+            --output pages-project.json
+
+          node <<'NODE'
+          const fs = require('fs')
+          const response = JSON.parse(fs.readFileSync('pages-project.json', 'utf8'))
+          if (!response.success) {
+            throw new Error(`Cloudflare recusou a alteração da produção: ${JSON.stringify(response.errors || response)}`)
+          }
+          if (response.result?.production_branch !== 'main') {
+            throw new Error(`Branch de produção inesperada: ${response.result?.production_branch || 'não informada'}`)
+          }
+          console.log('Branch main confirmada como produção do Pages.')
+          NODE
+
       - name: Configurar chave administrativa do Pages
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -95,8 +121,8 @@ jobs:
             echo "Chave administrativa configurada no Cloudflare Pages."
           fi
 
-      - name: Publicar Pages Functions com D1
+      - name: Publicar versão no ambiente de produção
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: npx wrangler@4.112.0 pages deploy --branch main --commit-dirty=true
+        run: npx wrangler@4.112.0 pages deploy dist --project-name painel-equipe-norte --branch main --commit-hash "$GITHUB_SHA" --commit-dirty=true --skip-caching --config wrangler.jsonc
