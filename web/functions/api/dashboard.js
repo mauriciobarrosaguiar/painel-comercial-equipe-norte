@@ -1,222 +1,60 @@
-const JSON_HEADERS = {
-  'content-type': 'application/json; charset=UTF-8',
-  'cache-control': 'no-store',
-}
+const HEADERS={'content-type':'application/json; charset=UTF-8','cache-control':'no-store'}
+const FATURADO="UPPER(COALESCE(pe.status,'')) LIKE '%FATURAD%' AND UPPER(COALESCE(pe.status,'')) NOT LIKE '%CANCEL%'"
+const PERIODOS=new Set(['mes-atual','mes-anterior','todo-periodo','personalizado'])
+const json=(data,status=200)=>new Response(JSON.stringify(data),{status,headers:HEADERS})
+const stmt=(env,sql,params=[])=>params.length?env.DB.prepare(sql).bind(...params):env.DB.prepare(sql)
+const iso=(y,m,d)=>`${String(y).padStart(4,'0')}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`
+const mostrar=(v)=>v?`${v.slice(8,10)}/${v.slice(5,7)}/${v.slice(0,4)}`:''
 
-function json(data, status = 200) {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: JSON_HEADERS,
-  })
-}
-
-const STATUS_FATURADO = `
-  UPPER(COALESCE(pe.status, '')) LIKE '%FATURAD%'
-  AND UPPER(COALESCE(pe.status, '')) NOT LIKE '%CANCEL%'
-`
-
-const PERIODOS = new Set(['mes-atual', 'mes-anterior', 'todo-periodo', 'personalizado'])
-
-function datePartsInSaoPaulo() {
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'America/Sao_Paulo',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).formatToParts(new Date())
-
-  return Object.fromEntries(parts.map((part) => [part.type, part.value]))
-}
-
-function isoDate(year, month, day) {
-  return `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
-}
-
-function lastDayOfMonth(year, month) {
-  return new Date(Date.UTC(year, month, 0)).getUTCDate()
-}
-
-function validIsoDate(value) {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value || '')) return false
-  const [year, month, day] = value.split('-').map(Number)
-  const date = new Date(Date.UTC(year, month - 1, day))
-  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day
-}
-
-function resolvePeriod(searchParams) {
-  const periodo = PERIODOS.has(searchParams.get('periodo')) ? searchParams.get('periodo') : 'mes-atual'
-  if (periodo === 'todo-periodo') return { periodo, inicio: null, fim: null }
-
-  const requestedStart = searchParams.get('inicio') || ''
-  const requestedEnd = searchParams.get('fim') || ''
-  if (validIsoDate(requestedStart) && validIsoDate(requestedEnd)) {
-    if (requestedStart > requestedEnd) throw new Error('A data inicial não pode ser posterior à data final.')
-    return { periodo, inicio: requestedStart, fim: requestedEnd }
+function periodo(params){
+  const tipo=PERIODOS.has(params.get('periodo'))?params.get('periodo'):'mes-atual'
+  if(tipo==='todo-periodo')return{tipo,inicio:null,fim:null}
+  const inicio=params.get('inicio')||''; const fim=params.get('fim')||''
+  if(/^\d{4}-\d{2}-\d{2}$/.test(inicio)&&/^\d{4}-\d{2}-\d{2}$/.test(fim)){
+    if(inicio>fim)throw new Error('A data inicial não pode ser posterior à data final.')
+    return{tipo,inicio,fim}
   }
-
-  if (periodo === 'personalizado') {
-    throw new Error('Informe uma data inicial e uma data final válidas.')
-  }
-
-  const today = datePartsInSaoPaulo()
-  let year = Number(today.year)
-  let month = Number(today.month)
-  if (periodo === 'mes-anterior') {
-    month -= 1
-    if (month === 0) {
-      month = 12
-      year -= 1
-    }
-  }
-
-  return {
-    periodo,
-    inicio: isoDate(year, month, 1),
-    fim: isoDate(year, month, lastDayOfMonth(year, month)),
-  }
+  if(tipo==='personalizado')throw new Error('Informe uma data inicial e uma data final válidas.')
+  const partes=Object.fromEntries(new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date()).map(p=>[p.type,p.value]))
+  let y=Number(partes.year),m=Number(partes.month)
+  if(tipo==='mes-anterior'){m--;if(!m){m=12;y--}}
+  return{tipo,inicio:iso(y,m,1),fim:iso(y,m,new Date(Date.UTC(y,m,0)).getUTCDate())}
 }
 
-function displayDate(value) {
-  if (!value) return ''
-  const [year, month, day] = value.split('-')
-  return `${day}/${month}/${year}`
+function filtros(params){
+  const p=periodo(params),consultor=String(params.get('consultor')||'').trim().slice(0,180),uf=String(params.get('uf')||'').trim().toUpperCase().slice(0,2)
+  const cond=[FATURADO,'cl.carteira_importada=1']; const valores=[]
+  if(p.inicio&&p.fim){cond.push('DATE(COALESCE(pe.data_pedido,pe.data_faturamento)) BETWEEN DATE(?) AND DATE(?)');valores.push(p.inicio,p.fim)}
+  if(consultor){cond.push('cl.consultor_id=?');valores.push(consultor)}
+  if(uf){cond.push("UPPER(TRIM(COALESCE(cl.uf,'')))=?");valores.push(uf)}
+  return{...p,consultor,uf,where:cond.join(' AND '),valores,rotulo:p.inicio?`${mostrar(p.inicio)} a ${mostrar(p.fim)}`:'Todo o período extraído'}
 }
 
-function prepare(env, sql, params = []) {
-  const statement = env.DB.prepare(sql)
-  return params.length ? statement.bind(...params) : statement
-}
+const JOINS='FROM itens_pedido ip JOIN pedidos pe ON pe.id=ip.pedido_id JOIN clientes cl ON cl.id=pe.cliente_id LEFT JOIN produtos pr ON pr.id=ip.produto_id'
 
-function filterContext(searchParams) {
-  const period = resolvePeriod(searchParams)
-  const consultant = String(searchParams.get('consultor') || '').trim().slice(0, 160)
-  const uf = String(searchParams.get('uf') || '').trim().toUpperCase().slice(0, 2)
-  const conditions = [STATUS_FATURADO]
-  const params = []
-
-  if (period.inicio && period.fim) {
-    conditions.push('DATE(COALESCE(pe.data_pedido, pe.data_faturamento)) >= DATE(?)')
-    conditions.push('DATE(COALESCE(pe.data_pedido, pe.data_faturamento)) <= DATE(?)')
-    params.push(period.inicio, period.fim)
-  }
-  if (consultant) {
-    conditions.push('pe.consultor_id = ?')
-    params.push(consultant)
-  }
-  if (uf) {
-    conditions.push(`UPPER(COALESCE(NULLIF(TRIM(cl.uf), ''), NULLIF(TRIM(pe.uf_centro_distribuicao), ''), '')) = ?`)
-    params.push(uf)
-  }
-
-  const label = period.inicio && period.fim
-    ? `${displayDate(period.inicio)} a ${displayDate(period.fim)}`
-    : 'Todo o período extraído'
-
-  return {
-    ...period,
-    consultant,
-    uf,
-    where: conditions.join('\n AND '),
-    params,
-    label,
-  }
-}
-
-const BASE_JOINS = `
-  FROM itens_pedido ip
-  JOIN pedidos pe ON pe.id = ip.pedido_id
-  LEFT JOIN produtos pr ON pr.id = ip.produto_id
-  LEFT JOIN clientes cl ON cl.id = pe.cliente_id
-`
-
-export async function onRequestGet({ request, env }) {
-  try {
-    const url = new URL(request.url)
-    const filter = filterContext(url.searchParams)
-
-    const metricStatements = [
-      prepare(env, `
-        SELECT COALESCE(SUM(ip.valor_faturado), 0) AS total
-        ${BASE_JOINS}
-        WHERE ${filter.where}
-          AND UPPER(COALESCE(pr.tipo_mix, 'SEM CLASSIFICACAO')) <> 'COMBATE'
-      `, filter.params),
-      prepare(env, `
-        SELECT COALESCE(SUM(ip.valor_faturado), 0) AS total
-        ${BASE_JOINS}
-        WHERE ${filter.where}
-          AND UPPER(COALESCE(pr.tipo_mix, '')) = 'PRIORITARIO'
-      `, filter.params),
-      prepare(env, `
-        SELECT COALESCE(SUM(ip.valor_faturado), 0) AS total
-        ${BASE_JOINS}
-        WHERE ${filter.where}
-          AND UPPER(COALESCE(pr.tipo_mix, '')) = 'LANCAMENTO'
-      `, filter.params),
-      prepare(env, `
-        SELECT COUNT(DISTINCT pe.cliente_id) AS total
-        ${BASE_JOINS}
-        WHERE pe.cliente_id IS NOT NULL
-          AND ${filter.where}
-          AND ip.valor_faturado > 0
-          AND UPPER(COALESCE(pr.tipo_mix, 'SEM CLASSIFICACAO')) <> 'COMBATE'
-      `, filter.params),
-      prepare(env, 'SELECT COUNT(*) AS total FROM clientes WHERE ativo = 1'),
-      prepare(env, 'SELECT COUNT(*) AS total FROM consultores WHERE ativo = 1'),
-      prepare(env, `
-        SELECT COALESCE(SUM(ip.valor_faturado), 0) AS total
-        ${BASE_JOINS}
-        WHERE ${filter.where}
-      `, filter.params),
-      prepare(env, "SELECT COUNT(*) AS total FROM extracoes WHERE status = 'executando'"),
-      prepare(env, `SELECT id, nome FROM consultores WHERE ativo = 1 AND TRIM(nome) <> '' ORDER BY nome COLLATE NOCASE`),
-      prepare(env, `
-        SELECT uf FROM (
-          SELECT UPPER(TRIM(uf)) AS uf FROM clientes WHERE ativo = 1 AND TRIM(COALESCE(uf, '')) <> ''
-          UNION
-          SELECT UPPER(TRIM(uf_centro_distribuicao)) AS uf FROM pedidos WHERE TRIM(COALESCE(uf_centro_distribuicao, '')) <> ''
-        ) WHERE LENGTH(uf) = 2 ORDER BY uf
-      `),
+export async function onRequestGet({request,env}){
+  try{
+    const f=filtros(new URL(request.url).searchParams)
+    const consultas=[
+      stmt(env,`SELECT COALESCE(SUM(ip.valor_faturado),0) total ${JOINS} WHERE ${f.where} AND UPPER(COALESCE(pr.tipo_mix,'SEM CLASSIFICACAO'))<>'COMBATE'`,f.valores),
+      stmt(env,`SELECT COALESCE(SUM(ip.valor_faturado),0) total ${JOINS} WHERE ${f.where} AND UPPER(COALESCE(pr.tipo_mix,''))='PRIORITARIO'`,f.valores),
+      stmt(env,`SELECT COALESCE(SUM(ip.valor_faturado),0) total ${JOINS} WHERE ${f.where} AND UPPER(COALESCE(pr.tipo_mix,''))='LANCAMENTO'`,f.valores),
+      stmt(env,`SELECT COUNT(DISTINCT pe.cliente_id) total ${JOINS} WHERE ${f.where} AND cl.ativo=1 AND ip.valor_faturado>0`,f.valores),
+      stmt(env,'SELECT COUNT(*) total FROM clientes WHERE carteira_importada=1 AND ativo=1'),
+      stmt(env,"SELECT COUNT(*) total FROM consultores WHERE ativo=1 AND origem='PAINEL_EQUIPE'"),
+      stmt(env,`SELECT COALESCE(SUM(ip.valor_faturado),0) total ${JOINS} WHERE ${f.where}`,f.valores),
+      stmt(env,"SELECT COUNT(*) total FROM extracoes WHERE status='executando'"),
+      stmt(env,"SELECT id,nome FROM consultores WHERE ativo=1 AND origem='PAINEL_EQUIPE' AND TRIM(nome)<>'' ORDER BY nome COLLATE NOCASE"),
+      stmt(env,"SELECT DISTINCT UPPER(TRIM(uf)) uf FROM clientes WHERE carteira_importada=1 AND ativo=1 AND LENGTH(TRIM(COALESCE(uf,'')))=2 ORDER BY uf"),
+      stmt(env,"SELECT (SELECT COUNT(*) FROM clientes WHERE carteira_importada=1) clientes_carteira,(SELECT COUNT(*) FROM produtos WHERE UPPER(COALESCE(tipo_mix,''))<>'SEM CLASSIFICACAO') produtos_mix,(SELECT COUNT(*) FROM produtos WHERE mercado_farma_ativo=1) produtos_mercado_farma,(SELECT COUNT(*) FROM metas) metas")
     ]
-
-    const resultados = await env.DB.batch(metricStatements)
-    const consultores = (resultados[8]?.results || []).map((item) => ({
-      id: String(item.id || ''),
-      nome: String(item.nome || ''),
-    })).filter((item) => item.id && item.nome)
-    const ufs = (resultados[9]?.results || []).map((item) => String(item.uf || '')).filter(Boolean)
-
+    const r=await env.DB.batch(consultas),ativos=Number(r[4]?.results?.[0]?.total||0),comVenda=Number(r[3]?.results?.[0]?.total||0),b=r[10]?.results?.[0]||{}
     return json({
-      ol_sem_combate: Number(resultados[0]?.results?.[0]?.total || 0),
-      ol_prioritarios: Number(resultados[1]?.results?.[0]?.total || 0),
-      ol_lancamentos: Number(resultados[2]?.results?.[0]?.total || 0),
-      clientes_com_venda: Number(resultados[3]?.results?.[0]?.total || 0),
-      clientes_ativos: Number(resultados[4]?.results?.[0]?.total || 0),
-      consultores_ativos: Number(resultados[5]?.results?.[0]?.total || 0),
-      vendas_faturadas: Number(resultados[6]?.results?.[0]?.total || 0),
-      automacoes_executando: Number(resultados[7]?.results?.[0]?.total || 0),
-      filtros: {
-        consultores,
-        ufs,
-        aplicado: {
-          periodo: filter.periodo,
-          inicio: filter.inicio,
-          fim: filter.fim,
-          consultor: filter.consultant,
-          uf: filter.uf,
-          rotulo: filter.label,
-        },
-      },
-      atualizado_em: new Date().toISOString(),
+      ol_sem_combate:Number(r[0]?.results?.[0]?.total||0),ol_prioritarios:Number(r[1]?.results?.[0]?.total||0),ol_lancamentos:Number(r[2]?.results?.[0]?.total||0),
+      clientes_com_venda:comVenda,clientes_sem_venda:Math.max(0,ativos-comVenda),clientes_ativos:ativos,consultores_ativos:Number(r[5]?.results?.[0]?.total||0),vendas_faturadas:Number(r[6]?.results?.[0]?.total||0),automacoes_executando:Number(r[7]?.results?.[0]?.total||0),
+      bases:{painel_equipe_norte:Number(b.clientes_carteira||0),produtos_mix:Number(b.produtos_mix||0),produtos_mercado_farma:Number(b.produtos_mercado_farma||0),metas:Number(b.metas||0)},
+      filtros:{consultores:(r[8]?.results||[]).map(x=>({id:String(x.id||''),nome:String(x.nome||'')})).filter(x=>x.id&&x.nome),ufs:(r[9]?.results||[]).map(x=>String(x.uf||'')).filter(Boolean),aplicado:{periodo:f.tipo,inicio:f.inicio,fim:f.fim,consultor:f.consultor,uf:f.uf,rotulo:f.rotulo}},
+      regra_calculo:{valor:'itens_pedido.valor_faturado',carteira:'PAINEL EQUIPE NORTE por CNPJ',uf:'UF do cliente',consultor:'NOME REP do cliente'},atualizado_em:new Date().toISOString()
     })
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
-    return json(
-      {
-        erro: 'Não foi possível carregar os indicadores.',
-        detalhe: message,
-      },
-      message.includes('data inicial') || message.includes('data final') ? 400 : 500,
-    )
-  }
+  }catch(error){const detalhe=error instanceof Error?error.message:String(error);return json({erro:'Não foi possível carregar os indicadores.',detalhe},detalhe.includes('data inicial')||detalhe.includes('data final')?400:500)}
 }
