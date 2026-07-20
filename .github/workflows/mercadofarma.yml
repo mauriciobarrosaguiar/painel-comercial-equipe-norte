@@ -83,6 +83,7 @@ jobs:
       - name: Extrair UF ${{ matrix.uf }}
         if: ${{ (inputs.ufs == '' && inputs.uf == '') || contains(inputs.ufs, matrix.uf) || contains(inputs.uf, matrix.uf) }}
         env:
+          PYTHONPATH: ${{ github.workspace }}
           GITHUB_TOKEN: ${{ github.token }}
           GITHUB_REPO: ${{ github.repository }}
           GITHUB_BRANCH: ${{ github.ref_name }}
@@ -90,21 +91,16 @@ jobs:
           PERSISTENCE_KEY: ${{ secrets.PERSISTENCE_KEY || inputs.persistence_key }}
           MERCADOFARMA_USUARIO: ${{ secrets.MERCADOFARMA_USUARIO || inputs.mercadofarma_usuario }}
           MERCADOFARMA_SENHA: ${{ secrets.MERCADOFARMA_SENHA || inputs.mercadofarma_senha }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_D1_DATABASE: painel-equipe-norte-db
         run: |
-          if [ -n "$MERCADOFARMA_USUARIO" ]; then
-            echo "::add-mask::$MERCADOFARMA_USUARIO"
-          fi
-          if [ -n "$MERCADOFARMA_SENHA" ]; then
-            echo "::add-mask::$MERCADOFARMA_SENHA"
-          fi
-          if [ -n "$PERSISTENCE_KEY" ]; then
-            echo "::add-mask::$PERSISTENCE_KEY"
-          fi
-          echo "Iniciando extracao Mercado Farma para UF ${{ matrix.uf }}"
+          if [ -n "$MERCADOFARMA_USUARIO" ]; then echo "::add-mask::$MERCADOFARMA_USUARIO"; fi
+          if [ -n "$MERCADOFARMA_SENHA" ]; then echo "::add-mask::$MERCADOFARMA_SENHA"; fi
+          if [ -n "$PERSISTENCE_KEY" ]; then echo "::add-mask::$PERSISTENCE_KEY"; fi
+          echo "Iniciando extracao Mercado Farma para UF ${{ matrix.uf }} usando carteira e produtos do D1"
           EXTRA_ARGS=""
-          if [ "${{ inputs.headless }}" = "false" ]; then
-            EXTRA_ARGS="--visivel"
-          fi
+          if [ "${{ inputs.headless }}" = "false" ]; then EXTRA_ARGS="--visivel"; fi
           python automacoes/mercadofarma.py --uf "${{ matrix.uf }}" --limite-eans "${{ inputs.limite_eans }}" $EXTRA_ARGS
 
       - name: Publicar artifact da UF ${{ matrix.uf }}
