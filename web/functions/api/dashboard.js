@@ -9,7 +9,7 @@ const mostrar=(v)=>v?`${v.slice(8,10)}/${v.slice(5,7)}/${v.slice(0,4)}`:''
 function periodo(params){
   const tipo=PERIODOS.has(params.get('periodo'))?params.get('periodo'):'mes-atual'
   if(tipo==='todo-periodo')return{tipo,inicio:null,fim:null}
-  const inicio=params.get('inicio')||''; const fim=params.get('fim')||''
+  const inicio=params.get('inicio')||'',fim=params.get('fim')||''
   if(/^\d{4}-\d{2}-\d{2}$/.test(inicio)&&/^\d{4}-\d{2}-\d{2}$/.test(fim)){
     if(inicio>fim)throw new Error('A data inicial não pode ser posterior à data final.')
     return{tipo,inicio,fim}
@@ -23,11 +23,12 @@ function periodo(params){
 
 function filtros(params){
   const p=periodo(params),consultor=String(params.get('consultor')||'').trim().slice(0,180),uf=String(params.get('uf')||'').trim().toUpperCase().slice(0,2)
-  const cond=[FATURADO,'cl.carteira_importada=1']; const valores=[]
+  const cond=[FATURADO,'cl.carteira_importada=1'],valores=[]
+  const condClientes=['cl.carteira_importada=1','cl.ativo=1'],valoresClientes=[]
   if(p.inicio&&p.fim){cond.push('DATE(COALESCE(pe.data_pedido,pe.data_faturamento)) BETWEEN DATE(?) AND DATE(?)');valores.push(p.inicio,p.fim)}
-  if(consultor){cond.push('cl.consultor_id=?');valores.push(consultor)}
-  if(uf){cond.push("UPPER(TRIM(COALESCE(cl.uf,'')))=?");valores.push(uf)}
-  return{...p,consultor,uf,where:cond.join(' AND '),valores,rotulo:p.inicio?`${mostrar(p.inicio)} a ${mostrar(p.fim)}`:'Todo o período extraído'}
+  if(consultor){cond.push('cl.consultor_id=?');valores.push(consultor);condClientes.push('cl.consultor_id=?');valoresClientes.push(consultor)}
+  if(uf){cond.push("UPPER(TRIM(COALESCE(cl.uf,'')))=?");valores.push(uf);condClientes.push("UPPER(TRIM(COALESCE(cl.uf,'')))=?");valoresClientes.push(uf)}
+  return{...p,consultor,uf,where:cond.join(' AND '),valores,clientWhere:condClientes.join(' AND '),clientValues:valoresClientes,rotulo:p.inicio?`${mostrar(p.inicio)} a ${mostrar(p.fim)}`:'Todo o período extraído'}
 }
 
 const JOINS='FROM itens_pedido ip JOIN pedidos pe ON pe.id=ip.pedido_id JOIN clientes cl ON cl.id=pe.cliente_id LEFT JOIN produtos pr ON pr.id=ip.produto_id'
@@ -40,13 +41,13 @@ export async function onRequestGet({request,env}){
       stmt(env,`SELECT COALESCE(SUM(ip.valor_faturado),0) total ${JOINS} WHERE ${f.where} AND UPPER(COALESCE(pr.tipo_mix,''))='PRIORITARIO'`,f.valores),
       stmt(env,`SELECT COALESCE(SUM(ip.valor_faturado),0) total ${JOINS} WHERE ${f.where} AND UPPER(COALESCE(pr.tipo_mix,''))='LANCAMENTO'`,f.valores),
       stmt(env,`SELECT COUNT(DISTINCT pe.cliente_id) total ${JOINS} WHERE ${f.where} AND cl.ativo=1 AND ip.valor_faturado>0`,f.valores),
-      stmt(env,'SELECT COUNT(*) total FROM clientes WHERE carteira_importada=1 AND ativo=1'),
+      stmt(env,`SELECT COUNT(*) total FROM clientes cl WHERE ${f.clientWhere}`,f.clientValues),
       stmt(env,"SELECT COUNT(*) total FROM consultores WHERE ativo=1 AND origem='PAINEL_EQUIPE'"),
       stmt(env,`SELECT COALESCE(SUM(ip.valor_faturado),0) total ${JOINS} WHERE ${f.where}`,f.valores),
       stmt(env,"SELECT COUNT(*) total FROM extracoes WHERE status='executando'"),
       stmt(env,"SELECT id,nome FROM consultores WHERE ativo=1 AND origem='PAINEL_EQUIPE' AND TRIM(nome)<>'' ORDER BY nome COLLATE NOCASE"),
       stmt(env,"SELECT DISTINCT UPPER(TRIM(uf)) uf FROM clientes WHERE carteira_importada=1 AND ativo=1 AND LENGTH(TRIM(COALESCE(uf,'')))=2 ORDER BY uf"),
-      stmt(env,"SELECT (SELECT COUNT(*) FROM clientes WHERE carteira_importada=1) clientes_carteira,(SELECT COUNT(*) FROM produtos WHERE UPPER(COALESCE(tipo_mix,''))<>'SEM CLASSIFICACAO') produtos_mix,(SELECT COUNT(*) FROM produtos WHERE mercado_farma_ativo=1) produtos_mercado_farma,(SELECT COUNT(*) FROM metas) metas")
+      stmt(env,"SELECT (SELECT COUNT(*) FROM clientes WHERE carteira_importada=1) clientes_carteira,(SELECT COUNT(*) FROM produtos WHERE UPPER(COALESCE(tipo_mix,''))<>'SEM CLASSIFICACAO') produtos_mix,(SELECT COUNT(*) FROM produtos WHERE mercado_farma_ativo=1) produtos_mercado_farma,(SELECT COUNT(*) FROM metas WHERE escopo='consultor') metas")
     ]
     const r=await env.DB.batch(consultas),ativos=Number(r[4]?.results?.[0]?.total||0),comVenda=Number(r[3]?.results?.[0]?.total||0),b=r[10]?.results?.[0]||{}
     return json({
