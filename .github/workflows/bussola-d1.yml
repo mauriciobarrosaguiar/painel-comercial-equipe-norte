@@ -1,0 +1,58 @@
+name: Extrair Bússola para D1
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "*/30 * * * *"
+  push:
+    branches:
+      - main
+    paths:
+      - "scripts/extrair_bussola_d1.py"
+      - ".github/workflows/bussola-d1.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bussola-d1
+  cancel-in-progress: false
+
+jobs:
+  extrair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Baixar repositório
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Instalar dependências
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install \
+            "pandas>=2.3,<3" \
+            "openpyxl>=3.1.5,<4" \
+            "selenium>=4.46,<5" \
+            "webdriver-manager>=4.1.2,<5" \
+            "requests>=2.34,<3" \
+            "tzdata>=2026.3,<2027"
+
+      - name: Verificar navegador
+        run: |
+          google-chrome --version || chromium --version || chromium-browser --version
+
+      - name: Extrair Bússola e sincronizar D1
+        env:
+          PAINEL_BASE_URL: https://painel-equipe-norte.pages.dev
+          PAINEL_ADMIN_KEY: ${{ secrets.PAINEL_ADMIN_KEY }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_API_TOKEN }}
+          CLOUDFLARE_D1_DATABASE: painel-equipe-norte-db
+        run: python scripts/extrair_bussola_d1.py
