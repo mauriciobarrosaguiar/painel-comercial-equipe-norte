@@ -10,7 +10,9 @@ type ConsultantRow = {
   clientes_ativos: number
   clientes_com_venda: number
   clientes_sem_venda: number
+  ol_total_faturado: number
   ol_sem_combate: number
+  ol_combate: number
   ol_prioritarios: number
   ol_lancamentos: number
   meta_ol_sem_combate: number
@@ -34,7 +36,9 @@ type ConsultantsData = {
   ufs: string[]
   consultores: ConsultantRow[]
   totais: {
+    ol_total_faturado: number
     ol_sem_combate: number
+    ol_combate: number
     ol_prioritarios: number
     ol_lancamentos: number
     clientes_ativos: number
@@ -180,7 +184,7 @@ export default function ConsultantsModule({ onBack }: Props) {
       {error && <div className="alert alert-error consultants-alert">{error}</div>}
 
       <section className="consultants-summary" aria-label="Resumo da equipe">
-        <article><span>OL sem combate</span><strong>{loading ? '—' : currency.format(totals?.ol_sem_combate || 0)}</strong><small>Meta GD: {currency.format(totals?.meta_gerente.ol_sem_combate || 0)}</small></article>
+        <article><span>OL sem combate</span><strong>{loading ? '—' : currency.format(totals?.ol_sem_combate || 0)}</strong><small>Total: {currency.format(totals?.ol_total_faturado || 0)} · Meta GD: {currency.format(totals?.meta_gerente.ol_sem_combate || 0)}</small></article>
         <article><span>Resultado da meta</span><strong className={resultClass(totals?.resultado_meta_gerente || 0)}>{loading ? '—' : `${percent.format(totals?.resultado_meta_gerente || 0)}%`}</strong><small>Realizado ÷ meta da gerência</small></article>
         <article><span>Clientes com venda</span><strong>{loading ? '—' : number.format(totals?.clientes_com_venda || 0)}</strong><small>{number.format(totals?.clientes_sem_venda || 0)} clientes sem venda</small></article>
         <article><span>Mix prioritário</span><strong>{loading ? '—' : `${percent.format(totals?.participacao_prioritarios || 0)}%`}</strong><small>Lançamentos: {percent.format(totals?.participacao_lancamentos || 0)}%</small></article>

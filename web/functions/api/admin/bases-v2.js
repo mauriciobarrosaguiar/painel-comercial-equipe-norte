@@ -1,4 +1,5 @@
 import { authorized, json } from '../../_lib/credentials.js'
+import { classificarMix } from '../../_lib/commercial.js'
 
 const TIPOS=new Set(['painel','metas','produtos_mix','produtos_mercado_farma'])
 const texto=(v)=>String(v??'').trim()
@@ -6,7 +7,6 @@ const digitos=(v)=>texto(v).replace(/\D/g,'')
 const alto=(v)=>texto(v).normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ').toUpperCase()
 const numero=(v)=>{if(typeof v==='number')return Number.isFinite(v)?v:0;let s=texto(v).replace(/R\$/g,'').replace(/%/g,'').replace(/\s/g,'');if(s.includes(',')&&s.includes('.'))s=s.replace(/\./g,'').replace(',','.');else if(s.includes(','))s=s.replace(',','.');const n=Number(s);return Number.isFinite(n)?n:0}
 const ativo=(v)=>!/(INATIV|CANCEL|ENCERR|BLOQUE)/.test(alto(v))
-const mix=(v)=>{const s=alto(v);if(s.includes('PRIORIT'))return'PRIORITARIO';if(s.includes('LANC'))return'LANCAMENTO';if(/\b(?:SEM|NAO)\s+COMBATE\b/.test(s))return'LINHA';if(s.includes('COMBATE'))return'COMBATE';if(s.includes('LINHA'))return'LINHA';return'SEM CLASSIFICACAO'}
 
 async function idEstavel(prefixo,...partes){
   const bytes=new TextEncoder().encode(partes.map(texto).join('|'))
@@ -69,7 +69,7 @@ async function importarPainel(env,rows,nome){
 
 async function importarProdutos(env,rows,nome,tipo){
   const token=crypto.randomUUID(),dados=[]
-  for(const row of rows){const ean=digitos(row.ean);if(!ean)continue;dados.push({id:await idEstavel('prod',ean),ean,descricao:texto(row.produto||row.descricao)||`Produto ${ean}`,tipo_mix:mix(row.tipo_mix||row.classificacao||row.categoria),token})}
+  for(const row of rows){const ean=digitos(row.ean);if(!ean)continue;dados.push({id:await idEstavel('prod',ean),ean,descricao:texto(row.produto||row.descricao)||`Produto ${ean}`,tipo_mix:classificarMix(row.tipo_mix||row.classificacao||row.categoria),token})}
   if(!dados.length)throw new Error('A planilha não possui EANs válidos.')
   const agora=new Date().toISOString()
   if(tipo==='produtos_mix'){
