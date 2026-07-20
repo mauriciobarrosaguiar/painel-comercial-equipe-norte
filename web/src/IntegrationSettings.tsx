@@ -1,4 +1,5 @@
 import { FormEvent, useState } from 'react'
+import BaseManagement from './BaseManagement'
 
 type IntegrationStatus = {
   configurada: boolean
@@ -39,37 +40,50 @@ export default function IntegrationSettings({ onBack }: Props) {
   }
 
   async function unlock() {
-    setLoading(true); setError(''); setMessage('')
+    setLoading(true)
+    setError('')
+    setMessage('')
     try {
       setStatus(await request('GET'))
       setMessage('Área administrativa liberada enquanto esta página permanecer aberta.')
     } catch (reason) {
       setStatus(null)
       setError(reason instanceof Error ? reason.message : String(reason))
-    } finally { setLoading(false) }
+    } finally {
+      setLoading(false)
+    }
   }
 
   async function save(event: FormEvent) {
-    event.preventDefault(); setLoading(true); setError(''); setMessage('')
+    event.preventDefault()
+    setLoading(true)
+    setError('')
+    setMessage('')
     try {
       setStatus(await request('POST', { usuario: userId, segredo: accessSecret }))
-      setUserId(''); setAccessSecret('')
+      setUserId('')
+      setAccessSecret('')
       setMessage('Acesso salvo e protegido com sucesso.')
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason))
-    } finally { setLoading(false) }
+    } finally {
+      setLoading(false)
+    }
   }
 
   async function remove() {
     if (!window.confirm('Remover o acesso salvo?')) return
-    setLoading(true); setError('')
+    setLoading(true)
+    setError('')
     try {
       await request('DELETE')
       setStatus({ configurada: false, usuario_mascarado: '', status: 'nao_configurada', mensagem: 'Acesso removido.', atualizado_em: null })
       setMessage('Acesso removido.')
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason))
-    } finally { setLoading(false) }
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -77,9 +91,10 @@ export default function IntegrationSettings({ onBack }: Props) {
       <button className="back-button" type="button" onClick={onBack}>← Voltar ao painel</button>
       <section className="admin-hero">
         <span className="eyebrow">Administração</span>
-        <h1>Integrações do painel</h1>
-        <p>Cadastre ou altere o acesso usado pela automação do Bússola.</p>
+        <h1>Integrações e bases do painel</h1>
+        <p>Gerencie o acesso do Bússola e as planilhas oficiais usadas nos cálculos comerciais.</p>
       </section>
+
       <section className="admin-grid">
         <article className="admin-card">
           <div className="integration-heading">
@@ -90,7 +105,7 @@ export default function IntegrationSettings({ onBack }: Props) {
           <div className="admin-unlock">
             <label><span>Chave administrativa</span><input type="password" value={adminKey} onChange={(event) => setAdminKey(event.target.value)} /></label>
             <button className="outline-button" type="button" onClick={() => void unlock()} disabled={loading}>{loading ? 'Verificando…' : 'Acessar configurações'}</button>
-            <small>A chave fica somente na memória do navegador e é apagada ao atualizar a página.</small>
+            <small>A mesma chave libera as credenciais e a importação das planilhas. Ela não é gravada no navegador.</small>
           </div>
           {error && <div className="alert alert-error">{error}</div>}
           {message && <div className="alert alert-success">{message}</div>}
@@ -113,12 +128,20 @@ export default function IntegrationSettings({ onBack }: Props) {
             </>
           )}
         </article>
+
         <aside className="security-card">
-          <span className="security-icon">✓</span><h2>Proteção aplicada</h2>
-          <p>O acesso é cifrado no servidor antes de entrar no D1. A página recebe apenas o usuário mascarado e o status.</p>
-          <ul><li>O código de acesso nunca volta ao navegador.</li><li>Alterações exigem a chave administrativa.</li><li>O acesso pode ser substituído a qualquer momento.</li></ul>
+          <span className="security-icon">✓</span><h2>Regras corrigidas</h2>
+          <p>Cada informação agora tem uma única fonte oficial.</p>
+          <ul>
+            <li>Bússola: pedidos, datas, EANs e valor faturado.</li>
+            <li>Painel Equipe Norte: cliente, consultor, GD e UF.</li>
+            <li>Metas Comerciais: objetivos por consultor e GD.</li>
+            <li>Produtos: classificação do mix e lista do Mercado Farma.</li>
+          </ul>
         </aside>
       </section>
+
+      <BaseManagement adminKey={adminKey} enabled={Boolean(status)} />
     </main>
   )
 }
