@@ -12,6 +12,7 @@ on:
       - main
     paths:
       - "scripts/migrar_bases_legadas_d1.py"
+      - "scripts/migrar_bases_legadas_seguro.py"
       - "web/migrations/**"
       - ".github/workflows/migrar-bases-legadas-d1.yml"
 
@@ -69,7 +70,7 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt
 
-      - name: Migrar carteira produtos e metas
+      - name: Migrar carteira produtos e metas com validação de vínculos
         env:
           PYTHONPATH: ${{ github.workspace }}
           GITHUB_TOKEN: ${{ github.token }}
@@ -83,4 +84,4 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_D1_DATABASE: painel-equipe-norte-db
           MIGRACAO_ANO_MES: ${{ inputs.ano_mes || '2026-07' }}
-        run: python scripts/migrar_bases_legadas_d1.py
+        run: python scripts/migrar_bases_legadas_seguro.py
