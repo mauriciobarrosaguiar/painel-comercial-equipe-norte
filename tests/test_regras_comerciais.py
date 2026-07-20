@@ -3,7 +3,11 @@ from __future__ import annotations
 import pandas as pd
 
 from src.calculos import calcular_indicadores, calcular_resumo_operacional
-from src.tratamento import normalizar_data_iso, normalizar_tipo_mix
+from src.tratamento import (
+    deduplicar_exportacao_bussola,
+    normalizar_data_iso,
+    normalizar_tipo_mix,
+)
 
 
 def _vendas_conhecidas() -> pd.DataFrame:
@@ -45,3 +49,20 @@ def test_indicadores_excluem_cancelado_e_nao_inventam_classificacao() -> None:
     assert indicadores["clientes_positivados"] == 4
     assert operacional["valor_combate"] == 40.0
     assert operacional["faturado_periodo"] == 225.0
+
+
+def test_reimportacao_ignora_item_exatamente_duplicado() -> None:
+    linha = {
+        "pedido_id": "P1",
+        "nota_fiscal": "NF1",
+        "data_de_faturamento": "2026-07-12",
+        "cnpj_pdv": "12.345.678/0001-90",
+        "ean": "7891234567890",
+        "sku_produto": "SKU1",
+        "valor_faturado": "100,00",
+    }
+    base = pd.DataFrame([linha, linha, {**linha, "ean": "7891234567891"}])
+
+    resultado = deduplicar_exportacao_bussola(base)
+
+    assert len(resultado) == 2
