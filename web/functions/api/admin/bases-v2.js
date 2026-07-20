@@ -88,13 +88,17 @@ async function importarMetas(env,rows,nome,anoMes){
   const dados=[]
   for(const row of rows){const n=texto(row.consultor||row.colaborador);if(!n)continue;const consultor_id=await idEstavel('cons',n);dados.push({id:await idEstavel('meta',anoMes,'consultor',consultor_id),consultor_id,nome:n,ol_sem_combate:numero(row.ol_sem_combate),ol_prioritarios:numero(row.ol_prioritarios),ol_lancamentos:numero(row.ol_lancamentos),clientes_positivados:numero(row.clientes_positivados)})}
   if(!dados.length)throw new Error('A planilha não possui metas válidas.')
-  const agora=new Date().toISOString(),token=crypto.randomUUID()
+  const agora=new Date().toISOString(),token=`imp-${crypto.randomUUID()}`
   for(const d of dados)await env.DB.prepare("INSERT INTO consultores(id,nome,origem,ativo,atualizado_em) VALUES(?,?,'METAS',1,?) ON CONFLICT(id) DO UPDATE SET nome=excluded.nome,atualizado_em=excluded.atualizado_em").bind(d.consultor_id,d.nome,agora).run()
-  await env.DB.prepare('DELETE FROM metas WHERE ano_mes=?').bind(anoMes).run()
-  await executarJson(env,`INSERT INTO metas(id,ano_mes,escopo,consultor_id,ol_sem_combate,ol_prioritarios,ol_lancamentos,clientes_positivados,importacao_id,atualizado_em) SELECT json_extract(value,'$.id'),?,'consultor',json_extract(value,'$.consultor_id'),json_extract(value,'$.ol_sem_combate'),json_extract(value,'$.ol_prioritarios'),json_extract(value,'$.ol_lancamentos'),json_extract(value,'$.clientes_positivados'),?,? FROM json_each(?)`,dados,400,[anoMes,token,agora])
   const soma=dados.reduce((a,d)=>({ol_sem_combate:a.ol_sem_combate+d.ol_sem_combate,ol_prioritarios:a.ol_prioritarios+d.ol_prioritarios,ol_lancamentos:a.ol_lancamentos+d.ol_lancamentos,clientes_positivados:a.clientes_positivados+d.clientes_positivados}),{ol_sem_combate:0,ol_prioritarios:0,ol_lancamentos:0,clientes_positivados:0})
-  await env.DB.prepare("INSERT INTO metas(id,ano_mes,escopo,consultor_id,ol_sem_combate,ol_prioritarios,ol_lancamentos,clientes_positivados,importacao_id,atualizado_em) VALUES(?,?,'gerente',NULL,?,?,?,?,?,?)").bind(await idEstavel('meta',anoMes,'gerente'),anoMes,soma.ol_sem_combate,soma.ol_prioritarios,soma.ol_lancamentos,soma.clientes_positivados,token,agora).run()
-  await registrar(env,'METAS_COMERCIAIS',nome,dados.length)
+  const gerenteId=await idEstavel('meta',anoMes,'gerente')
+  await env.DB.batch([
+    env.DB.prepare("INSERT INTO importacoes(id,tipo,nome_arquivo,total_registros,status,criado_em) VALUES(?,'METAS_COMERCIAIS',?,?,?,?)").bind(token,nome,dados.length+1,'concluido',agora),
+    env.DB.prepare(`INSERT INTO metas_historico(meta_id,ano_mes,escopo,consultor_id,ol_sem_combate,ol_prioritarios,ol_lancamentos,clientes_positivados,importacao_anterior_id,nova_importacao_id,substituida_em) SELECT id,ano_mes,escopo,consultor_id,ol_sem_combate,ol_prioritarios,ol_lancamentos,clientes_positivados,importacao_id,?,? FROM metas WHERE ano_mes=?`).bind(token,agora,anoMes),
+    env.DB.prepare(`INSERT INTO metas(id,ano_mes,escopo,consultor_id,ol_sem_combate,ol_prioritarios,ol_lancamentos,clientes_positivados,importacao_id,atualizado_em) SELECT json_extract(value,'$.id'),?,'consultor',json_extract(value,'$.consultor_id'),json_extract(value,'$.ol_sem_combate'),json_extract(value,'$.ol_prioritarios'),json_extract(value,'$.ol_lancamentos'),json_extract(value,'$.clientes_positivados'),?,? FROM json_each(?) WHERE 1 ON CONFLICT(id) DO UPDATE SET ol_sem_combate=excluded.ol_sem_combate,ol_prioritarios=excluded.ol_prioritarios,ol_lancamentos=excluded.ol_lancamentos,clientes_positivados=excluded.clientes_positivados,importacao_id=excluded.importacao_id,atualizado_em=excluded.atualizado_em`).bind(anoMes,token,agora,JSON.stringify(dados)),
+    env.DB.prepare("INSERT INTO metas(id,ano_mes,escopo,consultor_id,ol_sem_combate,ol_prioritarios,ol_lancamentos,clientes_positivados,importacao_id,atualizado_em) VALUES(?,?,'gerente',NULL,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET ol_sem_combate=excluded.ol_sem_combate,ol_prioritarios=excluded.ol_prioritarios,ol_lancamentos=excluded.ol_lancamentos,clientes_positivados=excluded.clientes_positivados,importacao_id=excluded.importacao_id,atualizado_em=excluded.atualizado_em").bind(gerenteId,anoMes,soma.ol_sem_combate,soma.ol_prioritarios,soma.ol_lancamentos,soma.clientes_positivados,token,agora),
+    env.DB.prepare("DELETE FROM metas WHERE ano_mes=? AND COALESCE(importacao_id,'')<>?").bind(anoMes,token),
+  ])
   return{total:dados.length,ano_mes:anoMes}
 }
 
