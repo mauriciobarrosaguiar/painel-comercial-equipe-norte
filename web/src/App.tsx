@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import IntegrationSettings from './IntegrationSettings'
+import ConsultantsModule from './ConsultantsModule'
 
 type ModuleCard = {
   title: string
@@ -40,12 +41,12 @@ type DashboardData = {
 }
 
 type DatabaseState = 'carregando' | 'conectado' | 'erro'
-type Page = 'dashboard' | 'administracao'
+type Page = 'dashboard' | 'administracao' | 'consultores'
 type PeriodOption = 'mes-atual' | 'mes-anterior' | 'todo-periodo' | 'personalizado'
 
 const modules: ModuleCard[] = [
   { title: 'Visão Geral', description: 'Indicadores, metas, projeções e desempenho da equipe.', icon: '▦', status: 'Primeira etapa' },
-  { title: 'Consultores', description: 'Ranking, resultados individuais e acompanhamento das metas.', icon: '◉' },
+  { title: 'Consultores', description: 'Ranking, resultados individuais e acompanhamento das metas.', icon: '◉', status: 'Ativo' },
   { title: 'Clientes', description: 'Positivação, cobertura, histórico e oportunidades por cliente.', icon: '◇' },
   { title: 'Foco Semanal', description: 'Produtos foco, clientes selecionados e acompanhamento da semana.', icon: '◎' },
   { title: 'Oportunidades', description: 'Clientes sem compra, mix ausente e potenciais de crescimento.', icon: '↗' },
@@ -183,17 +184,21 @@ function App() {
     { label: 'Clientes com venda', value: numberFormatter.format(dashboard.clientes_com_venda), detail: activeFilterText },
   ], [dashboard, activeFilterText])
 
+  function goTo(nextPage: Page) {
+    setPage(nextPage)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
   function openModule(title: string) {
-    if (title === 'Administração') {
-      setPage('administracao')
-      window.scrollTo({ top: 0, behavior: 'smooth' })
-    }
+    if (title === 'Administração') goTo('administracao')
+    if (title === 'Consultores') goTo('consultores')
+    if (title === 'Visão Geral') goTo('dashboard')
   }
 
   return (
     <div className="app-shell">
       <header className="topbar">
-        <button className="brand brand-button" type="button" onClick={() => setPage('dashboard')}>
+        <button className="brand brand-button" type="button" onClick={() => goTo('dashboard')}>
           <div className="brand-mark">N</div>
           <div><strong>Painel Comercial</strong><span>Equipe Norte</span></div>
         </button>
@@ -204,7 +209,9 @@ function App() {
       </header>
 
       {page === 'administracao' ? (
-        <IntegrationSettings onBack={() => setPage('dashboard')} />
+        <IntegrationSettings onBack={() => goTo('dashboard')} />
+      ) : page === 'consultores' ? (
+        <ConsultantsModule onBack={() => goTo('dashboard')} />
       ) : (
         <main className="content">
           <section className="hero">
@@ -214,8 +221,8 @@ function App() {
               <p>Acompanhe a operação da Equipe Norte em um único lugar.</p>
             </div>
             <div className="hero-actions">
-              <button className="secondary-button" type="button">Últimas atualizações</button>
-              <button className="primary-button" type="button">Central de automações</button>
+              <button className="secondary-button" type="button" onClick={() => goTo('administracao')}>Últimas atualizações</button>
+              <button className="primary-button" type="button" onClick={() => goTo('administracao')}>Central de automações</button>
             </div>
           </section>
 
