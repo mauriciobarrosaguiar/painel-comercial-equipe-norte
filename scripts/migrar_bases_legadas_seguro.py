@@ -110,19 +110,36 @@ def migrar_metas_seguro(database_id: str) -> int:
 
     legado.d1.executar(database_id, "DELETE FROM metas WHERE ano_mes=?", [ano_mes])
 
-    # Inserção individual facilita identificar qualquer registro problemático e respeita as FKs.
+    # Insere cada meta separadamente. Para o gerente, o SQL usa NULL real,
+    # evitando que o conector converta None em texto vazio e viole a FK.
     for linha in linhas_metas:
-        legado.d1.executar(
-            database_id,
-            """
-            INSERT INTO metas (
-              id,ano_mes,escopo,consultor_id,ol_sem_combate,
-              ol_prioritarios,ol_lancamentos,clientes_positivados,
-              importacao_id,atualizado_em
-            ) VALUES (?,?,?,?,?,?,?,?,?,?)
-            """,
-            linha,
-        )
+        escopo = str(linha[2])
+        if linha[3] is None:
+            parametros = linha[:3] + linha[4:]
+            legado.d1.executar(
+                database_id,
+                """
+                INSERT INTO metas (
+                  id,ano_mes,escopo,consultor_id,ol_sem_combate,
+                  ol_prioritarios,ol_lancamentos,clientes_positivados,
+                  importacao_id,atualizado_em
+                ) VALUES (?,?,?,NULL,?,?,?,?,?,?)
+                """,
+                parametros,
+            )
+        else:
+            legado.d1.executar(
+                database_id,
+                """
+                INSERT INTO metas (
+                  id,ano_mes,escopo,consultor_id,ol_sem_combate,
+                  ol_prioritarios,ol_lancamentos,clientes_positivados,
+                  importacao_id,atualizado_em
+                ) VALUES (?,?,?,?,?,?,?,?,?,?)
+                """,
+                linha,
+            )
+        print(f"Meta migrada: {escopo} - {linha[1]}")
 
     legado.d1.executar(
         database_id,
