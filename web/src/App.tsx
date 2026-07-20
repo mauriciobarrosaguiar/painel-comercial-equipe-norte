@@ -1,9 +1,25 @@
+import { useEffect, useMemo, useState } from 'react'
+
 type ModuleCard = {
   title: string
   description: string
   icon: string
   status?: string
 }
+
+type DashboardData = {
+  ol_sem_combate: number
+  ol_prioritarios: number
+  ol_lancamentos: number
+  clientes_com_venda: number
+  clientes_ativos: number
+  consultores_ativos: number
+  vendas_faturadas: number
+  automacoes_executando: number
+  atualizado_em: string
+}
+
+type DatabaseState = 'carregando' | 'conectado' | 'erro'
 
 const modules: ModuleCard[] = [
   { title: 'Visão Geral', description: 'Indicadores, metas, projeções e desempenho da equipe.', icon: '▦', status: 'Primeira etapa' },
@@ -18,14 +34,72 @@ const modules: ModuleCard[] = [
   { title: 'Administração', description: 'Usuários, metas, produtos, permissões e configurações.', icon: '☷' },
 ]
 
-const summary = [
-  { label: 'OL sem combate', value: '—', detail: 'Aguardando banco de dados' },
-  { label: 'OL prioritários', value: '—', detail: 'Aguardando banco de dados' },
-  { label: 'OL lançamentos', value: '—', detail: 'Aguardando banco de dados' },
-  { label: 'Clientes com venda', value: '—', detail: 'Aguardando banco de dados' },
-]
+const initialDashboard: DashboardData = {
+  ol_sem_combate: 0,
+  ol_prioritarios: 0,
+  ol_lancamentos: 0,
+  clientes_com_venda: 0,
+  clientes_ativos: 0,
+  consultores_ativos: 0,
+  vendas_faturadas: 0,
+  automacoes_executando: 0,
+  atualizado_em: '',
+}
+
+const numberFormatter = new Intl.NumberFormat('pt-BR')
 
 function App() {
+  const [dashboard, setDashboard] = useState<DashboardData>(initialDashboard)
+  const [databaseState, setDatabaseState] = useState<DatabaseState>('carregando')
+
+  useEffect(() => {
+    let active = true
+
+    async function loadDashboard() {
+      try {
+        const [healthResponse, dashboardResponse] = await Promise.all([
+          fetch('/api/health', { cache: 'no-store' }),
+          fetch('/api/dashboard', { cache: 'no-store' }),
+        ])
+
+        if (!healthResponse.ok || !dashboardResponse.ok) {
+          throw new Error('API indisponível')
+        }
+
+        const health = await healthResponse.json() as { database?: string }
+        const data = await dashboardResponse.json() as DashboardData
+
+        if (active) {
+          setDashboard(data)
+          setDatabaseState(health.database === 'ok' ? 'conectado' : 'erro')
+        }
+      } catch {
+        if (active) {
+          setDatabaseState('erro')
+        }
+      }
+    }
+
+    void loadDashboard()
+
+    return () => {
+      active = false
+    }
+  }, [])
+
+  const statusText = databaseState === 'conectado'
+    ? 'Banco conectado'
+    : databaseState === 'erro'
+      ? 'Falha ao conectar ao banco'
+      : 'Conectando ao banco'
+
+  const summary = useMemo(() => [
+    { label: 'OL sem combate', value: numberFormatter.format(dashboard.ol_sem_combate), detail: statusText },
+    { label: 'OL prioritários', value: numberFormatter.format(dashboard.ol_prioritarios), detail: statusText },
+    { label: 'OL lançamentos', value: numberFormatter.format(dashboard.ol_lancamentos), detail: statusText },
+    { label: 'Clientes com venda', value: numberFormatter.format(dashboard.clientes_com_venda), detail: statusText },
+  ], [dashboard, statusText])
+
   return (
     <div className="app-shell">
       <header className="topbar">
@@ -87,7 +161,7 @@ function App() {
           {summary.map((item) => (
             <article className="summary-card" key={item.label}>
               <span>{item.label}</span>
-              <strong>{item.value}</strong>
+              <strong>{databaseState === 'carregando' ? '—' : item.value}</strong>
               <small>{item.detail}</small>
             </article>
           ))}
@@ -98,7 +172,7 @@ function App() {
             <span className="eyebrow">Acesso rápido</span>
             <h2>Módulos do painel</h2>
           </div>
-          <span className="development-note">Interface inicial em desenvolvimento</span>
+          <span className="development-note">{statusText}</span>
         </section>
 
         <section className="modules-grid">
