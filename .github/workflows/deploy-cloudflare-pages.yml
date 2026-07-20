@@ -53,7 +53,7 @@ jobs:
           process.exit(databases.some((item) => item && item.name === 'painel-equipe-norte-db') ? 0 : 1)
           NODE
           then
-            npx wrangler@4.112.0 d1 create painel-equipe-norte-db --yes
+            npx wrangler@4.112.0 d1 create painel-equipe-norte-db
             npx wrangler@4.112.0 d1 list --json > d1-list.json
           fi
 
