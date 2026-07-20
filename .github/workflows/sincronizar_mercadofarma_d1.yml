@@ -1,0 +1,52 @@
+name: Sincronizar Mercado Farma no D1
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "scripts/importar_mercadofarma_d1.py"
+      - ".github/workflows/sincronizar_mercadofarma_d1.yml"
+  workflow_run:
+    workflows:
+      - "Mercado Farma por UF"
+    types:
+      - completed
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sincronizar-mercadofarma-d1
+  cancel-in-progress: false
+
+jobs:
+  sincronizar:
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Baixar versão atual do repositório
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Instalar dependências da sincronização
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas requests
+
+      - name: Importar consolidado Mercado Farma no D1
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_D1_DATABASE: painel-equipe-norte-db
+        run: python scripts/importar_mercadofarma_d1.py
