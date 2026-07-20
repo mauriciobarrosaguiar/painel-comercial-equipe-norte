@@ -49,6 +49,12 @@ const initialDashboard: DashboardData = {
 }
 
 const numberFormatter = new Intl.NumberFormat('pt-BR')
+const currencyFormatter = new Intl.NumberFormat('pt-BR', {
+  style: 'currency',
+  currency: 'BRL',
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+})
 
 function App() {
   const [page, setPage] = useState<Page>('dashboard')
@@ -87,9 +93,9 @@ function App() {
       : 'Conectando ao banco'
 
   const summary = useMemo(() => [
-    { label: 'OL sem combate', value: numberFormatter.format(dashboard.ol_sem_combate), detail: statusText },
-    { label: 'OL prioritários', value: numberFormatter.format(dashboard.ol_prioritarios), detail: statusText },
-    { label: 'OL lançamentos', value: numberFormatter.format(dashboard.ol_lancamentos), detail: statusText },
+    { label: 'OL sem combate', value: currencyFormatter.format(dashboard.ol_sem_combate), detail: statusText },
+    { label: 'OL prioritários', value: currencyFormatter.format(dashboard.ol_prioritarios), detail: statusText },
+    { label: 'OL lançamentos', value: currencyFormatter.format(dashboard.ol_lancamentos), detail: statusText },
     { label: 'Clientes com venda', value: numberFormatter.format(dashboard.clientes_com_venda), detail: statusText },
   ], [dashboard, statusText])
 
