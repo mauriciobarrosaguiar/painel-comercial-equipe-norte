@@ -30,6 +30,33 @@ jobs:
       - name: Baixar repositório
         uses: actions/checkout@v4
 
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Localizar banco e aplicar migrações
+        working-directory: web
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx wrangler@4.112.0 d1 list --json > d1-list.json
+          node <<'NODE'
+          const fs = require('fs')
+          const data = JSON.parse(fs.readFileSync('d1-list.json', 'utf8'))
+          const databases = Array.isArray(data) ? data : (Array.isArray(data.result) ? data.result : [])
+          const database = databases.find((item) => item && item.name === 'painel-equipe-norte-db')
+          const databaseId = database?.uuid || database?.database_id || database?.id
+          if (!databaseId) throw new Error('Banco painel-equipe-norte-db não encontrado.')
+          const config = JSON.parse(fs.readFileSync('wrangler.jsonc', 'utf8'))
+          config.d1_databases[0].database_id = databaseId
+          fs.writeFileSync('wrangler.jsonc', `${JSON.stringify(config, null, 2)}\n`)
+          NODE
+          npx wrangler@4.112.0 d1 migrations apply DB --remote --config wrangler.jsonc
+
       - name: Configurar Python
         uses: actions/setup-python@v5
         with:
