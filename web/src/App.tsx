@@ -8,6 +8,20 @@ type ModuleCard = {
   status?: string
 }
 
+type ConsultantOption = {
+  id: string
+  nome: string
+}
+
+type AppliedFilters = {
+  periodo: string
+  inicio: string | null
+  fim: string | null
+  consultor: string
+  uf: string
+  rotulo: string
+}
+
 type DashboardData = {
   ol_sem_combate: number
   ol_prioritarios: number
@@ -17,11 +31,17 @@ type DashboardData = {
   consultores_ativos: number
   vendas_faturadas: number
   automacoes_executando: number
+  filtros: {
+    consultores: ConsultantOption[]
+    ufs: string[]
+    aplicado: AppliedFilters
+  }
   atualizado_em: string
 }
 
 type DatabaseState = 'carregando' | 'conectado' | 'erro'
 type Page = 'dashboard' | 'administracao'
+type PeriodOption = 'mes-atual' | 'mes-anterior' | 'todo-periodo' | 'personalizado'
 
 const modules: ModuleCard[] = [
   { title: 'Visão Geral', description: 'Indicadores, metas, projeções e desempenho da equipe.', icon: '▦', status: 'Primeira etapa' },
@@ -45,6 +65,18 @@ const initialDashboard: DashboardData = {
   consultores_ativos: 0,
   vendas_faturadas: 0,
   automacoes_executando: 0,
+  filtros: {
+    consultores: [],
+    ufs: [],
+    aplicado: {
+      periodo: 'mes-atual',
+      inicio: null,
+      fim: null,
+      consultor: '',
+      uf: '',
+      rotulo: 'Mês atual',
+    },
+  },
   atualizado_em: '',
 }
 
@@ -56,19 +88,59 @@ const currencyFormatter = new Intl.NumberFormat('pt-BR', {
   maximumFractionDigits: 2,
 })
 
+function formatLocalDate(date: Date) {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+function monthBounds(offset: number) {
+  const now = new Date()
+  const first = new Date(now.getFullYear(), now.getMonth() + offset, 1)
+  const last = new Date(now.getFullYear(), now.getMonth() + offset + 1, 0)
+  return { inicio: formatLocalDate(first), fim: formatLocalDate(last) }
+}
+
+const currentMonth = monthBounds(0)
+
 function App() {
   const [page, setPage] = useState<Page>('dashboard')
   const [dashboard, setDashboard] = useState<DashboardData>(initialDashboard)
   const [databaseState, setDatabaseState] = useState<DatabaseState>('carregando')
+  const [period, setPeriod] = useState<PeriodOption>('mes-atual')
+  const [consultant, setConsultant] = useState('')
+  const [uf, setUf] = useState('')
+  const [customStart, setCustomStart] = useState(currentMonth.inicio)
+  const [customEnd, setCustomEnd] = useState(currentMonth.fim)
+
+  const selectedPeriod = useMemo(() => {
+    if (period === 'mes-atual') return monthBounds(0)
+    if (period === 'mes-anterior') return monthBounds(-1)
+    if (period === 'personalizado') return { inicio: customStart, fim: customEnd }
+    return { inicio: '', fim: '' }
+  }, [period, customStart, customEnd])
 
   useEffect(() => {
+    if (period === 'personalizado' && (!customStart || !customEnd)) return
+
+    const controller = new AbortController()
     let active = true
 
     async function loadDashboard() {
+      setDatabaseState('carregando')
       try {
+        const params = new URLSearchParams({ periodo: period })
+        if (selectedPeriod.inicio && selectedPeriod.fim) {
+          params.set('inicio', selectedPeriod.inicio)
+          params.set('fim', selectedPeriod.fim)
+        }
+        if (consultant) params.set('consultor', consultant)
+        if (uf) params.set('uf', uf)
+
         const [healthResponse, dashboardResponse] = await Promise.all([
-          fetch('/api/health', { cache: 'no-store' }),
-          fetch('/api/dashboard', { cache: 'no-store' }),
+          fetch('/api/health', { cache: 'no-store', signal: controller.signal }),
+          fetch(`/api/dashboard?${params.toString()}`, { cache: 'no-store', signal: controller.signal }),
         ])
         if (!healthResponse.ok || !dashboardResponse.ok) throw new Error('API indisponível')
         const health = await healthResponse.json() as { database?: string }
@@ -77,27 +149,39 @@ function App() {
           setDashboard(data)
           setDatabaseState(health.database === 'ok' ? 'conectado' : 'erro')
         }
-      } catch {
+      } catch (reason) {
+        if (reason instanceof DOMException && reason.name === 'AbortError') return
         if (active) setDatabaseState('erro')
       }
     }
 
     void loadDashboard()
-    return () => { active = false }
-  }, [])
+    return () => {
+      active = false
+      controller.abort()
+    }
+  }, [period, consultant, uf, customStart, customEnd, selectedPeriod.inicio, selectedPeriod.fim])
 
   const statusText = databaseState === 'conectado'
     ? 'Banco conectado'
     : databaseState === 'erro'
       ? 'Falha ao conectar ao banco'
-      : 'Conectando ao banco'
+      : 'Atualizando resultados'
+
+  const selectedConsultantName = dashboard.filtros.consultores.find((item) => item.id === consultant)?.nome
+  const activeFilterText = useMemo(() => {
+    const parts = [dashboard.filtros.aplicado.rotulo || statusText]
+    if (selectedConsultantName) parts.push(selectedConsultantName)
+    if (uf) parts.push(`UF ${uf}`)
+    return parts.join(' · ')
+  }, [dashboard.filtros.aplicado.rotulo, selectedConsultantName, statusText, uf])
 
   const summary = useMemo(() => [
-    { label: 'OL sem combate', value: currencyFormatter.format(dashboard.ol_sem_combate), detail: statusText },
-    { label: 'OL prioritários', value: currencyFormatter.format(dashboard.ol_prioritarios), detail: statusText },
-    { label: 'OL lançamentos', value: currencyFormatter.format(dashboard.ol_lancamentos), detail: statusText },
-    { label: 'Clientes com venda', value: numberFormatter.format(dashboard.clientes_com_venda), detail: statusText },
-  ], [dashboard, statusText])
+    { label: 'OL sem combate', value: currencyFormatter.format(dashboard.ol_sem_combate), detail: activeFilterText },
+    { label: 'OL prioritários', value: currencyFormatter.format(dashboard.ol_prioritarios), detail: activeFilterText },
+    { label: 'OL lançamentos', value: currencyFormatter.format(dashboard.ol_lancamentos), detail: activeFilterText },
+    { label: 'Clientes com venda', value: numberFormatter.format(dashboard.clientes_com_venda), detail: activeFilterText },
+  ], [dashboard, activeFilterText])
 
   function openModule(title: string) {
     if (title === 'Administração') {
@@ -136,9 +220,37 @@ function App() {
           </section>
 
           <section className="filters" aria-label="Filtros do painel">
-            <label><span>Período</span><select defaultValue="mes-atual"><option value="mes-atual">Mês atual</option><option value="mes-anterior">Mês anterior</option><option value="personalizado">Personalizado</option></select></label>
-            <label><span>Consultor</span><select defaultValue="todos"><option value="todos">Todos os consultores</option></select></label>
-            <label><span>UF</span><select defaultValue="todas"><option value="todas">Todas as UFs</option><option>MA</option><option>MT</option><option>PA</option><option>PI</option><option>TO</option></select></label>
+            <label>
+              <span>Período</span>
+              <select value={period} onChange={(event) => setPeriod(event.target.value as PeriodOption)}>
+                <option value="mes-atual">Mês atual</option>
+                <option value="mes-anterior">Mês anterior</option>
+                <option value="todo-periodo">Todo o período extraído</option>
+                <option value="personalizado">Personalizado</option>
+              </select>
+            </label>
+            <label>
+              <span>Consultor</span>
+              <select value={consultant} onChange={(event) => setConsultant(event.target.value)}>
+                <option value="">Todos os consultores</option>
+                {dashboard.filtros.consultores.map((item) => (
+                  <option value={item.id} key={item.id}>{item.nome}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <span>UF</span>
+              <select value={uf} onChange={(event) => setUf(event.target.value)}>
+                <option value="">Todas as UFs</option>
+                {dashboard.filtros.ufs.map((item) => <option value={item} key={item}>{item}</option>)}
+              </select>
+            </label>
+            {period === 'personalizado' && (
+              <>
+                <label><span>Data inicial</span><input type="date" value={customStart} onChange={(event) => setCustomStart(event.target.value)} /></label>
+                <label><span>Data final</span><input type="date" value={customEnd} onChange={(event) => setCustomEnd(event.target.value)} /></label>
+              </>
+            )}
           </section>
 
           <section className="summary-grid" aria-label="Resumo de resultados">
@@ -146,7 +258,7 @@ function App() {
               <article className="summary-card" key={item.label}>
                 <span>{item.label}</span>
                 <strong>{databaseState === 'carregando' ? '—' : item.value}</strong>
-                <small>{item.detail}</small>
+                <small>{databaseState === 'erro' ? statusText : item.detail}</small>
               </article>
             ))}
           </section>
