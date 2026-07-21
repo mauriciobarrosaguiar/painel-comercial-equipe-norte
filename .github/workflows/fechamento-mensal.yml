@@ -1,0 +1,54 @@
+name: Fechamento mensal do painel
+
+on:
+  workflow_dispatch:
+    inputs:
+      ano_mes:
+        description: "Mês a fechar no formato AAAA-MM. Vazio usa o mês anterior."
+        required: false
+        default: ""
+      reprocessar:
+        description: "Criar nova versão de um fechamento existente"
+        required: false
+        type: boolean
+        default: false
+      motivo:
+        description: "Motivo do reprocessamento"
+        required: false
+        default: ""
+  schedule:
+    - cron: "20 5 1 * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fechamento-mensal
+  cancel-in-progress: false
+
+jobs:
+  fechar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Executar fotografia mensal no D1
+        env:
+          PAINEL_ADMIN_KEY: ${{ secrets.PAINEL_ADMIN_KEY }}
+          ANO_MES: ${{ inputs.ano_mes }}
+          REPROCESSAR: ${{ inputs.reprocessar }}
+          MOTIVO: ${{ inputs.motivo }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE' > payload.json
+          const payload = {}
+          if (process.env.ANO_MES) payload.ano_mes = process.env.ANO_MES
+          if (process.env.REPROCESSAR === 'true') payload.reprocessar = true
+          if (process.env.MOTIVO) payload.motivo = process.env.MOTIVO
+          process.stdout.write(JSON.stringify(payload))
+          NODE
+          curl --fail-with-body --silent --show-error \
+            --request POST "https://painel-equipe-norte.pages.dev/api/internal/fechamento-mensal" \
+            --header "x-admin-key: ${PAINEL_ADMIN_KEY}" \
+            --header "content-type: application/json" \
+            --data @payload.json | tee fechamento.json
