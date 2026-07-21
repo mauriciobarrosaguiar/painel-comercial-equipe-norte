@@ -24,21 +24,28 @@ test('missão encerrada vira histórico com meta e realizado congelados', async 
   assert.equal(second.historicos[0].linhas[0].realizado_quantidade, 1)
 })
 
-test('planilha da missão mantém cabeçalhos agrupados e totais', async () => {
+test('planilha da missão é um XLSX real, mantém o layout e não apaga os focos', async () => {
   const DB = testDatabase()
+  const antes = await DB.prepare("SELECT COUNT(*) total FROM foco_semanal WHERE ativo=1").first()
   const response = await getSpreadsheet({
     request: new Request('https://x/api/foco-planilha?inicio=2026-07-07&fim=2026-07-13'),
     env: { DB },
   })
   assert.equal(response.status, 200)
-  assert.match(response.headers.get('content-type') || '', /application\/vnd\.ms-excel/)
-  assert.match(response.headers.get('content-disposition') || '', /missao_2026-07-07_a_2026-07-13\.xls/)
+  assert.match(response.headers.get('content-type') || '', /application\/vnd\.openxmlformats-officedocument\.spreadsheetml\.sheet/)
+  assert.match(response.headers.get('content-disposition') || '', /missao_2026-07-07_a_2026-07-13\.xlsx/)
 
-  const content = await response.text()
+  const bytes = new Uint8Array(await response.arrayBuffer())
+  assert.deepEqual([...bytes.slice(0, 4)], [0x50, 0x4b, 0x03, 0x04])
+  const content = new TextDecoder().decode(bytes)
+  assert.match(content, /\[Content_Types\]\.xml/)
   assert.match(content, /MISSÃO DO PERÍODO/)
   assert.match(content, /META DO PRODUTO/)
   assert.match(content, /QTDE FATURADA/)
   assert.match(content, /% ATINGIMENTO/)
   assert.match(content, /Ana/)
   assert.match(content, /TOTAL/)
+
+  const depois = await DB.prepare("SELECT COUNT(*) total FROM foco_semanal WHERE ativo=1").first()
+  assert.equal(depois.total, antes.total)
 })
