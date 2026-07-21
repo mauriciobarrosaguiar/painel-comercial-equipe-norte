@@ -71,7 +71,7 @@ test('Foco Semanal salva produto e meta individual no período escolhido', async
   const line = body.linhas.find(item => item.ean === '222')
   assert.equal(line.meta_quantidade, 3)
   assert.equal(line.realizado_quantidade, 1)
-  assert.equal(line.cobertura_percentual, 100 / 3)
+  assert.ok(Math.abs(line.cobertura_percentual - 33.3333333333) < 0.0001)
 })
 
 test('Tela usa matriz de missão com meta, quantidade faturada e atingimento por produto', () => {
