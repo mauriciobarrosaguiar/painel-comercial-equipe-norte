@@ -4,8 +4,8 @@ import './operations.css'
 type Command={id:string;tipo:string;status:string;mensagem:string;erro:string;solicitado_em:string;iniciado_em:string|null;finalizado_em:string|null}
 type Extraction={id:string;tipo:string;status:string;total_registros:number;mensagem:string;erro:string;iniciado_em:string|null;finalizado_em:string|null;criado_em:string}
 type Data={comandos:Command[];extracoes:Extraction[];aviso?:string}
-const date=v=>{if(!v)return'—';const d=new Date(v);return Number.isNaN(d.getTime())?v:d.toLocaleString('pt-BR')}
-const label=v=>v.replaceAll('_',' ').replace(/\b\w/g,x=>x.toUpperCase())
+const date=(v:string|null|undefined)=>{if(!v)return'—';const d=new Date(v);return Number.isNaN(d.getTime())?v:d.toLocaleString('pt-BR')}
+const label=(v:string)=>v.replaceAll('_',' ').replace(/\b\w/g,(x:string)=>x.toUpperCase())
 
 export default function AutomationsModule({onBack}:{onBack:()=>void}){
  const [key,setKey]=useState(''),[data,setData]=useState<Data>({comandos:[],extracoes:[]}),[loading,setLoading]=useState(false),[message,setMessage]=useState(''),[error,setError]=useState(''),[month,setMonth]=useState(new Date().toISOString().slice(0,7))
