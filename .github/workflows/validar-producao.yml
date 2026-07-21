@@ -17,23 +17,22 @@ concurrency:
 jobs:
   smoke:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 12
     env:
       PAINEL_URL: https://painel-equipe-norte.pages.dev
-      SMOKE_LOGIN: m0043497
     steps:
       - name: Aguardar publicação do Cloudflare
         shell: bash
         run: |
           set -euo pipefail
           pronto=0
-          for tentativa in $(seq 1 36); do
+          for tentativa in $(seq 1 48); do
             codigo=$(curl --silent --show-error --output session.json --write-out '%{http_code}' "${PAINEL_URL}/api/auth/session" || true)
             if [ "$codigo" = "401" ] && grep -q 'autenticado' session.json; then
               pronto=1
               break
             fi
-            echo "Publicação ainda não disponível (${tentativa}/36, HTTP ${codigo})."
+            echo "Publicação ainda não disponível (${tentativa}/48, HTTP ${codigo})."
             sleep 10
           done
           if [ "$pronto" != "1" ]; then
@@ -50,22 +49,55 @@ jobs:
           curl --fail --silent --show-error "${PAINEL_URL}/manifest.webmanifest" --output manifest.json
           grep -q 'Painel Comercial Equipe Norte' manifest.json
 
-      - name: Entrar com acesso corporativo
+      - name: Validar os seis acessos autorizados
         shell: bash
         run: |
           set -euo pipefail
-          codigo=$(curl --silent --show-error --cookie-jar cookies.txt --output login.json --write-out '%{http_code}' \
-            --request POST "${PAINEL_URL}/api/auth/login" \
-            --header 'content-type: application/json' \
-            --data "{\"login\":\"${SMOKE_LOGIN}\"}")
-          test "$codigo" = "200"
-          grep -q 'usuario' login.json
+          logins=(a0002958 d0047303 j0050526 r0041868 m0043497 f0059410)
+          nomes=(
+            'ALESSANDRA FREITAS SA'
+            'DENYSE CRISTINA VIANA VELOSO ARAUJO'
+            'JOAO DIEGO FERREIRA DE OLIVEIRA'
+            'RAIMUNDA MARTINS GOMES CARNEIRO'
+            'MAURICIO BARROS DE AGUIAR'
+            'FRANCISCO CORTEZ FILHO'
+          )
+
+          todos_ok=0
+          for tentativa in $(seq 1 36); do
+            todos_ok=1
+            for indice in "${!logins[@]}"; do
+              login="${logins[$indice]}"
+              nome="${nomes[$indice]}"
+              for acesso in "$login" "${login}@ems.com.br"; do
+                arquivo="login-${login}-$(echo "$acesso" | tr '@.' '__').json"
+                codigo=$(curl --silent --show-error --cookie-jar "cookies-${login}.txt" --output "$arquivo" --write-out '%{http_code}' \
+                  --request POST "${PAINEL_URL}/api/auth/login" \
+                  --header 'content-type: application/json' \
+                  --data "{\"login\":\"${acesso}\"}" || true)
+                if [ "$codigo" != "200" ] || ! jq -e --arg login "$login" --arg nome "$nome" '.usuario.login==$login and .usuario.nome==$nome' "$arquivo" >/dev/null 2>&1; then
+                  todos_ok=0
+                  break 2
+                fi
+              done
+            done
+            if [ "$todos_ok" = "1" ]; then
+              break
+            fi
+            echo "Aguardando publicação dos acessos (${tentativa}/36)."
+            sleep 10
+          done
+
+          if [ "$todos_ok" != "1" ]; then
+            echo "Um ou mais acessos autorizados não funcionaram."
+            exit 1
+          fi
 
       - name: Confirmar dashboard e banco D1
         shell: bash
         run: |
           set -euo pipefail
-          codigo=$(curl --silent --show-error --cookie cookies.txt --output dashboard.json --write-out '%{http_code}' \
+          codigo=$(curl --silent --show-error --cookie cookies-m0043497.txt --output dashboard.json --write-out '%{http_code}' \
             "${PAINEL_URL}/api/dashboard?periodo=mes-atual")
           test "$codigo" = "200"
           python - <<'PY'
@@ -76,7 +108,7 @@ jobs:
           ausentes = [campo for campo in obrigatorios if campo not in dados]
           if ausentes:
               raise SystemExit(f'Campos ausentes no dashboard: {ausentes}')
-          print('Produção validada com acesso, D1 e dashboard ativos.')
+          print('Produção validada com seis acessos, D1 e dashboard ativos.')
           PY
 
       - name: Publicar resultado da produção
@@ -90,7 +122,7 @@ jobs:
           descricao="Validação da produção falhou"
           if [ "$RESULTADO_JOB" = "success" ]; then
             estado=success
-            descricao="Login, D1, dashboard e instalação validados"
+            descricao="Seis acessos, D1, dashboard e instalação validados"
           fi
           gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" \
             -f state="$estado" \
