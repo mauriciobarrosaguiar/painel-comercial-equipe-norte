@@ -66,29 +66,29 @@ jobs:
             set +e
             case "$tipo" in
               BUSSOLA)
-                saida=$(gh workflow run bussola-d1.yml --ref main 2>&1)
+                saida=$(gh workflow run bussola-d1.yml --repo "$GITHUB_REPOSITORY" --ref main 2>&1)
                 codigo=$?
                 mensagem="Extração manual do Bússola enviada. O agendamento automático de 30 em 30 minutos permanece ativo."
                 ;;
               MERCADO_FARMA)
-                saida=$(gh workflow run mercadofarma.yml --ref main -f acao=atualizar_mercadofarma_paralelo -f ufs="$ufs" -f command_id="$id" 2>&1)
+                saida=$(gh workflow run mercadofarma.yml --repo "$GITHUB_REPOSITORY" --ref main -f acao=atualizar_mercadofarma_paralelo -f ufs="$ufs" -f command_id="$id" 2>&1)
                 codigo=$?
                 mensagem="Extração do Mercado Farma enviada para as UFs ${ufs}."
                 ;;
               MIGRAR_BASES)
                 if [ -n "$ano_mes" ]; then
-                  saida=$(gh workflow run migrar-bases-legadas-d1.yml --ref main -f ano_mes="$ano_mes" 2>&1)
+                  saida=$(gh workflow run migrar-bases-legadas-d1.yml --repo "$GITHUB_REPOSITORY" --ref main -f ano_mes="$ano_mes" 2>&1)
                 else
-                  saida=$(gh workflow run migrar-bases-legadas-d1.yml --ref main 2>&1)
+                  saida=$(gh workflow run migrar-bases-legadas-d1.yml --repo "$GITHUB_REPOSITORY" --ref main 2>&1)
                 fi
                 codigo=$?
                 mensagem="Migração das bases legadas enviada ao GitHub Actions."
                 ;;
               FECHAMENTO_MENSAL)
                 if [ -n "$ano_mes" ]; then
-                  saida=$(gh workflow run fechamento-mensal.yml --ref main -f ano_mes="$ano_mes" 2>&1)
+                  saida=$(gh workflow run fechamento-mensal.yml --repo "$GITHUB_REPOSITORY" --ref main -f ano_mes="$ano_mes" 2>&1)
                 else
-                  saida=$(gh workflow run fechamento-mensal.yml --ref main 2>&1)
+                  saida=$(gh workflow run fechamento-mensal.yml --repo "$GITHUB_REPOSITORY" --ref main 2>&1)
                 fi
                 codigo=$?
                 mensagem="Fechamento mensal enviado ao GitHub Actions."
