@@ -1,0 +1,79 @@
+name: Validar painel em produção
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: validar-painel-producao
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PAINEL_URL: https://painel-equipe-norte.pages.dev
+      SMOKE_LOGIN: m0043497
+    steps:
+      - name: Aguardar publicação do Cloudflare
+        shell: bash
+        run: |
+          set -euo pipefail
+          pronto=0
+          for tentativa in $(seq 1 36); do
+            codigo=$(curl --silent --show-error --output session.json --write-out '%{http_code}' "${PAINEL_URL}/api/auth/session" || true)
+            if [ "$codigo" = "401" ] && grep -q 'autenticado' session.json; then
+              pronto=1
+              break
+            fi
+            echo "Publicação ainda não disponível (${tentativa}/36, HTTP ${codigo})."
+            sleep 10
+          done
+          if [ "$pronto" != "1" ]; then
+            echo "A nova versão não ficou disponível no tempo esperado."
+            exit 1
+          fi
+
+      - name: Validar página e instalação mobile
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error "${PAINEL_URL}/" --output painel.html
+          grep -q 'Painel Comercial' painel.html
+          curl --fail --silent --show-error "${PAINEL_URL}/manifest.webmanifest" --output manifest.json
+          grep -q 'Painel Comercial Equipe Norte' manifest.json
+
+      - name: Entrar com acesso corporativo
+        shell: bash
+        run: |
+          set -euo pipefail
+          codigo=$(curl --silent --show-error --cookie-jar cookies.txt --output login.json --write-out '%{http_code}' \
+            --request POST "${PAINEL_URL}/api/auth/login" \
+            --header 'content-type: application/json' \
+            --data "{\"login\":\"${SMOKE_LOGIN}\"}")
+          test "$codigo" = "200"
+          grep -q 'usuario' login.json
+
+      - name: Confirmar dashboard e banco D1
+        shell: bash
+        run: |
+          set -euo pipefail
+          codigo=$(curl --silent --show-error --cookie cookies.txt --output dashboard.json --write-out '%{http_code}' \
+            "${PAINEL_URL}/api/dashboard?periodo=mes-atual")
+          test "$codigo" = "200"
+          python - <<'PY'
+          import json
+          with open('dashboard.json', encoding='utf-8') as arquivo:
+              dados = json.load(arquivo)
+          obrigatorios = ['ol_total_faturado', 'ol_sem_combate', 'clientes_ativos', 'filtros']
+          ausentes = [campo for campo in obrigatorios if campo not in dados]
+          if ausentes:
+              raise SystemExit(f'Campos ausentes no dashboard: {ausentes}')
+          print('Produção validada com acesso, D1 e dashboard ativos.')
+          PY
