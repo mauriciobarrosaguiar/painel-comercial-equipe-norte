@@ -1,0 +1,21 @@
+const HEADERS={'content-type':'application/json; charset=UTF-8','cache-control':'no-store,no-cache,must-revalidate'}
+const json=(data,status=200)=>new Response(JSON.stringify(data),{status,headers:HEADERS})
+const texto=v=>String(v??'').trim()
+
+export async function onRequestGet({request,env}){
+ try{
+  const p=new URL(request.url).searchParams
+  const mes=texto(p.get('ano_mes')).slice(0,7)
+  const escopo=texto(p.get('escopo')).toUpperCase().slice(0,20)
+  const referencia=texto(p.get('referencia')).slice(0,180)
+  const cond=['versao_atual=1'],binds=[]
+  if(mes){cond.push('ano_mes=?');binds.push(mes)}
+  if(escopo){cond.push('escopo=?');binds.push(escopo)}
+  if(referencia){cond.push('(referencia_id=? OR UPPER(referencia_nome) LIKE UPPER(?))');binds.push(referencia,`%${referencia}%`)}
+  const linhas=await env.DB.prepare(`SELECT id,ano_mes,escopo,referencia_id,referencia_nome,versao,resultado_json,fechado_em,criado_em FROM historico_mensal WHERE ${cond.join(' AND ')} ORDER BY ano_mes DESC,escopo,referencia_nome COLLATE NOCASE LIMIT 1500`).bind(...binds).all()
+  const meses=await env.DB.prepare("SELECT ano_mes,MAX(fechado_em) fechado_em,MAX(versao) versao FROM historico_mensal WHERE versao_atual=1 GROUP BY ano_mes ORDER BY ano_mes DESC").all()
+  const itens=(linhas.results||[]).map(item=>{let resultado={};try{resultado=JSON.parse(String(item.resultado_json||'{}'))}catch{}return{...item,resultado}})
+  const geral=itens.filter(item=>item.escopo==='GERAL')
+  return json({meses:meses.results||[],geral,itens})
+ }catch(error){const detalhe=error instanceof Error?error.message:String(error);if(detalhe.includes('no such table'))return json({meses:[],geral:[],itens:[],aviso:'O Histórico mensal ainda não foi criado no banco.'});return json({erro:'Não foi possível carregar o histórico.',detalhe},500)}
+}
