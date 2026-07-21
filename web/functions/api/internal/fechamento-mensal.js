@@ -1,1 +1,35 @@
-export async function onRequestPost(){return new Response('{}',{headers:{'content-type':'application/json'}})}
+import {authorized,json} from '../../_lib/credentials.js'
+import {ITEM_FATURADO,MIX_SEM_COMBATE} from '../../_lib/commercial.js'
+
+const n=v=>Number.isFinite(Number(v))?Number(v):0
+const anterior=()=>{const d=new Date();d.setUTCMonth(d.getUTCMonth()-1);return`${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,'0')}`}
+const datas=m=>{const[a,b]=m.split('-').map(Number);return{inicio:`${m}-01`,fim:`${m}-${String(new Date(Date.UTC(a,b,0)).getUTCDate()).padStart(2,'0')}`}}
+const normalizar=r=>{const x={};for(const[k,v]of Object.entries(r||{}))x[k]=typeof v==='number'?n(v):v;x.clientes_sem_venda=Math.max(0,n(x.clientes_ativos)-n(x.clientes_com_venda));x.positivacao_percentual=n(x.clientes_ativos)>0?n(x.clientes_com_venda)/n(x.clientes_ativos)*100:0;x.ticket_medio_cliente=n(x.clientes_com_venda)>0?n(x.ol_total)/n(x.clientes_com_venda):0;x.ticket_medio_pedido=n(x.pedidos)>0?n(x.ol_total)/n(x.pedidos):0;return x}
+
+async function admin(request,env){if(typeof env.PAINEL_ADMIN_KEY!=='string'||env.PAINEL_ADMIN_KEY.length<12)return json({erro:'Chave administrativa não configurada.'},503);if(!(await authorized(request,env.PAINEL_ADMIN_KEY)))return json({erro:'Chave administrativa inválida.'},401);return null}
+
+export async function onRequestPost({request,env}){
+ const negado=await admin(request,env);if(negado)return negado
+ try{
+  const body=await request.json().catch(()=>({})),mes=String(body.ano_mes||anterior()).trim(),reprocessar=Boolean(body.reprocessar),motivo=String(body.motivo||'').trim().slice(0,500)
+  if(!/^\d{4}-\d{2}$/.test(mes))return json({erro:'Mês inválido. Use AAAA-MM.'},400)
+  const existente=await env.DB.prepare("SELECT versao,fechado_em FROM historico_mensal WHERE ano_mes=? AND escopo='GERAL' AND versao_atual=1 LIMIT 1").bind(mes).first()
+  if(existente&&!reprocessar)return json({sucesso:true,ja_existia:true,ano_mes:mes,versao:existente.versao,fechado_em:existente.fechado_em})
+  if(reprocessar&&!motivo)return json({erro:'Informe o motivo do reprocessamento.'},400)
+  const{inicio,fim}=datas(mes),data="DATE(COALESCE(pe.data_faturamento,pe.data_pedido)) BETWEEN DATE(?) AND DATE(?)"
+  const colunas=`COUNT(DISTINCT pe.id) pedidos,COALESCE(SUM(ip.valor_faturado),0) ol_total,COALESCE(SUM(CASE WHEN ${MIX_SEM_COMBATE} THEN ip.valor_faturado ELSE 0 END),0) ol_sem_combate,COALESCE(SUM(CASE WHEN UPPER(COALESCE(pr.tipo_mix,''))='COMBATE' THEN ip.valor_faturado ELSE 0 END),0) ol_combate,COALESCE(SUM(CASE WHEN UPPER(COALESCE(pr.tipo_mix,''))='PRIORITARIO' THEN ip.valor_faturado ELSE 0 END),0) ol_prioritarios,COALESCE(SUM(CASE WHEN UPPER(COALESCE(pr.tipo_mix,''))='LANCAMENTO' THEN ip.valor_faturado ELSE 0 END),0) ol_lancamentos`
+  const geral=env.DB.prepare(`SELECT ${colunas},COUNT(DISTINCT CASE WHEN cl.carteira_importada=1 AND cl.ativo=1 AND ip.valor_faturado>0 THEN cl.id END) clientes_com_venda FROM itens_pedido ip JOIN pedidos pe ON pe.id=ip.pedido_id LEFT JOIN clientes cl ON cl.id=pe.cliente_id LEFT JOIN produtos pr ON pr.id=ip.produto_id WHERE ${ITEM_FATURADO} AND ${data}`).bind(inicio,fim)
+  const grupos=(id,nome,from,where)=>env.DB.prepare(`SELECT ${id} referencia_id,${nome} referencia_nome,COUNT(DISTINCT cl.id) clientes_ativos,COUNT(DISTINCT CASE WHEN pe.id IS NOT NULL AND ip.valor_faturado>0 THEN cl.id END) clientes_com_venda,${colunas} ${from} WHERE ${where} GROUP BY ${id},${nome}`).bind(inicio,fim)
+  const consultas=[geral,env.DB.prepare("SELECT COUNT(*) clientes_ativos FROM clientes WHERE carteira_importada=1 AND ativo=1"),env.DB.prepare("SELECT COALESCE(SUM(ol_sem_combate),0) meta_ol_sem_combate,COALESCE(SUM(ol_prioritarios),0) meta_ol_prioritarios,COALESCE(SUM(ol_lancamentos),0) meta_ol_lancamentos,COALESCE(SUM(clientes_positivados),0) meta_clientes FROM metas WHERE escopo='gerente' AND ano_mes=?").bind(mes),
+   grupos('co.id','co.nome',`FROM consultores co LEFT JOIN clientes cl ON cl.consultor_id=co.id AND cl.carteira_importada=1 AND cl.ativo=1 LEFT JOIN pedidos pe ON pe.cliente_id=cl.id AND pe.ativo=1 AND UPPER(TRIM(COALESCE(pe.status,''))) IN ('FATURADO','FATURADO PARCIAL','FATURADO RECUPERADO') AND ${data} LEFT JOIN itens_pedido ip ON ip.pedido_id=pe.id AND ip.ativo=1 LEFT JOIN produtos pr ON pr.id=ip.produto_id`,`co.ativo=1 AND co.origem='PAINEL_EQUIPE'`),
+   grupos("UPPER(TRIM(cl.uf))","UPPER(TRIM(cl.uf))",`FROM clientes cl LEFT JOIN pedidos pe ON pe.cliente_id=cl.id AND pe.ativo=1 AND UPPER(TRIM(COALESCE(pe.status,''))) IN ('FATURADO','FATURADO PARCIAL','FATURADO RECUPERADO') AND ${data} LEFT JOIN itens_pedido ip ON ip.pedido_id=pe.id AND ip.ativo=1 LEFT JOIN produtos pr ON pr.id=ip.produto_id`,`cl.carteira_importada=1 AND cl.ativo=1 AND TRIM(COALESCE(cl.uf,''))<>''`),
+   grupos("COALESCE(NULLIF(TRIM(cl.nome_gd),''),'SEM GD')","COALESCE(NULLIF(TRIM(cl.nome_gd),''),'SEM GD')",`FROM clientes cl LEFT JOIN pedidos pe ON pe.cliente_id=cl.id AND pe.ativo=1 AND UPPER(TRIM(COALESCE(pe.status,''))) IN ('FATURADO','FATURADO PARCIAL','FATURADO RECUPERADO') AND ${data} LEFT JOIN itens_pedido ip ON ip.pedido_id=pe.id AND ip.ativo=1 LEFT JOIN produtos pr ON pr.id=ip.produto_id`,`cl.carteira_importada=1 AND cl.ativo=1`),
+   grupos('s.id','s.nome',`FROM sips s LEFT JOIN sip_clientes sc ON sc.sip_id=s.id AND sc.ativo=1 LEFT JOIN clientes cl ON cl.cnpj=sc.cnpj AND cl.carteira_importada=1 AND cl.ativo=1 LEFT JOIN pedidos pe ON pe.cliente_id=cl.id AND pe.ativo=1 AND UPPER(TRIM(COALESCE(pe.status,''))) IN ('FATURADO','FATURADO PARCIAL','FATURADO RECUPERADO') AND ${data} LEFT JOIN itens_pedido ip ON ip.pedido_id=pe.id AND ip.ativo=1 LEFT JOIN produtos pr ON pr.id=ip.produto_id`,`s.ativo=1`)]
+  const r=await env.DB.batch(consultas),g=normalizar({...r[0].results?.[0],...r[1].results?.[0],...r[2].results?.[0]});g.resultado_meta_ol=n(g.meta_ol_sem_combate)>0?n(g.ol_sem_combate)/n(g.meta_ol_sem_combate)*100:0
+  const blocos=[['GERAL',[{referencia_id:'',referencia_nome:'Equipe Norte',...g}]],['CONSULTOR',r[3].results||[]],['UF',r[4].results||[]],['GD',r[5].results||[]],['SIP',r[6].results||[]]],vr=await env.DB.prepare('SELECT COALESCE(MAX(versao),0)+1 proxima FROM historico_mensal WHERE ano_mes=?').bind(mes).first(),versao=n(vr?.proxima)||1,fechado=new Date().toISOString(),stm=[]
+  if(existente)stm.push(env.DB.prepare('UPDATE historico_mensal SET versao_atual=0 WHERE ano_mes=? AND versao_atual=1').bind(mes))
+  let total=0
+  for(const[escopo,linhas]of blocos)for(const bruto of linhas){const linha=normalizar(bruto);stm.push(env.DB.prepare('INSERT INTO historico_mensal(id,ano_mes,escopo,referencia_id,referencia_nome,versao,versao_atual,motivo_reprocessamento,resultado_json,fechado_em) VALUES(?,?,?,?,?,?,1,?,?,?)').bind(`hist-${crypto.randomUUID()}`,mes,escopo,String(linha.referencia_id||''),String(linha.referencia_nome||''),versao,motivo,JSON.stringify(linha),fechado));total++}
+  await env.DB.batch(stm);return json({sucesso:true,ano_mes:mes,versao,registros:total,fechado_em:fechado})
+ }catch(error){return json({erro:'Não foi possível concluir o fechamento mensal.',detalhe:error instanceof Error?error.message:String(error)},500)}
+}
