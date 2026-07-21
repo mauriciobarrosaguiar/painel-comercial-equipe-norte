@@ -1,21 +1,16 @@
 {
   "uf": "PA",
-  "status": "sucesso",
+  "status": "erro",
   "consultor_usado": "GD",
-  "cnpj_referencia": "36346498000781",
+  "cnpj_referencia": "",
   "usuario_mascarado": "a0***8@ems.com.br",
-  "total_eans": 434,
-  "total_produtos": 434,
-  "erro": "",
-  "etapa": "concluido",
-  "traceback": "",
-  "iniciado_em": "2026-07-10T12:58:17.286246-03:00",
-  "finalizado_em": "2026-07-10T13:32:31.713848-03:00",
-  "cnpjs_candidatos": [
-    "36346498000781",
-    "33659604000101",
-    "33659604000799",
-    "22183946000254"
-  ],
-  "arquivo": "data/mercadofarma/parciais/mercadofarma_PA.csv"
+  "total_eans": 0,
+  "total_produtos": 0,
+  "erro": "\"None of [Index([1, 1, 1, 1, 1, 1, 1, 1, 1, 1,\\n       ...\\n       1, 1, 1, 1, 1, 1, 1, 1, 1, 1],\\n      dtype='int64', length=528)] are in the [columns]\"",
+  "etapa": "montar_alvos",
+  "traceback": "Traceback (most recent call last):\n  File \"/home/runner/work/painel-comercial-equipe-norte/painel-comercial-equipe-norte/automacoes/mercadofarma.py\", line 185, in main\n    alvos = [alvo for alvo in alvos_mercadofarma_por_uf(clientes, usuario_gd, senha_gd) if alvo.get(\"uf\") == uf]\n                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/runner/work/painel-comercial-equipe-norte/painel-comercial-equipe-norte/src/mercado_farma.py\", line 590, in alvos_mercadofarma_por_uf\n    base = _clientes_ativos_com_cnpj_por_uf(clientes)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/runner/work/painel-comercial-equipe-norte/painel-comercial-equipe-norte/src/mercado_farma.py\", line 575, in _clientes_ativos_com_cnpj_por_uf\n    base = base[base[\"cliente_ativo\"].fillna(True)].copy()\n           ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/site-packages/pandas/core/frame.py\", line 4119, in __getitem__\n    indexer = self.columns._get_indexer_strict(key, \"columns\")[1]\n              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/site-packages/pandas/core/indexes/base.py\", line 6212, in _get_indexer_strict\n    self._raise_if_missing(keyarr, indexer, axis_name)\n  File \"/opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/site-packages/pandas/core/indexes/base.py\", line 6261, in _raise_if_missing\n    raise KeyError(f\"None of [{key}] are in the [{axis_name}]\")\nKeyError: \"None of [Index([1, 1, 1, 1, 1, 1, 1, 1, 1, 1,\\n       ...\\n       1, 1, 1, 1, 1, 1, 1, 1, 1, 1],\\n      dtype='int64', length=528)] are in the [columns]\"\n",
+  "iniciado_em": "2026-07-21T15:03:31.955836-03:00",
+  "finalizado_em": "2026-07-21T15:03:33.197065-03:00",
+  "fonte_clientes": "D1 / PAINEL EQUIPE NORTE",
+  "fonte_produtos": "D1 / PRODUTOS MERCADO FARMA"
 }
