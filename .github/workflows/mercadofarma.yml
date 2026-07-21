@@ -1,5 +1,5 @@
 name: Mercado Farma por UF
-run-name: Mercado Farma / ${{ inputs.acao }} / ${{ inputs.ufs || inputs.uf || 'todas' }}
+run-name: Mercado Farma / ${{ inputs.acao || 'atualizar_mercadofarma_paralelo' }} / ${{ inputs.ufs || inputs.uf || 'todas' }}
 
 on:
   push:
@@ -51,6 +51,10 @@ on:
 permissions:
   contents: write
   actions: read
+
+concurrency:
+  group: mercado-farma-atualizacao
+  cancel-in-progress: false
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
@@ -105,7 +109,7 @@ jobs:
           if [ -n "$PERSISTENCE_KEY" ]; then echo "::add-mask::$PERSISTENCE_KEY"; fi
           EXTRA_ARGS=""
           if [ "${{ inputs.headless }}" = "false" ]; then EXTRA_ARGS="--visivel"; fi
-          python automacoes/mercadofarma_atualizado.py --uf "${{ matrix.uf }}" --limite-eans "${{ inputs.limite_eans }}" $EXTRA_ARGS
+          python automacoes/mercadofarma_atualizado.py --uf "${{ matrix.uf }}" --limite-eans "${{ inputs.limite_eans || '0' }}" $EXTRA_ARGS
 
       - name: Publicar artifact da UF ${{ matrix.uf }}
         if: always()
@@ -151,6 +155,11 @@ jobs:
       - name: Consolidar Mercado Farma
         run: python scripts/consolidar_mercadofarma.py
 
+      - name: Disponibilizar Excel no painel
+        run: |
+          mkdir -p web/public/exports
+          cp data/mercadofarma/mercadofarma_consolidado.xlsx web/public/exports/mercadofarma.xlsx
+
       - name: Sincronizar consolidado no D1
         run: python scripts/importar_mercadofarma_d1.py
 
@@ -158,10 +167,11 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add -A data/mercadofarma
+          git add -A data/mercadofarma web/public/exports
           if git diff --staged --quiet; then
             echo "Nenhuma alteracao para publicar."
           else
             git commit -m "Atualiza Mercado Farma consolidado"
+            git pull --rebase origin main
             git push
           fi
