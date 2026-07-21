@@ -1,4 +1,5 @@
 import { FormEvent, Fragment, useEffect, useMemo, useState } from 'react'
+import FocusHistory from './FocusHistory'
 import './operations.css'
 import './focus.css'
 
@@ -232,12 +233,13 @@ export default function FocusModule({ onBack }: { onBack: () => void }) {
 
   const metasInformadas = Object.values(metas).filter(value => Number(value) > 0).length
   const missionWidth = Math.max(720, 330 + focusProducts.length * 300)
-  const exportParams = useMemo(() => {
+  const pendingExportParams = useMemo(() => {
     const params = new URLSearchParams({ tipo: 'foco_pendentes', formato: 'xls', inicio, fim })
     if (consultor) params.set('consultor', consultor)
     if (uf) params.set('uf', uf)
     return params.toString()
   }, [inicio, fim, consultor, uf])
+  const missionExportParams = useMemo(() => new URLSearchParams({ inicio, fim }).toString(), [inicio, fim])
 
   return <main className="content operations-page focus-page">
     <button className="back-button" onClick={onBack}>← Voltar ao painel</button>
@@ -248,7 +250,10 @@ export default function FocusModule({ onBack }: { onBack: () => void }) {
         <h1>Foco Semanal</h1>
         <p>Cadastre o produto e a meta de cada consultor. O realizado é buscado automaticamente na quantidade faturada do período selecionado.</p>
       </div>
-      <a className="secondary-button market-download" href={`/api/exportar?${exportParams}`}>Clientes que não compraram</a>
+      <div className="focus-hero-actions">
+        {focusProducts.length > 0 && <a className="secondary-button market-download" href={`/api/foco-planilha?${missionExportParams}`}>Baixar planilha da missão</a>}
+        <a className="secondary-button market-download" href={`/api/exportar?${pendingExportParams}`}>Clientes que não compraram</a>
+      </div>
     </section>
 
     <section className="filters history-filters focus-filters">
@@ -372,5 +377,7 @@ export default function FocusModule({ onBack }: { onBack: () => void }) {
 
       <div className="focus-submit"><button className="primary-action" disabled={busy}>{busy ? 'Salvando…' : 'Salvar produto e metas'}</button></div>
     </form>
+
+    <FocusHistory />
   </main>
 }
