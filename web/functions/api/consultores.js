@@ -2,11 +2,20 @@ import { ITEM_ATIVO, MIX_SEM_COMBATE, PEDIDO_FATURADO } from '../_lib/commercial
 
 const HEADERS = { 'content-type': 'application/json; charset=UTF-8', 'cache-control': 'no-store, no-cache, must-revalidate' }
 const PERIODOS = new Set(['mes-atual', 'mes-anterior', 'todo-periodo', 'personalizado'])
+const SETORES = {
+  'ALESSANDRA FREITAS SA': '18150300',
+  'MAURICIO BARROS DE AGUIAR': '18150301',
+  'RAIMUNDA MARTINS GOMES CARNEIRO': '18150302',
+  'FRANCISCO CORTEZ FILHO': '18150303',
+  'DENYSE CRISTINA VIANA VELOSO ARAUJO': '18150304',
+  'JOAO DIEGO FERREIRA DE OLIVEIRA': '18150305',
+}
 const json = (data, status = 200) => new Response(JSON.stringify(data), { status, headers: HEADERS })
 const iso = (y, m, d) => `${String(y).padStart(4, '0')}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
 const mostrar = (v) => v ? `${v.slice(8, 10)}/${v.slice(5, 7)}/${v.slice(0, 4)}` : ''
 const numero = (valor) => Number.isFinite(Number(valor)) ? Number(valor) : 0
 const percentual = (valor, base) => numero(base) > 0 ? (numero(valor) / numero(base)) * 100 : 0
+const normalizarNome = (valor) => String(valor || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/[^A-Z0-9]+/g, ' ').trim()
 
 function periodo(params) {
   const tipo = PERIODOS.has(params.get('periodo')) ? params.get('periodo') : 'mes-atual'
@@ -53,7 +62,7 @@ export async function onRequestGet({ request, env }) {
         FROM metas WHERE escopo='consultor' AND ${metaCond}
         GROUP BY consultor_id
       )
-      SELECT c.id,c.nome,COALESCE(c.uf,'') AS uf_cadastro,
+      SELECT c.id,c.nome,MIN(NULLIF(TRIM(cl.setor_rep),'')) AS setor_carteira,
         COUNT(DISTINCT cl.id) AS clientes_ativos,
         COUNT(DISTINCT CASE WHEN pe.id IS NOT NULL AND COALESCE(ip.valor_faturado,0)>0 THEN cl.id END) AS clientes_com_venda,
         COUNT(DISTINCT CASE WHEN pe.id IS NOT NULL AND COALESCE(ip.valor_faturado,0)>0 THEN pe.id END) AS pedidos_faturados,
@@ -73,16 +82,9 @@ export async function onRequestGet({ request, env }) {
       LEFT JOIN produtos pr ON pr.id=ip.produto_id
       LEFT JOIN metas_periodo m ON m.consultor_id=c.id
       WHERE c.ativo=1 AND c.origem='PAINEL_EQUIPE'
-      GROUP BY c.id,c.nome,c.uf,m.ol_sem_combate,m.ol_prioritarios,m.ol_lancamentos,m.clientes_positivados
-      ORDER BY ol_sem_combate DESC,c.nome COLLATE NOCASE
-    `
-    const gerenteSql = `
-      SELECT COALESCE(SUM(ol_sem_combate),0) ol_sem_combate,
-        COALESCE(SUM(ol_prioritarios),0) ol_prioritarios,
-        COALESCE(SUM(ol_lancamentos),0) ol_lancamentos,
-        COALESCE(SUM(clientes_positivados),0) clientes_positivados
-      FROM metas WHERE escopo='gerente' AND ${metaCond}
-    `
+      GROUP BY c.id,c.nome,m.ol_sem_combate,m.ol_prioritarios,m.ol_lancamentos,m.clientes_positivados
+      ORDER BY ol_sem_combate DESC,c.nome COLLATE NOCASE`
+    const gerenteSql = `SELECT COALESCE(SUM(ol_sem_combate),0) ol_sem_combate,COALESCE(SUM(ol_prioritarios),0) ol_prioritarios,COALESCE(SUM(ol_lancamentos),0) ol_lancamentos,COALESCE(SUM(clientes_positivados),0) clientes_positivados FROM metas WHERE escopo='gerente' AND ${metaCond}`
 
     const [rankingResult, gerenteResult, ufsResult, extracaoResult] = await env.DB.batch([
       env.DB.prepare(rankingSql).bind(...metaParams, ...clienteParams, ...pedidoParams),
@@ -92,6 +94,7 @@ export async function onRequestGet({ request, env }) {
     ])
 
     const consultores = (rankingResult.results || []).map((item) => {
+      const nome = String(item.nome || '')
       const clientesAtivos = numero(item.clientes_ativos)
       const clientesComVenda = numero(item.clientes_com_venda)
       const olSemCombate = numero(item.ol_sem_combate)
@@ -101,7 +104,8 @@ export async function onRequestGet({ request, env }) {
       const olPrioritarios = numero(item.ol_prioritarios)
       const olLancamentos = numero(item.ol_lancamentos)
       return {
-        id: String(item.id || ''), nome: String(item.nome || ''), uf: String(item.uf_cadastro || ''),
+        id: String(item.id || ''), nome,
+        setor: String(item.setor_carteira || SETORES[normalizarNome(nome)] || ''),
         clientes_ativos: clientesAtivos, clientes_com_venda: clientesComVenda,
         clientes_sem_venda: Math.max(0, clientesAtivos - clientesComVenda), pedidos_faturados: pedidos,
         ol_total_faturado: olTotalFaturado, ol_sem_combate: olSemCombate, ol_combate: numero(item.ol_combate),
@@ -125,28 +129,12 @@ export async function onRequestGet({ request, env }) {
       clientes_ativos: acc.clientes_ativos + item.clientes_ativos, clientes_com_venda: acc.clientes_com_venda + item.clientes_com_venda,
       clientes_sem_venda: acc.clientes_sem_venda + item.clientes_sem_venda, pedidos_faturados: acc.pedidos_faturados + item.pedidos_faturados,
     }), { ol_total_faturado: 0, ol_sem_combate: 0, ol_combate: 0, ol_prioritarios: 0, ol_lancamentos: 0, clientes_ativos: 0, clientes_com_venda: 0, clientes_sem_venda: 0, pedidos_faturados: 0 })
-
-    const metaGerente = {
-      ol_sem_combate: numero(gerente.ol_sem_combate), ol_prioritarios: numero(gerente.ol_prioritarios),
-      ol_lancamentos: numero(gerente.ol_lancamentos), clientes_positivados: numero(gerente.clientes_positivados),
-    }
+    const metaGerente = { ol_sem_combate: numero(gerente.ol_sem_combate), ol_prioritarios: numero(gerente.ol_prioritarios), ol_lancamentos: numero(gerente.ol_lancamentos), clientes_positivados: numero(gerente.clientes_positivados) }
 
     return json({
-      periodo: {
-        tipo: faixa.tipo, inicio: faixa.inicio, fim: faixa.fim,
-        rotulo: faixa.inicio ? `${mostrar(faixa.inicio)} a ${mostrar(faixa.fim)}` : 'Todo o período extraído',
-        meta_inicio: faixa.inicio ? faixa.inicio.slice(0, 7) : null, meta_fim: faixa.fim ? faixa.fim.slice(0, 7) : null,
-      },
+      periodo: { tipo: faixa.tipo, inicio: faixa.inicio, fim: faixa.fim, rotulo: faixa.inicio ? `${mostrar(faixa.inicio)} a ${mostrar(faixa.fim)}` : 'Todo o período extraído', meta_inicio: faixa.inicio ? faixa.inicio.slice(0, 7) : null, meta_fim: faixa.fim ? faixa.fim.slice(0, 7) : null },
       uf, ufs: (ufsResult.results || []).map((item) => String(item.uf || '')).filter(Boolean), consultores,
-      totais: {
-        ...totais, meta_gerente: metaGerente,
-        resultado_meta_gerente: percentual(totais.ol_sem_combate, metaGerente.ol_sem_combate),
-        resultado_meta_clientes: percentual(totais.clientes_com_venda, metaGerente.clientes_positivados),
-        participacao_prioritarios: percentual(totais.ol_prioritarios, totais.ol_sem_combate),
-        participacao_lancamentos: percentual(totais.ol_lancamentos, totais.ol_sem_combate),
-        ticket_medio_cliente: totais.clientes_com_venda > 0 ? totais.ol_total_faturado / totais.clientes_com_venda : 0,
-        ticket_medio_pedido: totais.pedidos_faturados > 0 ? totais.ol_total_faturado / totais.pedidos_faturados : 0,
-      },
+      totais: { ...totais, meta_gerente: metaGerente, resultado_meta_gerente: percentual(totais.ol_sem_combate, metaGerente.ol_sem_combate), resultado_meta_clientes: percentual(totais.clientes_com_venda, metaGerente.clientes_positivados), participacao_prioritarios: percentual(totais.ol_prioritarios, totais.ol_sem_combate), participacao_lancamentos: percentual(totais.ol_lancamentos, totais.ol_sem_combate), ticket_medio_cliente: totais.clientes_com_venda > 0 ? totais.ol_total_faturado / totais.clientes_com_venda : 0, ticket_medio_pedido: totais.pedidos_faturados > 0 ? totais.ol_total_faturado / totais.pedidos_faturados : 0 },
       atualizado_em: extracaoResult.results?.[0]?.finalizado_em || null,
     })
   } catch (error) {
