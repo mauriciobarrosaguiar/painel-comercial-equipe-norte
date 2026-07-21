@@ -25,20 +25,14 @@ function periodo(params) {
 
   const partes = Object.fromEntries(
     new Intl.DateTimeFormat('en-CA', {
-      timeZone: 'America/Sao_Paulo',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
+      timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit',
     }).formatToParts(new Date()).map((p) => [p.type, p.value]),
   )
   let y = Number(partes.year)
   let m = Number(partes.month)
   if (tipo === 'mes-anterior') {
     m -= 1
-    if (!m) {
-      m = 12
-      y -= 1
-    }
+    if (!m) { m = 12; y -= 1 }
   }
   return { tipo, inicio: iso(y, m, 1), fim: iso(y, m, new Date(Date.UTC(y, m, 0)).getUTCDate()) }
 }
@@ -47,9 +41,6 @@ function filtros(params) {
   const p = periodo(params)
   const consultor = String(params.get('consultor') || '').trim().slice(0, 180)
   const uf = String(params.get('uf') || '').trim().toUpperCase().slice(0, 2)
-
-  // O total geral vem diretamente dos pedidos faturados do Bússola.
-  // A carteira oficial só é obrigatória quando o usuário filtra por consultor ou UF.
   const cond = [ITEM_FATURADO]
   const valores = []
 
@@ -58,52 +49,27 @@ function filtros(params) {
     valores.push(p.inicio, p.fim)
   }
   if (consultor || uf) cond.push('cl.carteira_importada=1')
-  if (consultor) {
-    cond.push('cl.consultor_id=?')
-    valores.push(consultor)
-  }
-  if (uf) {
-    cond.push("UPPER(TRIM(COALESCE(cl.uf,'')))=?")
-    valores.push(uf)
-  }
+  if (consultor) { cond.push('cl.consultor_id=?'); valores.push(consultor) }
+  if (uf) { cond.push("UPPER(TRIM(COALESCE(cl.uf,'')))=?"); valores.push(uf) }
 
-  // Clientes com venda sempre são contados pela carteira oficial.
   const condClientesVenda = [ITEM_FATURADO, 'cl.carteira_importada=1', 'cl.ativo=1', 'ip.valor_faturado>0']
   const valoresClientesVenda = []
   if (p.inicio && p.fim) {
     condClientesVenda.push('DATE(COALESCE(pe.data_faturamento, pe.data_pedido)) BETWEEN DATE(?) AND DATE(?)')
     valoresClientesVenda.push(p.inicio, p.fim)
   }
-  if (consultor) {
-    condClientesVenda.push('cl.consultor_id=?')
-    valoresClientesVenda.push(consultor)
-  }
-  if (uf) {
-    condClientesVenda.push("UPPER(TRIM(COALESCE(cl.uf,'')))=?")
-    valoresClientesVenda.push(uf)
-  }
+  if (consultor) { condClientesVenda.push('cl.consultor_id=?'); valoresClientesVenda.push(consultor) }
+  if (uf) { condClientesVenda.push("UPPER(TRIM(COALESCE(cl.uf,'')))=?"); valoresClientesVenda.push(uf) }
 
   const condClientes = ['cl.carteira_importada=1', 'cl.ativo=1']
   const valoresClientes = []
-  if (consultor) {
-    condClientes.push('cl.consultor_id=?')
-    valoresClientes.push(consultor)
-  }
-  if (uf) {
-    condClientes.push("UPPER(TRIM(COALESCE(cl.uf,'')))=?")
-    valoresClientes.push(uf)
-  }
+  if (consultor) { condClientes.push('cl.consultor_id=?'); valoresClientes.push(consultor) }
+  if (uf) { condClientes.push("UPPER(TRIM(COALESCE(cl.uf,'')))=?"); valoresClientes.push(uf) }
 
   return {
-    ...p,
-    consultor,
-    uf,
-    where: cond.join(' AND '),
-    valores,
-    clientSaleWhere: condClientesVenda.join(' AND '),
-    clientSaleValues: valoresClientesVenda,
-    clientWhere: condClientes.join(' AND '),
-    clientValues: valoresClientes,
+    ...p, consultor, uf, where: cond.join(' AND '), valores,
+    clientSaleWhere: condClientesVenda.join(' AND '), clientSaleValues: valoresClientesVenda,
+    clientWhere: condClientes.join(' AND '), clientValues: valoresClientes,
     rotulo: p.inicio ? `${mostrar(p.inicio)} a ${mostrar(p.fim)}` : 'Todo o período extraído',
   }
 }
@@ -127,11 +93,15 @@ export async function onRequestGet({ request, env }) {
       stmt(env, "SELECT (SELECT COUNT(*) FROM clientes WHERE carteira_importada=1) clientes_carteira,(SELECT COUNT(*) FROM produtos WHERE UPPER(COALESCE(tipo_mix,''))<>'SEM CLASSIFICACAO') produtos_mix,(SELECT COUNT(*) FROM produtos WHERE mercado_farma_ativo=1) produtos_mercado_farma,(SELECT COUNT(*) FROM metas WHERE escopo='consultor') metas"),
       stmt(env, `SELECT COUNT(DISTINCT pe.id) pedidos, COUNT(ip.id) itens, COALESCE(SUM(ip.valor_faturado),0) valor_total, MIN(COALESCE(pe.data_faturamento,pe.data_pedido)) data_min, MAX(COALESCE(pe.data_faturamento,pe.data_pedido)) data_max ${JOINS} WHERE ${ITEM_FATURADO}`),
       stmt(env, `SELECT COALESCE(SUM(ip.valor_faturado),0) total ${JOINS} WHERE ${f.where} AND UPPER(TRIM(COALESCE(pr.tipo_mix,'')))='COMBATE'`, f.valores),
+      stmt(env, `SELECT COUNT(DISTINCT pe.id) total ${JOINS} WHERE ${f.where}`, f.valores),
+      stmt(env, "SELECT finalizado_em FROM extracoes WHERE tipo='BUSSOLA' AND status='concluido' AND finalizado_em IS NOT NULL ORDER BY finalizado_em DESC LIMIT 1"),
     ]
 
     const r = await env.DB.batch(consultas)
     const ativos = Number(r[4]?.results?.[0]?.total || 0)
     const comVenda = Number(r[3]?.results?.[0]?.total || 0)
+    const faturamento = Number(r[6]?.results?.[0]?.total || 0)
+    const pedidos = Number(r[13]?.results?.[0]?.total || 0)
     const b = r[10]?.results?.[0] || {}
     const d = r[11]?.results?.[0] || {}
 
@@ -144,21 +114,20 @@ export async function onRequestGet({ request, env }) {
       clientes_sem_venda: Math.max(0, ativos - comVenda),
       clientes_ativos: ativos,
       consultores_ativos: Number(r[5]?.results?.[0]?.total || 0),
-      ol_total_faturado: Number(r[6]?.results?.[0]?.total || 0),
-      vendas_faturadas: Number(r[6]?.results?.[0]?.total || 0),
+      ol_total_faturado: faturamento,
+      vendas_faturadas: pedidos,
+      pedidos_faturados: pedidos,
+      ticket_medio_cliente: comVenda > 0 ? faturamento / comVenda : 0,
+      ticket_medio_pedido: pedidos > 0 ? faturamento / pedidos : 0,
+      percentual_positivacao: ativos > 0 ? (comVenda / ativos) * 100 : 0,
       automacoes_executando: Number(r[7]?.results?.[0]?.total || 0),
       bases: {
-        painel_equipe_norte: Number(b.clientes_carteira || 0),
-        produtos_mix: Number(b.produtos_mix || 0),
-        produtos_mercado_farma: Number(b.produtos_mercado_farma || 0),
-        metas: Number(b.metas || 0),
+        painel_equipe_norte: Number(b.clientes_carteira || 0), produtos_mix: Number(b.produtos_mix || 0),
+        produtos_mercado_farma: Number(b.produtos_mercado_farma || 0), metas: Number(b.metas || 0),
       },
       diagnostico: {
-        pedidos_faturados: Number(d.pedidos || 0),
-        itens_faturados: Number(d.itens || 0),
-        valor_faturado_total: Number(d.valor_total || 0),
-        primeira_data: d.data_min || null,
-        ultima_data: d.data_max || null,
+        pedidos_faturados: Number(d.pedidos || 0), itens_faturados: Number(d.itens || 0),
+        valor_faturado_total: Number(d.valor_total || 0), primeira_data: d.data_min || null, ultima_data: d.data_max || null,
       },
       filtros: {
         consultores: (r[8]?.results || []).map((x) => ({ id: String(x.id || ''), nome: String(x.nome || '') })).filter((x) => x.id && x.nome),
@@ -170,7 +139,7 @@ export async function onRequestGet({ request, env }) {
         data: 'data_faturamento; data_pedido apenas como fallback',
         carteira: 'Painel Equipe Norte por CNPJ para filtros de consultor e UF',
       },
-      atualizado_em: new Date().toISOString(),
+      atualizado_em: r[14]?.results?.[0]?.finalizado_em || null,
     })
   } catch (error) {
     const detalhe = error instanceof Error ? error.message : String(error)
