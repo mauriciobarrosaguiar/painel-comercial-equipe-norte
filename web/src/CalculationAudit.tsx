@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import './calculation-audit.css'
+import './audit-details.css'
 
 type PeriodOption = 'todo-periodo' | 'mes-atual' | 'mes-anterior' | 'personalizado'
 type DetailKey = 'pedidos_fora_carteira'|'pedidos_sem_consultor'|'itens_sem_ean'|'itens_sem_produto'|'itens_sem_classificacao'|'datas_futuras'
