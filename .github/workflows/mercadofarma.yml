@@ -2,6 +2,13 @@ name: Mercado Farma por UF
 run-name: Mercado Farma / ${{ inputs.acao }} / ${{ inputs.ufs || inputs.uf || 'todas' }}
 
 on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/mercadofarma.yml
+      - automacoes/mercadofarma_atualizado.py
+      - src/mercadofarma_parser_atual.py
   workflow_dispatch:
     inputs:
       acao:
@@ -50,7 +57,7 @@ env:
 
 jobs:
   extrair_uf:
-    if: ${{ inputs.acao == 'atualizar_mercadofarma_paralelo' }}
+    if: ${{ github.event_name == 'push' || inputs.acao == 'atualizar_mercadofarma_paralelo' }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -79,7 +86,7 @@ jobs:
           chromedriver --version || true
 
       - name: Extrair UF ${{ matrix.uf }}
-        if: ${{ (inputs.ufs == '' && inputs.uf == '') || contains(inputs.ufs, matrix.uf) || contains(inputs.uf, matrix.uf) }}
+        if: ${{ github.event_name == 'push' || (inputs.ufs == '' && inputs.uf == '') || contains(inputs.ufs, matrix.uf) || contains(inputs.uf, matrix.uf) }}
         env:
           PYTHONPATH: ${{ github.workspace }}
           GITHUB_TOKEN: ${{ github.token }}
@@ -112,7 +119,7 @@ jobs:
             data/mercadofarma/debug/${{ matrix.uf }}/**
 
   consolidar_mercadofarma:
-    if: ${{ always() && inputs.acao == 'atualizar_mercadofarma_paralelo' }}
+    if: ${{ always() && (github.event_name == 'push' || inputs.acao == 'atualizar_mercadofarma_paralelo') }}
     runs-on: ubuntu-latest
     needs: extrair_uf
     env:
