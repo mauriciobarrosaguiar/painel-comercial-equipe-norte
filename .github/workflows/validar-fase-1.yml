@@ -51,8 +51,27 @@ jobs:
         run: npm audit --audit-level=high
 
       - name: Testar APIs e cálculos web
+        id: testes_web
         working-directory: web
-        run: npm run test:web
+        shell: bash
+        run: |
+          set +e
+          npm run test:web 2>&1 | tee test-output.txt
+          status=${PIPESTATUS[0]}
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Publicar relatório dos testes web
+        uses: actions/upload-artifact@v4
+        with:
+          name: relatorio-testes-web-${{ github.run_id }}
+          path: web/test-output.txt
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Interromper quando os testes web falharem
+        if: steps.testes_web.outputs.status != '0'
+        run: exit 1
 
       - name: Compilar aplicação de produção
         working-directory: web
