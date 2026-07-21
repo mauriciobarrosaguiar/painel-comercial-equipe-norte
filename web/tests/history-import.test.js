@@ -1,0 +1,6 @@
+import assert from'node:assert/strict'
+import test from'node:test'
+import{onRequestPost as importar}from'../functions/api/historico/importar.js'
+import{onRequestGet as detalhe}from'../functions/api/clientes/detalhe.js'
+import{testDatabase}from'./d1-fixture.js'
+test('histórico importado aparece na evolução mensal do cliente',async()=>{const DB=testDatabase(),response=await importar({request:new Request('https://painel.local/api/historico/importar',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({arquivo:'historico.xlsx',registros:[{ano_mes:'2026-05',cnpj:'11111111000111',faturamento:350,pedidos:2,produtos:4,quantidade:8}]})}),env:{DB,PAINEL_ADMIN_KEY:'chave-administrativa-teste'}});assert.equal(response.status,200);const imported=await response.json();assert.equal(imported.registros,1);assert.equal(imported.vinculados,1);const result=await detalhe({request:new Request('https://painel.local/api/clientes/detalhe?id=cl1'),env:{DB}}),body=await result.json(),month=body.historico.find(x=>x.ano_mes==='2026-05');assert.equal(month.faturamento,350);assert.equal(month.origem,'IMPORTADO');assert.equal(body.historico.find(x=>x.ano_mes==='2026-07').origem,'BUSSOLA')})
