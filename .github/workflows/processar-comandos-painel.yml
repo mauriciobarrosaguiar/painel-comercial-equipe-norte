@@ -16,95 +16,103 @@ concurrency:
 jobs:
   processar:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     env:
       PAINEL_URL: https://painel-equipe-norte.pages.dev
       PAINEL_ADMIN_KEY: ${{ secrets.PAINEL_ADMIN_KEY }}
       GH_TOKEN: ${{ github.token }}
     steps:
-      - name: Buscar próximo comando
-        id: comando
+      - name: Processar fila do painel
         shell: bash
         run: |
-          set -euo pipefail
-          curl --fail-with-body --silent --show-error \
-            --request POST "${PAINEL_URL}/api/internal/automacoes" \
-            --header "x-admin-key: ${PAINEL_ADMIN_KEY}" \
-            --header "content-type: application/json" \
-            --data '{"acao":"proxima"}' > comando.json
-          id=$(jq -r '.comando.id // empty' comando.json)
-          tipo=$(jq -r '.comando.tipo // empty' comando.json)
-          if [ -z "$id" ]; then
-            echo "existe=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          echo "existe=true" >> "$GITHUB_OUTPUT"
-          echo "id=$id" >> "$GITHUB_OUTPUT"
-          echo "tipo=$tipo" >> "$GITHUB_OUTPUT"
-          jq -c '.comando.parametros // {}' comando.json > parametros.json
+          set -u
 
-      - name: Despachar execução solicitada
-        if: steps.comando.outputs.existe == 'true'
-        id: despacho
-        shell: bash
-        env:
-          COMANDO_ID: ${{ steps.comando.outputs.id }}
-          TIPO: ${{ steps.comando.outputs.tipo }}
-        run: |
-          set -euo pipefail
-          ano_mes=$(jq -r '.ano_mes // empty' parametros.json)
-          ufs=$(jq -r '.ufs // "MA,MT,PA,PI,TO"' parametros.json)
-          case "$TIPO" in
-            BUSSOLA)
-              gh workflow run bussola-d1.yml
-              mensagem="Extração do Bússola enviada ao GitHub Actions."
-              ;;
-            MERCADO_FARMA)
-              gh workflow run mercadofarma.yml -f acao=atualizar_mercadofarma_paralelo -f ufs="$ufs" -f command_id="$COMANDO_ID"
-              mensagem="Extração do Mercado Farma enviada ao GitHub Actions."
-              ;;
-            MIGRAR_BASES)
-              if [ -n "$ano_mes" ]; then gh workflow run migrar-bases-legadas-d1.yml -f ano_mes="$ano_mes"; else gh workflow run migrar-bases-legadas-d1.yml; fi
-              mensagem="Migração das bases enviada ao GitHub Actions."
-              ;;
-            FECHAMENTO_MENSAL)
-              if [ -n "$ano_mes" ]; then gh workflow run fechamento-mensal.yml -f ano_mes="$ano_mes"; else gh workflow run fechamento-mensal.yml; fi
-              mensagem="Fechamento mensal enviado ao GitHub Actions."
-              ;;
-            AUDITORIA)
-              curl --fail-with-body --silent --show-error --request POST \
-                "${PAINEL_URL}/api/admin/auditoria" \
-                --header "x-admin-key: ${PAINEL_ADMIN_KEY}" > auditoria.json
-              mensagem="Auditoria dos cálculos concluída."
-              ;;
-            *)
-              echo "Tipo inválido: $TIPO" >&2
-              exit 2
-              ;;
-          esac
-          echo "mensagem=$mensagem" >> "$GITHUB_OUTPUT"
+          finalizar() {
+            local id="$1"
+            local status="$2"
+            local mensagem="$3"
+            local erro="$4"
+            jq -n --arg id "$id" --arg status "$status" --arg mensagem "$mensagem" --arg erro "$erro" \
+              '{acao:"finalizar",id:$id,status:$status,mensagem:$mensagem,erro:$erro}' > finalizar.json
+            curl --fail-with-body --silent --show-error \
+              --request POST "${PAINEL_URL}/api/internal/automacoes" \
+              --header "x-admin-key: ${PAINEL_ADMIN_KEY}" \
+              --header "content-type: application/json" \
+              --data @finalizar.json
+          }
 
-      - name: Marcar comando como concluído
-        if: steps.comando.outputs.existe == 'true' && success()
-        shell: bash
-        env:
-          COMANDO_ID: ${{ steps.comando.outputs.id }}
-          MENSAGEM: ${{ steps.despacho.outputs.mensagem }}
-        run: |
-          jq -n --arg id "$COMANDO_ID" --arg msg "$MENSAGEM" '{acao:"finalizar",id:$id,status:"concluido",mensagem:$msg}' > finalizar.json
-          curl --fail-with-body --silent --show-error \
-            --request POST "${PAINEL_URL}/api/internal/automacoes" \
-            --header "x-admin-key: ${PAINEL_ADMIN_KEY}" \
-            --header "content-type: application/json" \
-            --data @finalizar.json
+          for tentativa in $(seq 1 10); do
+            echo "Buscando comando ${tentativa}/10..."
+            if ! curl --fail-with-body --silent --show-error \
+              --request POST "${PAINEL_URL}/api/internal/automacoes" \
+              --header "x-admin-key: ${PAINEL_ADMIN_KEY}" \
+              --header "content-type: application/json" \
+              --data '{"acao":"proxima"}' > comando.json; then
+              echo "Não foi possível consultar a fila."
+              exit 1
+            fi
 
-      - name: Registrar falha
-        if: steps.comando.outputs.existe == 'true' && failure()
-        shell: bash
-        env:
-          COMANDO_ID: ${{ steps.comando.outputs.id }}
-        run: |
-          jq -n --arg id "$COMANDO_ID" '{acao:"finalizar",id:$id,status:"erro",erro:"Falha ao despachar. Consulte o GitHub Actions."}' > falha.json
-          curl --silent --show-error --request POST "${PAINEL_URL}/api/internal/automacoes" \
-            --header "x-admin-key: ${PAINEL_ADMIN_KEY}" \
-            --header "content-type: application/json" --data @falha.json || true
+            id=$(jq -r '.comando.id // empty' comando.json)
+            tipo=$(jq -r '.comando.tipo // empty' comando.json)
+            if [ -z "$id" ]; then
+              echo "Fila concluída."
+              break
+            fi
+
+            jq -c '.comando.parametros // {}' comando.json > parametros.json
+            ano_mes=$(jq -r '.ano_mes // empty' parametros.json)
+            ufs=$(jq -r '.ufs // "MA,MT,PA,PI,TO"' parametros.json)
+            mensagem=""
+            set +e
+            case "$tipo" in
+              BUSSOLA)
+                saida=$(gh workflow run bussola-d1.yml --ref main 2>&1)
+                codigo=$?
+                mensagem="Extração manual do Bússola enviada. O agendamento automático de 30 em 30 minutos permanece ativo."
+                ;;
+              MERCADO_FARMA)
+                saida=$(gh workflow run mercadofarma.yml --ref main -f acao=atualizar_mercadofarma_paralelo -f ufs="$ufs" -f command_id="$id" 2>&1)
+                codigo=$?
+                mensagem="Extração do Mercado Farma enviada para as UFs ${ufs}."
+                ;;
+              MIGRAR_BASES)
+                if [ -n "$ano_mes" ]; then
+                  saida=$(gh workflow run migrar-bases-legadas-d1.yml --ref main -f ano_mes="$ano_mes" 2>&1)
+                else
+                  saida=$(gh workflow run migrar-bases-legadas-d1.yml --ref main 2>&1)
+                fi
+                codigo=$?
+                mensagem="Migração das bases legadas enviada ao GitHub Actions."
+                ;;
+              FECHAMENTO_MENSAL)
+                if [ -n "$ano_mes" ]; then
+                  saida=$(gh workflow run fechamento-mensal.yml --ref main -f ano_mes="$ano_mes" 2>&1)
+                else
+                  saida=$(gh workflow run fechamento-mensal.yml --ref main 2>&1)
+                fi
+                codigo=$?
+                mensagem="Fechamento mensal enviado ao GitHub Actions."
+                ;;
+              AUDITORIA)
+                saida=$(curl --fail-with-body --silent --show-error --request POST \
+                  "${PAINEL_URL}/api/admin/auditoria" \
+                  --header "x-admin-key: ${PAINEL_ADMIN_KEY}" 2>&1)
+                codigo=$?
+                mensagem="Auditoria dos cálculos concluída."
+                ;;
+              *)
+                saida="Tipo de automação não reconhecido: ${tipo}"
+                codigo=2
+                ;;
+            esac
+            set -e
+
+            if [ "$codigo" -eq 0 ]; then
+              finalizar "$id" "concluido" "$mensagem" ""
+              echo "$mensagem"
+            else
+              erro=$(printf '%s' "$saida" | tail -c 3500)
+              finalizar "$id" "erro" "" "$erro"
+              echo "Falha no comando ${id}: ${erro}" >&2
+            fi
+          done

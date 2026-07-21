@@ -19,6 +19,9 @@ CREATE TABLE sip_recados(id TEXT PRIMARY KEY,sip_id TEXT,status TEXT,ativo INTEG
 CREATE TABLE comandos_automacao(id TEXT PRIMARY KEY,tipo TEXT,parametros_json TEXT,status TEXT,solicitado_por TEXT,mensagem TEXT,erro TEXT,solicitado_em TEXT,iniciado_em TEXT,finalizado_em TEXT,atualizado_em TEXT);
 CREATE TABLE historico_mensal(id TEXT PRIMARY KEY,ano_mes TEXT,escopo TEXT,referencia_id TEXT,referencia_nome TEXT,versao INTEGER,versao_atual INTEGER,motivo_reprocessamento TEXT,resultado_json TEXT,fechado_em TEXT,criado_em TEXT DEFAULT CURRENT_TIMESTAMP,UNIQUE(ano_mes,escopo,referencia_id,versao));
 CREATE TABLE mercado_farma_precos(id TEXT PRIMARY KEY,uf TEXT,cnpj_referencia TEXT,produto_id TEXT,ean TEXT,produto TEXT,distribuidora TEXT,estoque REAL,desconto REAL,pf_distribuidora REAL,pf_fabrica REAL,preco_com_imposto REAL,preco_sem_imposto REAL,status TEXT,erro TEXT,atualizado_em TEXT);
+CREATE TABLE foco_semanal(id TEXT PRIMARY KEY,semana_inicio TEXT,semana_fim TEXT,produto_id TEXT,ean TEXT,descricao TEXT,ativo INTEGER,meta_clientes INTEGER,meta_valor REAL,observacoes TEXT,criado_por TEXT,criado_em TEXT,atualizado_em TEXT);
+CREATE TABLE foco_clientes(foco_id TEXT,cliente_id TEXT,ativo INTEGER);
+CREATE TABLE foco_consultores(foco_id TEXT,consultor_id TEXT,ativo INTEGER);
 INSERT INTO consultores VALUES('co1','Ana','PA',1,'PAINEL_EQUIPE','2026-07-01');
 INSERT INTO clientes(id,cnpj,nome_fantasia,cidade,uf,consultor_id,nome_gd,ativo,carteira_importada)VALUES('cl1','11111111000111','Farmácia A','Belém','PA','co1','GD Norte',1,1),('cl2','22222222000122','Farmácia B','Belém','PA','co1','GD Norte',1,1);
 INSERT INTO produtos VALUES('linha','111','Linha','LINHA',1,1),('prioritario','222','Prioritário','PRIORITARIO',1,1),('combate','333','Combate','COMBATE',0,1),('desconhecido','444','Desconhecido','SEM CLASSIFICACAO',0,1);
@@ -28,4 +31,5 @@ INSERT INTO metas VALUES('mg',NULL,'gerente','2026-07',1000,300,200,2,'imp','202
 INSERT INTO extracoes VALUES('ex1','BUSSOLA','concluido',7,'OK','','2026-07-10T10:00:00Z','2026-07-10T10:05:00Z','2026-07-10T10:00:00Z');
 INSERT INTO sips VALUES('sip1','SIP Teste',1000,80,1,1);INSERT INTO redes VALUES('rede1','Rede Teste',1);INSERT INTO sip_redes VALUES('sip1','rede1',1);INSERT INTO sip_clientes VALUES('sip1','11111111000111','cl1',1),('sip1','22222222000122','cl2',1);
 INSERT INTO mercado_farma_precos VALUES('mf1','PA','111','linha','111','Linha','Distribuidora A',10,5,12,15,11,10,'OK','','2026-07-10T12:00:00Z'),('mf2','PA','111','linha','111','Linha','Distribuidora B',0,0,13,15,12,11,'OK','','2026-07-10T12:00:00Z');
+INSERT INTO foco_semanal VALUES('f1','2026-07-07','2026-07-13','linha','111','Linha',1,2,200,'Teste','Painel','2026-07-07','2026-07-07');
 `);return{prepare(sql){return statement(db,sql)},async batch(items){return Promise.all(items.map(item=>item.all()))}}}

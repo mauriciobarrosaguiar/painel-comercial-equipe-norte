@@ -1,0 +1,3 @@
+INSTRUÇÕES;O vínculo é feito pelo CNPJ. Consultor, GD, cidade e UF serão confirmados pela carteira oficial;;;;;;;;
+SIP;CÓDIGO SIP;REDE;CNPJ;NOME DO CLIENTE;CONSULTOR;GD;CIDADE;UF;SITUAÇÃO
+SIP Exemplo;SIP001;Rede Exemplo;00000000000000;Exemplo Farmácia;Exemplo Consultor;Exemplo GD;Palmas;TO;ATIVO

@@ -1,0 +1,3 @@
+INSTRUÇÕES;Preencha uma linha por CNPJ. CNPJ, NOME PDV, CIDADE, UF e NOME REP são obrigatórios;;;;;;;;;;;;
+CNPJ;NOME PDV;CIDADE;UF;NOME GD;NOME REP;SETOR REP;SITUAÇÃO;GRUPO ECONÔMICO;REDE ASSOCIAÇÃO;BANDEIRA;FOCO PEX;POSITIVAÇÃO
+00000000000000;Exemplo Farmácia;Palmas;TO;Exemplo GD;Exemplo Consultor;TO-01;ATIVO;Grupo Exemplo;Rede Exemplo;Bandeira Exemplo;SIM;SIM
