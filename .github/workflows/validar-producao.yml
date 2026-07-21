@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: read
+  statuses: write
 
 concurrency:
   group: validar-painel-producao
@@ -77,3 +78,21 @@ jobs:
               raise SystemExit(f'Campos ausentes no dashboard: {ausentes}')
           print('Produção validada com acesso, D1 e dashboard ativos.')
           PY
+
+      - name: Publicar resultado da produção
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RESULTADO_JOB: ${{ job.status }}
+        shell: bash
+        run: |
+          estado=error
+          descricao="Validação da produção falhou"
+          if [ "$RESULTADO_JOB" = "success" ]; then
+            estado=success
+            descricao="Login, D1, dashboard e instalação validados"
+          fi
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" \
+            -f state="$estado" \
+            -f context="production/smoke" \
+            -f description="$descricao"
