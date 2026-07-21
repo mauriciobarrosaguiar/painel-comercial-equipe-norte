@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import os
 import subprocess
 from typing import Any
@@ -39,7 +38,7 @@ def executar(comando: dict[str, Any]) -> tuple[str, str]:
 
     if tipo == "BUSSOLA":
         executar_workflow("bussola-d1.yml")
-        return "despachado", "Extração do Bússola enviada ao GitHub Actions."
+        return "concluido", "Extração do Bússola enviada ao GitHub Actions. Acompanhe em Últimas extrações."
     if tipo == "MERCADO_FARMA":
         executar_workflow(
             "mercadofarma.yml",
@@ -49,13 +48,13 @@ def executar(comando: dict[str, Any]) -> tuple[str, str]:
                 "command_id": identificador,
             },
         )
-        return "despachado", "Extração do Mercado Farma enviada ao GitHub Actions."
+        return "concluido", "Extração do Mercado Farma enviada ao GitHub Actions. Acompanhe em Últimas extrações."
     if tipo == "MIGRAR_BASES":
         executar_workflow("migrar-bases-legadas-d1.yml", {"ano_mes": str(parametros.get("ano_mes", ""))})
-        return "despachado", "Migração das bases enviada ao GitHub Actions."
+        return "concluido", "Migração das bases enviada ao GitHub Actions."
     if tipo == "FECHAMENTO_MENSAL":
         executar_workflow("fechamento-mensal.yml", {"ano_mes": str(parametros.get("ano_mes", ""))})
-        return "despachado", "Fechamento mensal enviado ao GitHub Actions."
+        return "concluido", "Fechamento mensal enviado ao GitHub Actions."
     if tipo == "AUDITORIA":
         resposta = requests.post(
             f"{PAINEL_URL}/api/admin/auditoria",
