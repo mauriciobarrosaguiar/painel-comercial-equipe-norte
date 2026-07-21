@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client'
 import AppShell from './AppShell'
 import './styles.css'
 import './focus.css'
+import './focus-history.css'
 import './phase4-responsive.css'
 import './automation-phase4.css'
 
