@@ -22,12 +22,13 @@ test('SIP destaca sem combate, projeção e CNPJs com vendas', () => {
   assert.match(api, /projecao_meta/)
 })
 
-test('Mercado Farma usa cartão suspenso e Excel xlsx real por UF', () => {
+test('Mercado Farma usa buybox suspenso e Excel xlsx real por UF', () => {
   const market = read('src/MarketFarmaModule.new.tsx')
   const workflow = read('../.github/workflows/mercadofarma.yml')
   const download = read('functions/api/mercado-farma-excel.js')
-  assert.match(market, /<details className="market-product-card"/)
-  assert.match(market, /market-product-preview/)
+  assert.match(market, /mef-product-card/)
+  assert.match(market, /mef-buybox-menu/)
+  assert.match(market, /aria-expanded=\{menuOpen\}/)
   assert.match(market, /\/api\/mercado-farma-excel/)
   assert.match(market, /Atualizar Mercado Farma/)
   assert.doesNotMatch(market, /Atualizar tela/)
