@@ -4,7 +4,7 @@ import './operations.css'
 type Item={id:string;ano_mes:string;escopo:string;referencia_id:string;referencia_nome:string;versao:number;fechado_em:string;resultado:Record<string,any>}
 type Data={meses:Array<{ano_mes:string;fechado_em:string;versao:number}>;geral:Item[];itens:Item[];aviso?:string}
 const money=new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}),num=new Intl.NumberFormat('pt-BR'),pct=new Intl.NumberFormat('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1})
-const month=v=>{const[y,m]=String(v||'').split('-');return y&&m?`${m}/${y}`:v}
+const month=(v:string)=>{const[y,m]=String(v||'').split('-');return y&&m?`${m}/${y}`:v}
 const value=(x:any,k:string)=>Number(x?.resultado?.[k]||0)
 export default function HistoryModule({onBack,onAutomations}:{onBack:()=>void;onAutomations:()=>void}){
  const [data,setData]=useState<Data>({meses:[],geral:[],itens:[]}),[selected,setSelected]=useState(''),[scope,setScope]=useState('CONSULTOR'),[error,setError]=useState(''),[loading,setLoading]=useState(true)
