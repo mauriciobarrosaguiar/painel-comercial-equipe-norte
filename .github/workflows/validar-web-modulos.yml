@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - conclusao-painel-fase-3
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
@@ -25,6 +28,23 @@ jobs:
           cache-dependency-path: web/package-lock.json
       - run: npm ci --ignore-scripts
       - name: Executar testes web
-        run: npm run test:web
+        id: testes
+        shell: bash
+        run: |
+          set +e
+          npm run test:web 2>&1 | tee test-output.txt
+          status=${PIPESTATUS[0]}
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          exit 0
+      - name: Publicar relatório dos testes
+        uses: actions/upload-artifact@v4
+        with:
+          name: relatorio-testes-web-${{ github.run_id }}
+          path: web/test-output.txt
+          if-no-files-found: error
+          retention-days: 7
+      - name: Interromper quando os testes falharem
+        if: steps.testes.outputs.status != '0'
+        run: exit 1
       - name: Compilar aplicação
         run: npm run build
