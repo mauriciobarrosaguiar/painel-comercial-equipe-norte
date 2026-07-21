@@ -1,0 +1,10 @@
+name: Processar comandos do painel
+
+on:
+  workflow_dispatch:
+
+jobs:
+  processar:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Processador"
