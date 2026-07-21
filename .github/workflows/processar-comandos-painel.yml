@@ -2,9 +2,109 @@ name: Processar comandos do painel
 
 on:
   workflow_dispatch:
+  schedule:
+    - cron: "*/5 * * * *"
+
+permissions:
+  contents: read
+  actions: write
+
+concurrency:
+  group: comandos-painel
+  cancel-in-progress: false
 
 jobs:
   processar:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PAINEL_URL: https://painel-equipe-norte.pages.dev
+      PAINEL_ADMIN_KEY: ${{ secrets.PAINEL_ADMIN_KEY }}
+      GH_TOKEN: ${{ github.token }}
     steps:
-      - run: echo "Processador"
+      - name: Buscar próximo comando
+        id: comando
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail-with-body --silent --show-error \
+            --request POST "${PAINEL_URL}/api/internal/automacoes" \
+            --header "x-admin-key: ${PAINEL_ADMIN_KEY}" \
+            --header "content-type: application/json" \
+            --data '{"acao":"proxima"}' > comando.json
+          id=$(jq -r '.comando.id // empty' comando.json)
+          tipo=$(jq -r '.comando.tipo // empty' comando.json)
+          if [ -z "$id" ]; then
+            echo "existe=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "existe=true" >> "$GITHUB_OUTPUT"
+          echo "id=$id" >> "$GITHUB_OUTPUT"
+          echo "tipo=$tipo" >> "$GITHUB_OUTPUT"
+          jq -c '.comando.parametros // {}' comando.json > parametros.json
+
+      - name: Despachar execução solicitada
+        if: steps.comando.outputs.existe == 'true'
+        id: despacho
+        shell: bash
+        env:
+          COMANDO_ID: ${{ steps.comando.outputs.id }}
+          TIPO: ${{ steps.comando.outputs.tipo }}
+        run: |
+          set -euo pipefail
+          ano_mes=$(jq -r '.ano_mes // empty' parametros.json)
+          ufs=$(jq -r '.ufs // "MA,MT,PA,PI,TO"' parametros.json)
+          case "$TIPO" in
+            BUSSOLA)
+              gh workflow run bussola-d1.yml
+              mensagem="Extração do Bússola enviada ao GitHub Actions."
+              ;;
+            MERCADO_FARMA)
+              gh workflow run mercadofarma.yml -f acao=atualizar_mercadofarma_paralelo -f ufs="$ufs" -f command_id="$COMANDO_ID"
+              mensagem="Extração do Mercado Farma enviada ao GitHub Actions."
+              ;;
+            MIGRAR_BASES)
+              if [ -n "$ano_mes" ]; then gh workflow run migrar-bases-legadas-d1.yml -f ano_mes="$ano_mes"; else gh workflow run migrar-bases-legadas-d1.yml; fi
+              mensagem="Migração das bases enviada ao GitHub Actions."
+              ;;
+            FECHAMENTO_MENSAL)
+              if [ -n "$ano_mes" ]; then gh workflow run fechamento-mensal.yml -f ano_mes="$ano_mes"; else gh workflow run fechamento-mensal.yml; fi
+              mensagem="Fechamento mensal enviado ao GitHub Actions."
+              ;;
+            AUDITORIA)
+              curl --fail-with-body --silent --show-error --request POST \
+                "${PAINEL_URL}/api/admin/auditoria" \
+                --header "x-admin-key: ${PAINEL_ADMIN_KEY}" > auditoria.json
+              mensagem="Auditoria dos cálculos concluída."
+              ;;
+            *)
+              echo "Tipo inválido: $TIPO" >&2
+              exit 2
+              ;;
+          esac
+          echo "mensagem=$mensagem" >> "$GITHUB_OUTPUT"
+
+      - name: Marcar comando como concluído
+        if: steps.comando.outputs.existe == 'true' && success()
+        shell: bash
+        env:
+          COMANDO_ID: ${{ steps.comando.outputs.id }}
+          MENSAGEM: ${{ steps.despacho.outputs.mensagem }}
+        run: |
+          jq -n --arg id "$COMANDO_ID" --arg msg "$MENSAGEM" '{acao:"finalizar",id:$id,status:"concluido",mensagem:$msg}' > finalizar.json
+          curl --fail-with-body --silent --show-error \
+            --request POST "${PAINEL_URL}/api/internal/automacoes" \
+            --header "x-admin-key: ${PAINEL_ADMIN_KEY}" \
+            --header "content-type: application/json" \
+            --data @finalizar.json
+
+      - name: Registrar falha
+        if: steps.comando.outputs.existe == 'true' && failure()
+        shell: bash
+        env:
+          COMANDO_ID: ${{ steps.comando.outputs.id }}
+        run: |
+          jq -n --arg id "$COMANDO_ID" '{acao:"finalizar",id:$id,status:"erro",erro:"Falha ao despachar. Consulte o GitHub Actions."}' > falha.json
+          curl --silent --show-error --request POST "${PAINEL_URL}/api/internal/automacoes" \
+            --header "x-admin-key: ${PAINEL_ADMIN_KEY}" \
+            --header "content-type: application/json" --data @falha.json || true
