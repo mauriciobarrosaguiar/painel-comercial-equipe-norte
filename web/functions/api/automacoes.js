@@ -8,7 +8,7 @@ const texto = value => String(value ?? '').trim()
 const DISPAROS = {
   BUSSOLA: {
     workflow: 'bussola-d1.yml',
-    inputs: (id, parametros) => ({ command_id: id, ...(parametros || {}) }),
+    inputs: id => ({ command_id: id }),
   },
   MERCADO_FARMA: {
     workflow: 'mercadofarma.yml',
@@ -44,11 +44,38 @@ function githubHeaders(env) {
   }
 }
 
+async function detalheGitHub(response) {
+  const bruto = (await response.text().catch(() => '')).slice(0, 800)
+  if (!bruto) return ''
+  try {
+    const body = JSON.parse(bruto)
+    return texto(body?.message || body?.error || bruto)
+  } catch {
+    return bruto
+  }
+}
+
+async function erroGitHub(response, acao) {
+  const detalhe = await detalheGitHub(response)
+  const status = Number(response.status || 0)
+  const orientacao = status === 401
+    ? 'O token é inválido ou expirou. Gere outro token e atualize o secret PAINEL_GITHUB_ACTIONS_TOKEN.'
+    : status === 403
+      ? 'O token não tem permissão suficiente. No token, deixe Actions como Read and write para este repositório.'
+      : status === 404
+        ? 'O token não tem acesso ao repositório selecionado ou ao workflow. Edite o token e selecione painel-comercial-equipe-norte com Actions em Read and write.'
+        : status === 422
+          ? 'O GitHub recusou os dados do workflow. A configuração do arquivo de automação precisa ser revisada.'
+          : 'O GitHub recusou a solicitação.'
+  const complemento = detalhe ? ` Detalhe do GitHub: ${detalhe}` : ''
+  return new Error(`${orientacao} (${acao}; HTTP ${status || 'desconhecido'}).${complemento}`)
+}
+
 async function workflowEmAndamento(env, workflow) {
   const response = await fetch(`https://api.github.com/repos/${REPOSITORIO}/actions/workflows/${workflow}/runs?per_page=10`, {
     headers: githubHeaders(env),
   })
-  if (!response.ok) throw new Error(`GitHub recusou a consulta do workflow (${response.status}).`)
+  if (!response.ok) throw await erroGitHub(response, 'consultar workflow')
   const body = await response.json().catch(() => ({}))
   const ativos = new Set(['queued', 'in_progress', 'pending', 'waiting', 'requested'])
   return Array.isArray(body.workflow_runs) && body.workflow_runs.some(run => ativos.has(String(run?.status || '').toLowerCase()))
@@ -67,10 +94,7 @@ async function dispararWorkflow(env, tipo, id, parametros) {
     headers: githubHeaders(env),
     body: JSON.stringify({ ref: 'main', inputs: configuracao.inputs(id, parametros) }),
   })
-  if (response.status !== 204) {
-    const detalhe = (await response.text().catch(() => '')).slice(0, 800)
-    throw new Error(`GitHub recusou o disparo (${response.status})${detalhe ? `: ${detalhe}` : ''}`)
-  }
+  if (response.status !== 204) throw await erroGitHub(response, 'iniciar workflow')
   return { imediato: true }
 }
 
@@ -179,7 +203,7 @@ export async function onRequestPost({ request, env }) {
       }
       const iniciado = new Date().toISOString()
       await env.DB.prepare(
-        "UPDATE comandos_automacao SET status='executando',mensagem='Enviado ao GitHub Actions. Aguardando conclusão.',iniciado_em=?,atualizado_em=? WHERE id=? AND status='aguardando'",
+        "UPDATE comandos_automacao SET status='executando',mensagem='Enviado ao GitHub Actions. Aguardando conclusão.',erro='',iniciado_em=?,atualizado_em=? WHERE id=? AND status='aguardando'",
       ).bind(iniciado, iniciado, id).run()
       return json({
         sucesso: true,
@@ -193,8 +217,8 @@ export async function onRequestPost({ request, env }) {
       const detalhe = error instanceof Error ? error.message : String(error)
       const atualizado = new Date().toISOString()
       await env.DB.prepare(
-        "UPDATE comandos_automacao SET status='aguardando',mensagem='Falha no disparo imediato. A fila de contingência assumirá o processo.',erro='',atualizado_em=? WHERE id=?",
-      ).bind(atualizado, id).run()
+        "UPDATE comandos_automacao SET status='aguardando',mensagem='Falha no disparo imediato. A fila de contingência assumirá o processo.',erro=?,atualizado_em=? WHERE id=?",
+      ).bind(detalhe, atualizado, id).run()
       return json({
         sucesso: true,
         id,

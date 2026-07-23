@@ -104,7 +104,11 @@ export default function AutomationsModule({ onBack }: { onBack: () => void }) {
       })
       const result = await response.json()
       if (!response.ok) throw new Error(result.detalhe || result.erro || 'Falha ao solicitar automação')
-      setMessage(result.mensagem || 'Solicitação registrada.')
+      if (result.imediato === false && result.detalhe) {
+        setError(`${result.mensagem || 'O disparo imediato falhou.'} ${result.detalhe}`)
+      } else {
+        setMessage(result.mensagem || 'Solicitação registrada.')
+      }
       await load()
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason))
@@ -139,7 +143,7 @@ export default function AutomationsModule({ onBack }: { onBack: () => void }) {
     <div className="automation-session-note">
       {data.disparo_imediato_configurado === false
         ? 'A fila de contingência está ativa. O disparo imediato do GitHub ainda precisa ser configurado.'
-        : 'Acesso confirmado. Os processos são enviados imediatamente ao GitHub Actions.'}
+        : 'Token configurado. O acesso ao repositório será validado quando o processo for enviado.'}
     </div>
     {error && <div className="alert alert-error"><strong>Não foi possível concluir:</strong> {error}</div>}
     {message && <div className="alert alert-success">{message}</div>}
