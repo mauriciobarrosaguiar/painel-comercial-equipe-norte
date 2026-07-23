@@ -9,7 +9,7 @@ on:
       - main
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   validar:
@@ -36,24 +36,9 @@ jobs:
           node-version: "24"
           cache: npm
           cache-dependency-path: web/package-lock.json
-      - name: Atualizar lock com correções e instalar dependências web
+      - name: Instalar dependências web reproduzíveis
         working-directory: web
-        run: |
-          npm install --package-lock-only --ignore-scripts
-          npm ci --ignore-scripts
-      - name: Salvar lock corrigido na branch
-        if: github.event_name == 'push'
-        shell: bash
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add web/package-lock.json
-          if git diff --staged --quiet; then
-            echo "O lock já está atualizado."
-          else
-            git commit -m "Aplica override seguro do Sharp no lock"
-            git push origin "HEAD:${GITHUB_REF_NAME}"
-          fi
+        run: npm ci --ignore-scripts
       - name: Verificar dependências conhecidas
         id: audit_web
         working-directory: web
