@@ -175,3 +175,39 @@ jobs:
             git pull --rebase origin main
             git push
           fi
+
+  finalizar_comando:
+    if: ${{ always() && github.event_name == 'workflow_dispatch' && inputs.command_id != '' }}
+    needs: [extrair_uf, consolidar_mercadofarma]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Atualizar solicitação no painel
+        env:
+          PAINEL_URL: https://painel-equipe-norte.pages.dev
+          PAINEL_ADMIN_KEY: ${{ secrets.PAINEL_ADMIN_KEY }}
+          COMMAND_ID: ${{ inputs.command_id }}
+          RESULTADO_EXTRACAO: ${{ needs.extrair_uf.result }}
+          RESULTADO_CONSOLIDACAO: ${{ needs.consolidar_mercadofarma.result }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "$RESULTADO_EXTRACAO" = "success" ] && [ "$RESULTADO_CONSOLIDACAO" = "success" ]; then
+            STATUS="concluido"
+            MENSAGEM="Extração do Mercado Farma concluída, consolidada e sincronizada no painel."
+            ERRO=""
+          else
+            STATUS="erro"
+            MENSAGEM=""
+            ERRO="Mercado Farma terminou com extração=${RESULTADO_EXTRACAO} e consolidação=${RESULTADO_CONSOLIDACAO}. Consulte o GitHub Actions para os detalhes."
+          fi
+          jq -n \
+            --arg id "$COMMAND_ID" \
+            --arg status "$STATUS" \
+            --arg mensagem "$MENSAGEM" \
+            --arg erro "$ERRO" \
+            '{acao:"finalizar",id:$id,status:$status,mensagem:$mensagem,erro:$erro}' > finalizar.json
+          curl --fail-with-body --silent --show-error \
+            --request POST "${PAINEL_URL}/api/internal/automacoes" \
+            --header "x-admin-key: ${PAINEL_ADMIN_KEY}" \
+            --header "content-type: application/json" \
+            --data @finalizar.json
