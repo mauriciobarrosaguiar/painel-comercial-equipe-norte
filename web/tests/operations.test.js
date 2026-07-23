@@ -52,6 +52,37 @@ test('dispara Bússola imediatamente no GitHub e mantém comando executando até
   }
 })
 
+test('mantém a solicitação na contingência e mostra orientação quando o token não tem acesso', async () => {
+  const DB = testDatabase()
+  const env = { DB, PAINEL_ADMIN_KEY: key, GITHUB_ACTIONS_TOKEN: 'github_pat_token_de_teste_com_tamanho_valido' }
+  const originalFetch = globalThis.fetch
+  let consultas = 0
+  globalThis.fetch = async url => {
+    if (String(url).includes('/runs?')) {
+      consultas += 1
+      return consultas === 1
+        ? new Response(JSON.stringify({ workflow_runs: [] }), { status: 200, headers: { 'content-type': 'application/json' } })
+        : new Response(JSON.stringify({ workflow_runs: [] }), { status: 200, headers: { 'content-type': 'application/json' } })
+    }
+    if (String(url).endsWith('/dispatches')) {
+      return new Response(JSON.stringify({ message: 'Not Found' }), { status: 404, headers: { 'content-type': 'application/json' } })
+    }
+    throw new Error(`URL inesperada: ${url}`)
+  }
+  try {
+    const response = await criar({ request: req('https://x/api/automacoes', 'POST', { tipo: 'BUSSOLA' }), env })
+    assert.equal(response.status, 202)
+    const body = await response.json()
+    assert.equal(body.imediato, false)
+    assert.match(body.detalhe, /selecione painel-comercial-equipe-norte/i)
+    const stored = await DB.prepare("SELECT status,erro FROM comandos_automacao WHERE tipo='BUSSOLA'").first()
+    assert.equal(stored.status, 'aguardando')
+    assert.match(stored.erro, /HTTP 404/)
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
 test('não cria novo comando quando o mesmo workflow já está rodando no GitHub', async () => {
   const DB = testDatabase()
   const env = { DB, PAINEL_ADMIN_KEY: key, GITHUB_ACTIONS_TOKEN: 'github_pat_token_de_teste_com_tamanho_valido' }
