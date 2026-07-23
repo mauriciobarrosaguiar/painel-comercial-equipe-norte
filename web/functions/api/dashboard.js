@@ -1,4 +1,9 @@
-import { ITEM_FATURADO, MIX_SEM_COMBATE } from '../_lib/commercial.js'
+import {
+  ITEM_FATURADO,
+  MIX_SEM_COMBATE,
+  PEDIDO_NAO_FATURADO,
+  VALOR_ITEM_NAO_FATURADO,
+} from '../_lib/commercial.js'
 
 const HEADERS = {
   'content-type': 'application/json; charset=UTF-8',
@@ -64,10 +69,20 @@ function filtros(params) {
   if (consultor) { condClientes.push('cl.consultor_id=?'); valoresClientes.push(consultor) }
   if (uf) { condClientes.push("UPPER(TRIM(COALESCE(cl.uf,'')))=?"); valoresClientes.push(uf) }
 
+  const condPendentes = [PEDIDO_NAO_FATURADO, 'ip.ativo=1', 'cl.carteira_importada=1', 'cl.ativo=1']
+  const valoresPendentes = []
+  if (faixa.inicio && faixa.fim) {
+    condPendentes.push('DATE(pe.data_pedido) BETWEEN DATE(?) AND DATE(?)')
+    valoresPendentes.push(faixa.inicio, faixa.fim)
+  }
+  if (consultor) { condPendentes.push('cl.consultor_id=?'); valoresPendentes.push(consultor) }
+  if (uf) { condPendentes.push("UPPER(TRIM(COALESCE(cl.uf,'')))=?"); valoresPendentes.push(uf) }
+
   return {
     ...faixa, consultor, uf, where: cond.join(' AND '), valores,
     clientSaleWhere: condClientesVenda.join(' AND '), clientSaleValues: valoresClientesVenda,
     clientWhere: condClientes.join(' AND '), clientValues: valoresClientes,
+    pendingWhere: condPendentes.join(' AND '), pendingValues: valoresPendentes,
     rotulo: faixa.inicio ? `${mostrar(faixa.inicio)} a ${mostrar(faixa.fim)}` : 'Todo o período extraído',
   }
 }
@@ -198,6 +213,24 @@ export async function onRequestGet({ request, env }) {
       stmt(env, `SELECT COUNT(DISTINCT pe.id) total ${JOINS} WHERE ${filtro.where}`, filtro.valores),
       stmt(env, "SELECT finalizado_em FROM extracoes WHERE tipo='BUSSOLA' AND status='concluido' AND finalizado_em IS NOT NULL ORDER BY finalizado_em DESC LIMIT 1"),
       consultaMeta(env, filtro),
+      stmt(env, `
+        SELECT COUNT(DISTINCT pe.id) pedidos_nao_faturados,
+               COALESCE(SUM(${VALOR_ITEM_NAO_FATURADO}),0) valor_nao_faturado
+          ${JOINS}
+         WHERE ${filtro.pendingWhere}
+      `, filtro.pendingValues),
+      stmt(env, `
+        SELECT co.id,co.nome,MIN(NULLIF(TRIM(cl.setor_rep),'')) setor,
+               COUNT(DISTINCT pe.id) pedidos_nao_faturados,
+               COALESCE(SUM(${VALOR_ITEM_NAO_FATURADO}),0) valor_nao_faturado
+          FROM itens_pedido ip
+          JOIN pedidos pe ON pe.id=ip.pedido_id
+          JOIN clientes cl ON cl.id=pe.cliente_id
+          JOIN consultores co ON co.id=cl.consultor_id
+         WHERE ${filtro.pendingWhere}
+         GROUP BY co.id,co.nome
+         ORDER BY valor_nao_faturado DESC,co.nome COLLATE NOCASE
+      `, filtro.pendingValues),
     ]
 
     const resultados = await env.DB.batch(consultas)
@@ -211,6 +244,7 @@ export async function onRequestGet({ request, env }) {
     const base = resultados[10]?.results?.[0] || {}
     const diagnostico = resultados[11]?.results?.[0] || {}
     const meta = resultados[15]?.results?.[0] || {}
+    const pendentes = resultados[16]?.results?.[0] || {}
     const metas = {
       ol_sem_combate: numero(meta.ol_sem_combate),
       ol_prioritarios: numero(meta.ol_prioritarios),
@@ -243,6 +277,15 @@ export async function onRequestGet({ request, env }) {
       ol_total_faturado: faturamento,
       vendas_faturadas: pedidos,
       pedidos_faturados: pedidos,
+      pedidos_nao_faturados: numero(pendentes.pedidos_nao_faturados),
+      valor_nao_faturado: numero(pendentes.valor_nao_faturado),
+      nao_faturados_por_consultor: (resultados[17]?.results || []).map((item) => ({
+        id: String(item.id || ''),
+        nome: String(item.nome || ''),
+        setor: String(item.setor || ''),
+        pedidos_nao_faturados: numero(item.pedidos_nao_faturados),
+        valor_nao_faturado: numero(item.valor_nao_faturado),
+      })).filter((item) => item.id && item.nome),
       ticket_medio_cliente: comVenda > 0 ? faturamento / comVenda : 0,
       ticket_medio_pedido: pedidos > 0 ? faturamento / pedidos : 0,
       percentual_positivacao: ativos > 0 ? (comVenda / ativos) * 100 : 0,
@@ -269,6 +312,7 @@ export async function onRequestGet({ request, env }) {
         valor: 'itens_pedido.valor_faturado (coluna AA do Bússola)',
         data: 'data_faturamento; data_pedido apenas como fallback',
         carteira: 'Painel Equipe Norte por CNPJ para filtros de consultor e UF',
+        nao_faturados: 'Atendido/Atendido parcial usam total_atendido_sem_imposto; Enviado usa valor_total_solicitado_sem_imposto. Contagem distinta por pedido.',
         projecao: 'Dias úteis, excluindo sábados, domingos e feriados comerciais nacionais.',
       },
       atualizado_em: resultados[14]?.results?.[0]?.finalizado_em || null,

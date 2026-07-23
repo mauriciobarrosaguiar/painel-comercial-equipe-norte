@@ -38,7 +38,12 @@ def test_migrations_criam_controle_de_versao_da_bussola() -> None:
     indices = {row[1] for row in connection.execute("PRAGMA index_list(pedidos)")}
 
     assert {"ativo", "ultima_extracao_id"} <= pedidos
-    assert {"ativo", "ultima_extracao_id"} <= itens
+    assert {
+        "ativo",
+        "ultima_extracao_id",
+        "valor_total_solicitado_sem_imposto",
+        "total_atendido_sem_imposto",
+    } <= itens
     assert "idx_pedidos_data_faturamento" in indices
     tabelas = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")}
     assert {"auditorias_calculos", "metas_historico", "sips", "redes", "sip_clientes", "sip_recados"} <= tabelas
@@ -61,8 +66,8 @@ def test_sincronizacao_bussola_atualiza_sem_apagar_historico() -> None:
     )
     connection.execute(
         """INSERT INTO bussola_itens_staging_v2
-        (run_id,id,pedido_id,produto_id,ean,descricao,valor_faturado)
-        VALUES('run-1','i1','p1','pr1','7891','Produto',100)"""
+        (run_id,id,pedido_id,produto_id,ean,descricao,valor_total_solicitado_sem_imposto,total_atendido_sem_imposto,valor_faturado)
+        VALUES('run-1','i1','p1','pr1','7891','Produto',125,100,100)"""
     )
 
     connection.execute(_sql_do_extrator("INSERT INTO pedidos\n"), ("ext-1", "run-1"))
@@ -74,3 +79,6 @@ def test_sincronizacao_bussola_atualiza_sem_apagar_historico() -> None:
 
     assert connection.execute("SELECT ativo,ultima_extracao_id FROM pedidos WHERE id='p1'").fetchone() == (1, "ext-2")
     assert connection.execute("SELECT ativo,ultima_extracao_id FROM itens_pedido WHERE id='i1'").fetchone() == (1, "ext-2")
+    assert connection.execute(
+        "SELECT valor_total_solicitado_sem_imposto,total_atendido_sem_imposto FROM itens_pedido WHERE id='i1'"
+    ).fetchone() == (125, 100)

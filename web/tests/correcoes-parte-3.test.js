@@ -13,13 +13,18 @@ test('login não exibe exemplos ou códigos corporativos reais', () => {
 test('SIP destaca sem combate, projeção e CNPJs com vendas', () => {
   const view = read('src/SipDetailView.tsx')
   const api = read('functions/api/sips/detalhe.js')
+  const commercial = read('functions/_lib/commercial.js')
   assert.match(view, /CNPJs com vendas/)
   assert.match(view, /OL Sem Combate/)
   assert.match(view, /Projeção/)
   assert.match(view, /Notas faturadas/)
+  assert.match(view, /Não faturados por consultor/)
+  assert.match(view, /valor_a_faturar/)
   assert.match(view, /OL Total/)
   assert.match(api, /projecao_ol_sem_combate/)
   assert.match(api, /projecao_meta/)
+  assert.match(commercial, /total_atendido_sem_imposto/)
+  assert.match(commercial, /valor_total_solicitado_sem_imposto/)
 })
 
 test('Mercado Farma usa buybox suspenso e Excel xlsx real por UF', () => {
@@ -44,6 +49,15 @@ test('ranking usa código do setor em vez da UF do consultor', () => {
   assert.match(view, /Setor \{x\.setor/)
   assert.doesNotMatch(view, /x\.uf\|\|/)
   for (const setor of ['18150300','18150301','18150302','18150303','18150304','18150305']) assert.match(api, new RegExp(setor))
+})
+
+test('página principal mostra não faturados por consultor', () => {
+  const app = read('src/App.tsx')
+  const view = read('src/PendingOrdersOverview.tsx')
+  assert.match(app, /PendingOrdersOverview/)
+  assert.match(view, /Pedidos ainda não faturados/)
+  assert.match(view, /pedidos_nao_faturados/)
+  assert.match(view, /valor_nao_faturado/)
 })
 
 test('conflitos da auditoria são clicáveis e possuem motivo', () => {
