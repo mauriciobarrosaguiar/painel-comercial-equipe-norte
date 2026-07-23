@@ -65,6 +65,13 @@ type ConsultantDetails = {
   nao_faturados: OrderDetail[]
   regra: string
 }
+type OrdersGroupProps = {
+  title: string
+  rows: OrderDetail[]
+  pending?: boolean
+  deletingOrderId?: string
+  onDelete?: (order: OrderDetail) => void
+}
 
 const money = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
 const num = new Intl.NumberFormat('pt-BR')
@@ -90,7 +97,7 @@ const safeFileName = (value: string) => value.normalize('NFD').replace(/[\u0300-
 const csvCell = (value: unknown) => `"${String(value ?? '').replaceAll('"', '""')}"`
 const csvNumber = (value: number) => Number(value || 0).toFixed(2).replace('.', ',')
 
-function OrdersGroup({ title, rows, pending }: { title: string; rows: OrderDetail[]; pending?: boolean }) {
+function OrdersGroup({ title, rows, pending, deletingOrderId, onDelete }: OrdersGroupProps) {
   return (
     <section className="consultant-orders-group">
       <div className="consultant-orders-group-heading">
@@ -101,30 +108,42 @@ function OrdersGroup({ title, rows, pending }: { title: string; rows: OrderDetai
         <p className="consultant-orders-empty">Nenhum pedido neste período.</p>
       ) : (
         <div className="consultant-order-list">
-          {rows.map((order) => (
-            <article className="consultant-order-row" key={`${order.tipo}-${order.id}`}>
-              <div className="consultant-order-main">
-                <strong>Pedido {order.pedido || order.id}</strong>
-                <span>
-                  {order.nota_fiscal ? `NF ${order.nota_fiscal} · ` : ''}{order.status}
-                </span>
-              </div>
-              <div>
-                <span>Cliente</span>
-                <b>{order.cliente}</b>
-                <small>{order.cnpj || `${order.cidade}${order.uf ? `/${order.uf}` : ''}`}</small>
-              </div>
-              <div>
-                <span>{pending ? 'Data do pedido' : 'Faturamento'}</span>
-                <b>{dateLabel(pending ? order.data_pedido : (order.data_faturamento || order.data_pedido))}</b>
-                <small>{num.format(order.itens)} itens</small>
-              </div>
-              <div className="consultant-order-value">
-                <span>{pending ? 'A faturar' : 'Faturado'}</span>
-                <b>{money.format(pending ? order.valor_considerado : order.valor_faturado)}</b>
-              </div>
-            </article>
-          ))}
+          {rows.map((order) => {
+            const deleting = deletingOrderId === order.id
+            return (
+              <article className={`consultant-order-row${pending ? ' has-actions' : ''}`} key={`${order.tipo}-${order.id}`}>
+                <div className="consultant-order-main">
+                  <strong>Pedido {order.pedido || order.id}</strong>
+                  <span>{order.nota_fiscal ? `NF ${order.nota_fiscal} · ` : ''}{order.status}</span>
+                </div>
+                <div>
+                  <span>Cliente</span>
+                  <b>{order.cliente}</b>
+                  <small>{order.cnpj || `${order.cidade}${order.uf ? `/${order.uf}` : ''}`}</small>
+                </div>
+                <div>
+                  <span>{pending ? 'Data do pedido' : 'Faturamento'}</span>
+                  <b>{dateLabel(pending ? order.data_pedido : (order.data_faturamento || order.data_pedido))}</b>
+                  <small>{num.format(order.itens)} itens</small>
+                </div>
+                <div className="consultant-order-value">
+                  <span>{pending ? 'A faturar' : 'Faturado'}</span>
+                  <b>{money.format(pending ? order.valor_considerado : order.valor_faturado)}</b>
+                </div>
+                {pending && onDelete && (
+                  <button
+                    type="button"
+                    className="consultant-order-delete"
+                    disabled={Boolean(deletingOrderId)}
+                    onClick={() => onDelete(order)}
+                    aria-label={`Excluir pedido ${order.pedido || order.id}`}
+                  >
+                    {deleting ? 'Excluindo…' : 'Excluir'}
+                  </button>
+                )}
+              </article>
+            )
+          })}
         </div>
       )}
     </section>
@@ -143,6 +162,8 @@ export default function ConsultantsModule({ onBack }: { onBack: () => void }) {
   const [details, setDetails] = useState<Record<string, ConsultantDetails>>({})
   const [detailLoading, setDetailLoading] = useState<Record<string, boolean>>({})
   const [detailErrors, setDetailErrors] = useState<Record<string, string>>({})
+  const [detailMessages, setDetailMessages] = useState<Record<string, string>>({})
+  const [deletingOrderId, setDeletingOrderId] = useState('')
 
   const selected = useMemo(() => period === 'mes-atual'
     ? bounds(0)
@@ -165,6 +186,7 @@ export default function ConsultantsModule({ onBack }: { onBack: () => void }) {
     setExpanded('')
     setDetails({})
     setDetailErrors({})
+    setDetailMessages({})
     fetch(`/api/consultores?${params}`, { cache: 'no-store', signal: controller.signal })
       .then(async (response) => {
         const result = await response.json()
@@ -218,6 +240,59 @@ export default function ConsultantsModule({ onBack }: { onBack: () => void }) {
     setExpanded(consultantId)
     if (!details[consultantId]) {
       try { await loadDetails(consultantId) } catch { /* erro aparece dentro do card */ }
+    }
+  }
+
+  const deletePendingOrder = async (consultant: Row, order: OrderDetail) => {
+    const orderLabel = order.pedido || order.id
+    const confirmed = window.confirm(
+      `Excluir o pedido ${orderLabel} de ${order.cliente}?\n\nEle deixará de aparecer nos resultados e não voltará na próxima atualização.`,
+    )
+    if (!confirmed) return
+
+    setDeletingOrderId(order.id)
+    setDetailErrors((currentState) => ({ ...currentState, [consultant.id]: '' }))
+    setDetailMessages((currentState) => ({ ...currentState, [consultant.id]: '' }))
+    try {
+      const params = new URLSearchParams({ consultor: consultant.id, pedido: order.id })
+      const response = await fetch(`/api/consultor-pedidos?${params}`, { method: 'DELETE', cache: 'no-store' })
+      const result = await response.json()
+      if (!response.ok) throw new Error(result.detalhe || result.erro || 'Falha ao excluir pedido')
+
+      const removedValue = Number(order.valor_considerado || 0)
+      setDetails((currentState) => {
+        const currentDetail = currentState[consultant.id]
+        if (!currentDetail) return currentState
+        return {
+          ...currentState,
+          [consultant.id]: {
+            ...currentDetail,
+            resumo: {
+              ...currentDetail.resumo,
+              pedidos_nao_faturados: Math.max(0, currentDetail.resumo.pedidos_nao_faturados - 1),
+              valor_nao_faturado: Math.max(0, currentDetail.resumo.valor_nao_faturado - removedValue),
+            },
+            nao_faturados: currentDetail.nao_faturados.filter((item) => item.id !== order.id),
+          },
+        }
+      })
+      setData((currentData) => currentData ? {
+        ...currentData,
+        consultores: currentData.consultores.map((item) => item.id === consultant.id ? {
+          ...item,
+          pedidos_nao_faturados: Math.max(0, item.pedidos_nao_faturados - 1),
+          valor_nao_faturado: Math.max(0, item.valor_nao_faturado - removedValue),
+        } : item),
+      } : currentData)
+      setDetailMessages((currentState) => ({
+        ...currentState,
+        [consultant.id]: result.mensagem || `Pedido ${orderLabel} excluído.`,
+      }))
+    } catch (reason) {
+      const message = reason instanceof Error ? reason.message : String(reason)
+      setDetailErrors((currentState) => ({ ...currentState, [consultant.id]: message }))
+    } finally {
+      setDeletingOrderId('')
     }
   }
 
@@ -373,6 +448,7 @@ export default function ConsultantsModule({ onBack }: { onBack: () => void }) {
                   <div className="consultant-order-details" id={`consultant-orders-${consultant.id}`}>
                     {detailLoading[consultant.id] && <div className="consultant-orders-loading">Carregando pedidos…</div>}
                     {detailErrors[consultant.id] && <div className="alert alert-error">{detailErrors[consultant.id]}</div>}
+                    {detailMessages[consultant.id] && <div className="alert alert-success">{detailMessages[consultant.id]}</div>}
                     {detail && (
                       <>
                         <div className="consultant-order-details-heading">
@@ -398,7 +474,13 @@ export default function ConsultantsModule({ onBack }: { onBack: () => void }) {
                         </div>
                         <div className="consultant-orders-columns">
                           <OrdersGroup title="Pedidos faturados" rows={detail.faturados} />
-                          <OrdersGroup title="Pedidos ainda não faturados" rows={detail.nao_faturados} pending />
+                          <OrdersGroup
+                            title="Pedidos ainda não faturados"
+                            rows={detail.nao_faturados}
+                            pending
+                            deletingOrderId={deletingOrderId}
+                            onDelete={(order) => void deletePendingOrder(consultant, order)}
+                          />
                         </div>
                         <small className="consultant-order-rule">{detail.regra}</small>
                       </>
