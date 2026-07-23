@@ -2,7 +2,7 @@ import { authorized, json } from '../_lib/credentials.js'
 
 const TIPOS = new Set(['BUSSOLA', 'MERCADO_FARMA', 'AUDITORIA', 'FECHAMENTO_MENSAL', 'MIGRAR_BASES'])
 const REPOSITORIO = 'mauriciobarrosaguiar/painel-comercial-equipe-norte'
-const ATIVOS = new Set(['aguardando', 'encaminhando', 'executando'])
+const ATIVOS = new Set(['aguardando', 'executando'])
 const texto = value => String(value ?? '').trim()
 
 const DISPAROS = {
@@ -115,10 +115,10 @@ export async function onRequestPost({ request, env }) {
     if (!TIPOS.has(tipo)) return json({ erro: 'Tipo de automação inválido.' }, 400)
 
     const existente = await env.DB.prepare(
-      "SELECT id,status FROM comandos_automacao WHERE tipo=? AND status IN ('aguardando','encaminhando','executando') ORDER BY solicitado_em DESC LIMIT 1",
+      "SELECT id,status FROM comandos_automacao WHERE tipo=? AND status IN ('aguardando','executando') ORDER BY solicitado_em DESC LIMIT 1",
     ).bind(tipo).first()
     if (existente) {
-      return json({ erro: 'Este processo já está sendo encaminhado ou executado.', comando_id: existente.id, status: existente.status }, 409)
+      return json({ erro: 'Este processo já está aguardando ou sendo executado.', comando_id: existente.id, status: existente.status }, 409)
     }
 
     const configuracao = DISPAROS[tipo]
@@ -129,8 +129,9 @@ export async function onRequestPost({ request, env }) {
     const id = `cmd-${crypto.randomUUID()}`
     const agora = new Date().toISOString()
     const parametros = body.parametros && typeof body.parametros === 'object' ? body.parametros : {}
-    const estadoInicial = configuracao && tokenDisponivel(env) ? 'encaminhando' : 'aguardando'
-    const mensagemInicial = estadoInicial === 'encaminhando'
+    const disparoImediato = Boolean(configuracao && tokenDisponivel(env))
+    const estadoInicial = 'aguardando'
+    const mensagemInicial = disparoImediato
       ? 'Enviando agora ao GitHub Actions.'
       : 'Aguardando processador de contingência.'
 
@@ -139,7 +140,7 @@ export async function onRequestPost({ request, env }) {
        SELECT ?,?,?,?,?,?,?,?
        WHERE NOT EXISTS (
          SELECT 1 FROM comandos_automacao
-         WHERE tipo=? AND status IN ('aguardando','encaminhando','executando')
+         WHERE tipo=? AND status IN ('aguardando','executando')
        )`,
     ).bind(
       id,
@@ -154,7 +155,7 @@ export async function onRequestPost({ request, env }) {
     ).run()
 
     if (!inserido.meta?.changes) {
-      return json({ erro: 'Este processo já está sendo encaminhado ou executado.' }, 409)
+      return json({ erro: 'Este processo já está aguardando ou sendo executado.' }, 409)
     }
 
     if (!configuracao || !tokenDisponivel(env)) {
@@ -173,12 +174,12 @@ export async function onRequestPost({ request, env }) {
     try {
       const resultado = await dispararWorkflow(env, tipo, id, parametros)
       if (resultado.ocupado) {
-        await env.DB.prepare('DELETE FROM comandos_automacao WHERE id=? AND status=?').bind(id, 'encaminhando').run()
+        await env.DB.prepare('DELETE FROM comandos_automacao WHERE id=? AND status=?').bind(id, 'aguardando').run()
         return json({ erro: 'Este processo já está em execução no GitHub Actions.', status: 'executando' }, 409)
       }
       const iniciado = new Date().toISOString()
       await env.DB.prepare(
-        "UPDATE comandos_automacao SET status='executando',mensagem='Enviado ao GitHub Actions. Aguardando conclusão.',iniciado_em=?,atualizado_em=? WHERE id=?",
+        "UPDATE comandos_automacao SET status='executando',mensagem='Enviado ao GitHub Actions. Aguardando conclusão.',iniciado_em=?,atualizado_em=? WHERE id=? AND status='aguardando'",
       ).bind(iniciado, iniciado, id).run()
       return json({
         sucesso: true,
