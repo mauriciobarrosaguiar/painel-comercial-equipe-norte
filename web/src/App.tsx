@@ -1,8 +1,331 @@
-import{useEffect,useMemo,useState}from'react';import IntegrationSettings from'./IntegrationSettings';import ConsultantsModule from'./ConsultantsModule';import type{SessionUser}from'./LoginPage';import'./dashboard.css';
-type Page='dashboard'|'administracao'|'consultores';type Period='mes-atual'|'mes-anterior'|'todo-periodo'|'personalizado';type Dashboard=any;type Props={user:SessionUser;onLogout:()=>void;onInstall:()=>void};
-const modules=[['Visão Geral','Indicadores, metas, projeções e desempenho da equipe.','▦'],['Consultores','Ranking, resultados individuais e acompanhamento das metas.','◉'],['Clientes','Positivação, cobertura, histórico e oportunidades por cliente.','◇'],['Foco Semanal','Produtos foco, metas por consultor e acompanhamento da semana.','◎'],['Oportunidades','Clientes sem compra, mix ausente e potenciais de crescimento.','↗'],['Mercado Farma','Preços, estoques e distribuidores organizados por UF.','⌁'],['SIP / Redes','Grupos, redes, acessos e resultados consolidados.','⬡'],['Histórico','Comparativos mensais e evolução dos principais indicadores.','◫'],['Automações','Extrações do Bússola e Mercado Farma com status em tempo real.','⚙'],['Administração','Integrações, metas, produtos e configurações.','☷']];
-const money=new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}),num=new Intl.NumberFormat('pt-BR'),pct=new Intl.NumberFormat('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1}),initials=(name:string)=>name.split(/\s+/).filter(Boolean).slice(0,2).map(x=>x[0]).join('').toUpperCase()||'N';
-const iso=(d:Date)=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`,bounds=(o:number)=>{const n=new Date();return{inicio:iso(new Date(n.getFullYear(),n.getMonth()+o,1)),fim:iso(new Date(n.getFullYear(),n.getMonth()+o+1,0))}},current=bounds(0);
-const initial:Dashboard={ol_total_faturado:0,ol_sem_combate:0,ol_combate:0,ol_prioritarios:0,ol_lancamentos:0,meta_ol_sem_combate:0,meta_ol_prioritarios:0,meta_ol_lancamentos:0,resultado_ol_sem_combate:0,resultado_ol_prioritarios:0,resultado_ol_lancamentos:0,projecao:{ativa:false,dias_uteis_decorridos:0,dias_uteis_total:0,ol_sem_combate:0,ol_prioritarios:0,ol_lancamentos:0,resultado_ol_sem_combate:0,resultado_ol_prioritarios:0,resultado_ol_lancamentos:0},clientes_com_venda:0,clientes_sem_venda:0,clientes_ativos:0,filtros:{consultores:[],ufs:[],aplicado:{rotulo:'Mês atual'}},atualizado_em:''};
-const updated=(v:string)=>{if(!v)return'Atualização ainda não concluída';const d=new Date(v);return isNaN(d.getTime())?'Horário indisponível':`Atualizado em ${new Intl.DateTimeFormat('pt-BR',{dateStyle:'short',timeStyle:'short',timeZone:'America/Sao_Paulo'}).format(d)}`},cls=(v:number)=>v>=100?'metric-good':v>=80?'metric-warning':'metric-low';
-export default function App({user,onLogout,onInstall}:Props){const[page,setPage]=useState<Page>('dashboard'),[d,setD]=useState<Dashboard>(initial),[state,setState]=useState<'carregando'|'conectado'|'erro'>('carregando'),[period,setPeriod]=useState<Period>('mes-atual'),[consultant,setConsultant]=useState(''),[uf,setUf]=useState(''),[start,setStart]=useState(current.inicio),[end,setEnd]=useState(current.fim);const selected=useMemo(()=>period==='mes-atual'?bounds(0):period==='mes-anterior'?bounds(-1):period==='personalizado'?{inicio:start,fim:end}:{inicio:'',fim:''},[period,start,end]);useEffect(()=>{if(period==='personalizado'&&(!start||!end))return;const c=new AbortController();setState('carregando');const p=new URLSearchParams({periodo:period});if(selected.inicio&&selected.fim){p.set('inicio',selected.inicio);p.set('fim',selected.fim)}if(consultant)p.set('consultor',consultant);if(uf)p.set('uf',uf);Promise.all([fetch('/api/health',{cache:'no-store',signal:c.signal}),fetch(`/api/dashboard?${p}`,{cache:'no-store',signal:c.signal})]).then(async([h,r])=>{const j=await r.json();if(!h.ok||!r.ok)throw new Error(j.detalhe||j.erro||'API indisponível');const health=await h.json();setD(j);setState(health.database==='ok'?'conectado':'erro')}).catch(e=>{if(!(e instanceof DOMException&&e.name==='AbortError'))setState('erro')});return()=>c.abort()},[period,consultant,uf,start,end,selected.inicio,selected.fim]);const status=state==='conectado'?'Banco conectado':state==='erro'?'Falha ao conectar ao banco':'Atualizando resultados',consultantName=d.filtros?.consultores?.find((x:any)=>x.id===consultant)?.nome,filter=[d.filtros?.aplicado?.rotulo||status,consultantName,uf?`UF ${uf}`:''].filter(Boolean).join(' · '),go=(p:Page)=>{setPage(p);window.scrollTo({top:0,behavior:'smooth'})},open=(title:string)=>{if(title==='Administração')go('administracao');else if(title==='Consultores')go('consultores');else if(title==='Visão Geral')go('dashboard')};const cards=[['OL sem combate','ol_sem_combate','meta_ol_sem_combate','resultado_ol_sem_combate'],['OL prioritários','ol_prioritarios','meta_ol_prioritarios','resultado_ol_prioritarios'],['OL lançamentos','ol_lancamentos','meta_ol_lancamentos','resultado_ol_lancamentos']];return <div className="app-shell"><header className="topbar"><button className="brand brand-button" onClick={()=>go('dashboard')}><div className="brand-mark">N</div><div><strong>Painel Comercial</strong><span>Equipe Norte</span></div></button><div className="topbar-actions"><button className="topbar-download" onClick={onInstall}>Baixar app</button><span className="environment-badge">{user.nome}</span><button className="profile-button" title="Sair" onClick={onLogout}>{initials(user.nome)}</button></div></header>{page==='administracao'?<IntegrationSettings onBack={()=>go('dashboard')}/>:page==='consultores'?<ConsultantsModule onBack={()=>go('dashboard')}/>:<main className="content"><section className="hero"><div><span className="eyebrow">Gestão comercial</span><h1>Olá, {user.nome.split(' ')[0]}</h1><p>Acompanhe a operação da Equipe Norte em um único lugar.</p></div><div className="hero-actions"><button className="secondary-button" onClick={onInstall}>Baixar app mobile</button><button className="primary-button" onClick={()=>go('administracao')}>Central de automações</button></div></section><section className="filters"><label><span>Período</span><select value={period} onChange={e=>setPeriod(e.target.value as Period)}><option value="mes-atual">Mês atual</option><option value="mes-anterior">Mês anterior</option><option value="todo-periodo">Todo o período</option><option value="personalizado">Personalizado</option></select></label><label><span>Consultor</span><select value={consultant} onChange={e=>setConsultant(e.target.value)}><option value="">Todos</option>{(d.filtros?.consultores||[]).map((x:any)=><option key={x.id} value={x.id}>{x.nome}</option>)}</select></label><label><span>UF</span><select value={uf} onChange={e=>setUf(e.target.value)}><option value="">Todas</option>{(d.filtros?.ufs||[]).map((x:string)=><option key={x}>{x}</option>)}</select></label>{period==='personalizado'&&<><label><span>Data inicial</span><input type="date" value={start} onChange={e=>setStart(e.target.value)}/></label><label><span>Data final</span><input type="date" value={end} onChange={e=>setEnd(e.target.value)}/></label></>}</section><section className="total-ol-card"><div><span>OL total faturado</span><small>{filter} · {updated(d.atualizado_em)}</small></div><strong>{state==='carregando'?'—':money.format(d.ol_total_faturado||0)}</strong><div className="total-ol-combate"><span>OL combate</span><b>{state==='carregando'?'—':money.format(d.ol_combate||0)}</b></div></section><section className="goal-grid">{cards.map(([label,key,meta,result])=><article className="goal-card" key={key}><div className="goal-card-heading"><span>{label}</span><b className={cls(d[result]||0)}>{state==='carregando'?'—':`${pct.format(d[result]||0)}%`}</b></div><strong>{state==='carregando'?'—':money.format(d[key]||0)}</strong><div className="goal-details"><span>Meta</span><b>{money.format(d[meta]||0)}</b></div><div className="goal-details"><span>Projeção do mês</span><b>{d.projecao?.ativa?money.format(d.projecao[key]||0):'Período concluído'}</b></div><small>{d.projecao?.ativa?`${pct.format(d.projecao[`resultado_${key}`]||0)}% projetado · ${d.projecao.dias_uteis_decorridos}/${d.projecao.dias_uteis_total} dias úteis`:filter}</small></article>)}<article className="goal-card"><div className="goal-card-heading"><span>Clientes com venda</span><b>{pct.format(d.clientes_ativos>0?d.clientes_com_venda/d.clientes_ativos*100:0)}%</b></div><strong>{num.format(d.clientes_com_venda||0)}</strong><div className="goal-details"><span>Sem venda</span><b>{num.format(d.clientes_sem_venda||0)}</b></div><small>{filter}</small></article></section><section className="section-heading"><div><span className="eyebrow">Acesso rápido</span><h2>Módulos do painel</h2></div><span className="development-note">{status}</span></section><section className="modules-grid">{modules.map(([title,description,icon])=><button className="module-card" key={title} onClick={()=>open(title)}><div className="module-card-top"><span className="module-icon">{icon}</span><span className="module-status">Ativo</span></div><div><h3>{title}</h3><p>{description}</p></div><span className="module-link">Abrir módulo <b>→</b></span></button>)}</section></main>}<footer><span>Painel Comercial · Equipe Norte</span><span>Versão SaaS em evolução</span></footer></div>}
+import { useEffect, useMemo, useState } from 'react'
+import IntegrationSettings from './IntegrationSettings'
+import ConsultantsModule from './ConsultantsModule'
+import PendingOrdersOverview from './PendingOrdersOverview'
+import type { SessionUser } from './LoginPage'
+import './dashboard.css'
+
+type Page = 'dashboard' | 'administracao' | 'consultores'
+type Period = 'mes-atual' | 'mes-anterior' | 'todo-periodo' | 'personalizado'
+type Dashboard = any
+type Props = { user: SessionUser; onLogout: () => void; onInstall: () => void }
+
+const modules = [
+  ['Visão Geral', 'Indicadores, metas, projeções e desempenho da equipe.', '▦'],
+  ['Consultores', 'Ranking, resultados individuais e acompanhamento das metas.', '◉'],
+  ['Clientes', 'Positivação, cobertura, histórico e oportunidades por cliente.', '◇'],
+  ['Foco Semanal', 'Produtos foco, metas por consultor e acompanhamento da semana.', '◎'],
+  ['Oportunidades', 'Clientes sem compra, mix ausente e potenciais de crescimento.', '↗'],
+  ['Mercado Farma', 'Preços, estoques e distribuidores organizados por UF.', '⌁'],
+  ['SIP / Redes', 'Grupos, redes, acessos e resultados consolidados.', '⬡'],
+  ['Histórico', 'Comparativos mensais e evolução dos principais indicadores.', '◫'],
+  ['Automações', 'Extrações do Bússola e Mercado Farma com status em tempo real.', '⚙'],
+  ['Administração', 'Integrações, metas, produtos e configurações.', '☷'],
+]
+const money = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
+const num = new Intl.NumberFormat('pt-BR')
+const pct = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })
+const initials = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2)
+  .map((item) => item[0]).join('').toUpperCase() || 'N'
+const iso = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+const bounds = (offset: number) => {
+  const now = new Date()
+  return {
+    inicio: iso(new Date(now.getFullYear(), now.getMonth() + offset, 1)),
+    fim: iso(new Date(now.getFullYear(), now.getMonth() + offset + 1, 0)),
+  }
+}
+const current = bounds(0)
+const initial: Dashboard = {
+  ol_total_faturado: 0,
+  ol_sem_combate: 0,
+  ol_combate: 0,
+  ol_prioritarios: 0,
+  ol_lancamentos: 0,
+  meta_ol_sem_combate: 0,
+  meta_ol_prioritarios: 0,
+  meta_ol_lancamentos: 0,
+  resultado_ol_sem_combate: 0,
+  resultado_ol_prioritarios: 0,
+  resultado_ol_lancamentos: 0,
+  projecao: {
+    ativa: false,
+    dias_uteis_decorridos: 0,
+    dias_uteis_total: 0,
+    ol_sem_combate: 0,
+    ol_prioritarios: 0,
+    ol_lancamentos: 0,
+    resultado_ol_sem_combate: 0,
+    resultado_ol_prioritarios: 0,
+    resultado_ol_lancamentos: 0,
+  },
+  clientes_com_venda: 0,
+  clientes_sem_venda: 0,
+  clientes_ativos: 0,
+  pedidos_nao_faturados: 0,
+  valor_nao_faturado: 0,
+  nao_faturados_por_consultor: [],
+  filtros: { consultores: [], ufs: [], aplicado: { rotulo: 'Mês atual' } },
+  atualizado_em: '',
+}
+const updated = (value: string) => {
+  if (!value) return 'Atualização ainda não concluída'
+  const date = new Date(value)
+  return Number.isNaN(date.getTime())
+    ? 'Horário indisponível'
+    : `Atualizado em ${new Intl.DateTimeFormat('pt-BR', {
+      dateStyle: 'short',
+      timeStyle: 'short',
+      timeZone: 'America/Sao_Paulo',
+    }).format(date)}`
+}
+const resultClass = (value: number) => value >= 100
+  ? 'metric-good'
+  : value >= 80 ? 'metric-warning' : 'metric-low'
+
+export default function App({ user, onLogout, onInstall }: Props) {
+  const [page, setPage] = useState<Page>('dashboard')
+  const [dashboard, setDashboard] = useState<Dashboard>(initial)
+  const [state, setState] = useState<'carregando' | 'conectado' | 'erro'>('carregando')
+  const [period, setPeriod] = useState<Period>('mes-atual')
+  const [consultant, setConsultant] = useState('')
+  const [uf, setUf] = useState('')
+  const [start, setStart] = useState(current.inicio)
+  const [end, setEnd] = useState(current.fim)
+  const selected = useMemo(
+    () => period === 'mes-atual'
+      ? bounds(0)
+      : period === 'mes-anterior'
+        ? bounds(-1)
+        : period === 'personalizado'
+          ? { inicio: start, fim: end }
+          : { inicio: '', fim: '' },
+    [period, start, end],
+  )
+
+  useEffect(() => {
+    if (period === 'personalizado' && (!start || !end)) return undefined
+    const controller = new AbortController()
+    setState('carregando')
+    const params = new URLSearchParams({ periodo: period })
+    if (selected.inicio && selected.fim) {
+      params.set('inicio', selected.inicio)
+      params.set('fim', selected.fim)
+    }
+    if (consultant) params.set('consultor', consultant)
+    if (uf) params.set('uf', uf)
+    Promise.all([
+      fetch('/api/health', { cache: 'no-store', signal: controller.signal }),
+      fetch(`/api/dashboard?${params}`, { cache: 'no-store', signal: controller.signal }),
+    ]).then(async ([healthResponse, dashboardResponse]) => {
+      const result = await dashboardResponse.json()
+      if (!healthResponse.ok || !dashboardResponse.ok) {
+        throw new Error(result.detalhe || result.erro || 'API indisponível')
+      }
+      const health = await healthResponse.json()
+      setDashboard(result)
+      setState(health.database === 'ok' ? 'conectado' : 'erro')
+    }).catch((error) => {
+      if (!(error instanceof DOMException && error.name === 'AbortError')) setState('erro')
+    })
+    return () => controller.abort()
+  }, [period, consultant, uf, start, end, selected.inicio, selected.fim])
+
+  const status = state === 'conectado'
+    ? 'Banco conectado'
+    : state === 'erro' ? 'Falha ao conectar ao banco' : 'Atualizando resultados'
+  const consultantName = dashboard.filtros?.consultores
+    ?.find((item: any) => item.id === consultant)?.nome
+  const filter = [
+    dashboard.filtros?.aplicado?.rotulo || status,
+    consultantName,
+    uf ? `UF ${uf}` : '',
+  ].filter(Boolean).join(' · ')
+  const go = (nextPage: Page) => {
+    setPage(nextPage)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+  const open = (title: string) => {
+    if (title === 'Administração') go('administracao')
+    else if (title === 'Consultores') go('consultores')
+    else if (title === 'Visão Geral') go('dashboard')
+  }
+  const cards = [
+    ['OL sem combate', 'ol_sem_combate', 'meta_ol_sem_combate', 'resultado_ol_sem_combate'],
+    ['OL prioritários', 'ol_prioritarios', 'meta_ol_prioritarios', 'resultado_ol_prioritarios'],
+    ['OL lançamentos', 'ol_lancamentos', 'meta_ol_lancamentos', 'resultado_ol_lancamentos'],
+  ]
+
+  return (
+    <div className="app-shell">
+      <header className="topbar">
+        <button className="brand brand-button" onClick={() => go('dashboard')}>
+          <div className="brand-mark">N</div>
+          <div><strong>Painel Comercial</strong><span>Equipe Norte</span></div>
+        </button>
+        <div className="topbar-actions">
+          <button className="topbar-download" onClick={onInstall}>Baixar app</button>
+          <span className="environment-badge">{user.nome}</span>
+          <button className="profile-button" title="Sair" onClick={onLogout}>
+            {initials(user.nome)}
+          </button>
+        </div>
+      </header>
+
+      {page === 'administracao' ? (
+        <IntegrationSettings onBack={() => go('dashboard')} />
+      ) : page === 'consultores' ? (
+        <ConsultantsModule onBack={() => go('dashboard')} />
+      ) : (
+        <main className="content">
+          <section className="hero">
+            <div>
+              <span className="eyebrow">Gestão comercial</span>
+              <h1>Olá, {user.nome.split(' ')[0]}</h1>
+              <p>Acompanhe a operação da Equipe Norte em um único lugar.</p>
+            </div>
+            <div className="hero-actions">
+              <button className="secondary-button" onClick={onInstall}>Baixar app mobile</button>
+              <button className="primary-button" onClick={() => go('administracao')}>
+                Central de automações
+              </button>
+            </div>
+          </section>
+
+          <section className="filters">
+            <label>
+              <span>Período</span>
+              <select value={period} onChange={(event) => setPeriod(event.target.value as Period)}>
+                <option value="mes-atual">Mês atual</option>
+                <option value="mes-anterior">Mês anterior</option>
+                <option value="todo-periodo">Todo o período</option>
+                <option value="personalizado">Personalizado</option>
+              </select>
+            </label>
+            <label>
+              <span>Consultor</span>
+              <select value={consultant} onChange={(event) => setConsultant(event.target.value)}>
+                <option value="">Todos</option>
+                {(dashboard.filtros?.consultores || []).map((item: any) => (
+                  <option key={item.id} value={item.id}>{item.nome}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <span>UF</span>
+              <select value={uf} onChange={(event) => setUf(event.target.value)}>
+                <option value="">Todas</option>
+                {(dashboard.filtros?.ufs || []).map((item: string) => (
+                  <option key={item}>{item}</option>
+                ))}
+              </select>
+            </label>
+            {period === 'personalizado' && (
+              <>
+                <label>
+                  <span>Data inicial</span>
+                  <input type="date" value={start} onChange={(event) => setStart(event.target.value)} />
+                </label>
+                <label>
+                  <span>Data final</span>
+                  <input type="date" value={end} onChange={(event) => setEnd(event.target.value)} />
+                </label>
+              </>
+            )}
+          </section>
+
+          <section className="total-ol-card">
+            <div>
+              <span>OL total faturado</span>
+              <small>{filter} · {updated(dashboard.atualizado_em)}</small>
+            </div>
+            <strong>
+              {state === 'carregando' ? '—' : money.format(dashboard.ol_total_faturado || 0)}
+            </strong>
+            <div className="total-ol-combate">
+              <span>OL combate</span>
+              <b>{state === 'carregando' ? '—' : money.format(dashboard.ol_combate || 0)}</b>
+            </div>
+          </section>
+
+          <PendingOrdersOverview
+            loading={state === 'carregando'}
+            orders={dashboard.pedidos_nao_faturados || 0}
+            value={dashboard.valor_nao_faturado || 0}
+            rows={dashboard.nao_faturados_por_consultor || []}
+            filter={filter}
+          />
+
+          <section className="goal-grid">
+            {cards.map(([label, key, meta, result]) => (
+              <article className="goal-card" key={key}>
+                <div className="goal-card-heading">
+                  <span>{label}</span>
+                  <b className={resultClass(dashboard[result] || 0)}>
+                    {state === 'carregando' ? '—' : `${pct.format(dashboard[result] || 0)}%`}
+                  </b>
+                </div>
+                <strong>
+                  {state === 'carregando' ? '—' : money.format(dashboard[key] || 0)}
+                </strong>
+                <div className="goal-details">
+                  <span>Meta</span>
+                  <b>{money.format(dashboard[meta] || 0)}</b>
+                </div>
+                <div className="goal-details">
+                  <span>Projeção do mês</span>
+                  <b>
+                    {dashboard.projecao?.ativa
+                      ? money.format(dashboard.projecao[key] || 0)
+                      : 'Período concluído'}
+                  </b>
+                </div>
+                <small>
+                  {dashboard.projecao?.ativa
+                    ? `${pct.format(dashboard.projecao[`resultado_${key}`] || 0)}% projetado · ${dashboard.projecao.dias_uteis_decorridos}/${dashboard.projecao.dias_uteis_total} dias úteis`
+                    : filter}
+                </small>
+              </article>
+            ))}
+            <article className="goal-card">
+              <div className="goal-card-heading">
+                <span>Clientes com venda</span>
+                <b>{pct.format(dashboard.clientes_ativos > 0 ? dashboard.clientes_com_venda / dashboard.clientes_ativos * 100 : 0)}%</b>
+              </div>
+              <strong>{num.format(dashboard.clientes_com_venda || 0)}</strong>
+              <div className="goal-details">
+                <span>Sem venda</span>
+                <b>{num.format(dashboard.clientes_sem_venda || 0)}</b>
+              </div>
+              <small>{filter}</small>
+            </article>
+          </section>
+
+          <section className="section-heading">
+            <div>
+              <span className="eyebrow">Acesso rápido</span>
+              <h2>Módulos do painel</h2>
+            </div>
+            <span className="development-note">{status}</span>
+          </section>
+          <section className="modules-grid">
+            {modules.map(([title, description, icon]) => (
+              <button className="module-card" key={title} onClick={() => open(title)}>
+                <div className="module-card-top">
+                  <span className="module-icon">{icon}</span>
+                  <span className="module-status">Ativo</span>
+                </div>
+                <div><h3>{title}</h3><p>{description}</p></div>
+                <span className="module-link">Abrir módulo <b>→</b></span>
+              </button>
+            ))}
+          </section>
+        </main>
+      )}
+      <footer>
+        <span>Painel Comercial · Equipe Norte</span>
+        <span>Versão SaaS em evolução</span>
+      </footer>
+    </div>
+  )
+}

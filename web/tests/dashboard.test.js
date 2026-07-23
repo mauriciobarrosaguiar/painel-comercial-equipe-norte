@@ -19,6 +19,12 @@ test('dashboard separa total, sem combate, combate e não classificados', async 
   assert.equal(body.ol_combate, 40)
   assert.equal(body.clientes_com_venda, 1)
   assert.equal(body.clientes_sem_venda, 1)
+  assert.equal(body.pedidos_nao_faturados, 3)
+  assert.equal(body.valor_nao_faturado, 550)
+  assert.equal(body.nao_faturados_por_consultor.length, 1)
+  assert.equal(body.nao_faturados_por_consultor[0].nome, 'Ana')
+  assert.equal(body.nao_faturados_por_consultor[0].pedidos_nao_faturados, 3)
+  assert.equal(body.nao_faturados_por_consultor[0].valor_nao_faturado, 550)
 })
 
 test('módulo de consultores aplica as mesmas regras do dashboard', async () => {

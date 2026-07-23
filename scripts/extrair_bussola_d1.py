@@ -293,6 +293,9 @@ def sincronizar() -> None:
         executar(
             database_id,
             """
+            DROP TABLE IF EXISTS bussola_pedidos_staging;
+            DROP TABLE IF EXISTS bussola_itens_staging;
+
             CREATE TABLE IF NOT EXISTS bussola_pedidos_staging (
               run_id TEXT NOT NULL,
               id TEXT NOT NULL,
@@ -323,6 +326,8 @@ def sincronizar() -> None:
               quantidade_cancelada REAL NOT NULL DEFAULT 0,
               preco_unitario_sem_imposto REAL NOT NULL DEFAULT 0,
               preco_unitario_com_imposto REAL NOT NULL DEFAULT 0,
+              valor_total_solicitado_sem_imposto REAL NOT NULL DEFAULT 0,
+              total_atendido_sem_imposto REAL NOT NULL DEFAULT 0,
               valor_faturado REAL NOT NULL DEFAULT 0
             );
             CREATE INDEX IF NOT EXISTS idx_bussola_itens_staging_run
@@ -454,6 +459,8 @@ def sincronizar() -> None:
                         numero(item.get("quantidade_cancelada")),
                         numero(item.get("preco_unitario_sem_imposto")),
                         numero(item.get("preco_unitario_com_imposto")),
+                        numero(item.get("valor_total_solicitado_sem_imposto")),
+                        numero(item.get("total_atendido_sem_imposto")),
                         numero(item.get("valor_faturado")),
                     ]
                 )
@@ -479,7 +486,8 @@ def sincronizar() -> None:
                     "run_id", "id", "pedido_id", "produto_id", "ean", "descricao",
                     "quantidade_solicitada", "quantidade_atendida", "quantidade_faturada",
                     "quantidade_cancelada", "preco_unitario_sem_imposto",
-                    "preco_unitario_com_imposto", "valor_faturado",
+                    "preco_unitario_com_imposto", "valor_total_solicitado_sem_imposto",
+                    "total_atendido_sem_imposto", "valor_faturado",
                 ],
                 linhas_itens,
             ),
@@ -511,10 +519,14 @@ def sincronizar() -> None:
                     INSERT INTO itens_pedido
                       (id,pedido_id,produto_id,ean,descricao,quantidade_solicitada,
                        quantidade_atendida,quantidade_faturada,quantidade_cancelada,
-                       preco_unitario_sem_imposto,preco_unitario_com_imposto,valor_faturado)
+                       preco_unitario_sem_imposto,preco_unitario_com_imposto,
+                       valor_total_solicitado_sem_imposto,total_atendido_sem_imposto,
+                       valor_faturado)
                     SELECT id,pedido_id,produto_id,ean,descricao,quantidade_solicitada,
                            quantidade_atendida,quantidade_faturada,quantidade_cancelada,
-                           preco_unitario_sem_imposto,preco_unitario_com_imposto,valor_faturado
+                           preco_unitario_sem_imposto,preco_unitario_com_imposto,
+                           valor_total_solicitado_sem_imposto,total_atendido_sem_imposto,
+                           valor_faturado
                       FROM bussola_itens_staging WHERE run_id=?
                     """,
                     "params": [run_uuid],
