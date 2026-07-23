@@ -80,8 +80,6 @@ function normalizarPedido(item, tipo) {
     cliente: texto(item.cliente),
     cidade: texto(item.cidade),
     uf: texto(item.uf),
-    centro_distribuicao: texto(item.centro_distribuicao),
-    uf_centro_distribuicao: texto(item.uf_centro_distribuicao),
     itens: numero(item.itens),
     quantidade_solicitada: numero(item.quantidade_solicitada),
     quantidade_atendida: numero(item.quantidade_atendida),
@@ -95,7 +93,6 @@ function normalizarPedido(item, tipo) {
 
 const SELECT_BASE = `
   SELECT pe.id,pe.pedido_origem,pe.nota_fiscal,pe.status,pe.data_pedido,pe.data_faturamento,
-         pe.centro_distribuicao,pe.uf_centro_distribuicao,
          cl.cnpj,COALESCE(NULLIF(TRIM(cl.nome_fantasia),''),NULLIF(TRIM(cl.razao_social),''),'Cliente sem nome') cliente,
          cl.cidade,cl.uf,
          COUNT(DISTINCT ip.id) itens,
@@ -111,7 +108,7 @@ const JOINS = `
     JOIN clientes cl ON cl.id=pe.cliente_id`
 const GROUP_ORDER = `
    GROUP BY pe.id,pe.pedido_origem,pe.nota_fiscal,pe.status,pe.data_pedido,pe.data_faturamento,
-            pe.centro_distribuicao,pe.uf_centro_distribuicao,cl.cnpj,cl.nome_fantasia,cl.razao_social,cl.cidade,cl.uf
+            cl.cnpj,cl.nome_fantasia,cl.razao_social,cl.cidade,cl.uf
    ORDER BY DATE(COALESCE(pe.data_faturamento,pe.data_pedido)) DESC,pe.pedido_origem DESC`
 
 export async function onRequestGet({ request, env }) {
