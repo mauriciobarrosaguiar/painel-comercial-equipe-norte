@@ -2,6 +2,12 @@ name: Processar comandos do painel
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/processar-comandos-painel.yml
+      - web/functions/api/automacoes.js
   schedule:
     - cron: "*/5 * * * *"
 
@@ -63,17 +69,20 @@ jobs:
             ano_mes=$(jq -r '.ano_mes // empty' parametros.json)
             ufs=$(jq -r '.ufs // "MA,MT,PA,PI,TO"' parametros.json)
             mensagem=""
+            acompanha_workflow="false"
             set +e
             case "$tipo" in
               BUSSOLA)
-                saida=$(gh workflow run bussola-d1.yml --repo "$GITHUB_REPOSITORY" --ref main 2>&1)
+                saida=$(gh workflow run bussola-d1.yml --repo "$GITHUB_REPOSITORY" --ref main -f command_id="$id" 2>&1)
                 codigo=$?
-                mensagem="Extração manual do Bússola enviada. O agendamento automático de 30 em 30 minutos permanece ativo."
+                mensagem="Extração manual do Bússola enviada ao GitHub Actions."
+                acompanha_workflow="true"
                 ;;
               MERCADO_FARMA)
                 saida=$(gh workflow run mercadofarma.yml --repo "$GITHUB_REPOSITORY" --ref main -f acao=atualizar_mercadofarma_paralelo -f ufs="$ufs" -f command_id="$id" 2>&1)
                 codigo=$?
                 mensagem="Extração do Mercado Farma enviada para as UFs ${ufs}."
+                acompanha_workflow="true"
                 ;;
               MIGRAR_BASES)
                 if [ -n "$ano_mes" ]; then
@@ -108,8 +117,12 @@ jobs:
             set -e
 
             if [ "$codigo" -eq 0 ]; then
-              finalizar "$id" "concluido" "$mensagem" ""
-              echo "$mensagem"
+              if [ "$acompanha_workflow" = "true" ]; then
+                echo "${mensagem} O próprio workflow atualizará o comando ao terminar."
+              else
+                finalizar "$id" "concluido" "$mensagem" ""
+                echo "$mensagem"
+              fi
             else
               erro=$(printf '%s' "$saida" | tail -c 3500)
               finalizar "$id" "erro" "" "$erro"

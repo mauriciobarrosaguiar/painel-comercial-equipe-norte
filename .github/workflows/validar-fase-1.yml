@@ -40,8 +40,22 @@ jobs:
         working-directory: web
         run: npm ci --ignore-scripts
       - name: Verificar dependências conhecidas
+        id: audit_web
         working-directory: web
-        run: npm audit --audit-level=high
+        shell: bash
+        run: |
+          set +e
+          npm audit --audit-level=high --json 2>&1 | tee audit-output.json
+          status=${PIPESTATUS[0]}
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          exit 0
+      - name: Publicar relatório da auditoria npm
+        uses: actions/upload-artifact@v4
+        with:
+          name: relatorio-auditoria-npm-${{ github.run_id }}
+          path: web/audit-output.json
+          if-no-files-found: error
+          retention-days: 7
       - name: Testar APIs e cálculos web
         id: testes_web
         working-directory: web
@@ -82,4 +96,7 @@ jobs:
           retention-days: 7
       - name: Interromper quando a compilação falhar
         if: steps.build_web.outputs.status != '0'
+        run: exit 1
+      - name: Interromper quando a auditoria npm encontrar risco alto
+        if: steps.audit_web.outputs.status != '0'
         run: exit 1

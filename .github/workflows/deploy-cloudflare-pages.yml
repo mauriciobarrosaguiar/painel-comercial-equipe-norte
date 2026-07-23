@@ -125,6 +125,20 @@ jobs:
             echo "Chave administrativa configurada no Cloudflare Pages."
           fi
 
+      - name: Configurar disparo imediato do GitHub Actions
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          PAINEL_GITHUB_ACTIONS_TOKEN: ${{ secrets.PAINEL_GITHUB_ACTIONS_TOKEN || secrets.GITHUB_PAT || secrets.GH_PAT || secrets.PAT_TOKEN }}
+        shell: bash
+        run: |
+          if [ -z "${PAINEL_GITHUB_ACTIONS_TOKEN:-}" ]; then
+            echo "::warning::Adicione o secret PAINEL_GITHUB_ACTIONS_TOKEN com permissão Actions: write para ativar o disparo imediato. A fila de contingência continuará funcionando."
+          else
+            printf '%s' "$PAINEL_GITHUB_ACTIONS_TOKEN" | npx wrangler@4.112.0 pages secret put GITHUB_ACTIONS_TOKEN --project-name painel-equipe-norte
+            echo "Token de disparo imediato configurado no Cloudflare Pages."
+          fi
+
       - name: Publicar versão no ambiente de produção
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
