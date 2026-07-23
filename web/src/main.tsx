@@ -6,6 +6,7 @@ import './focus.css'
 import './focus-history.css'
 import './phase4-responsive.css'
 import './automation-phase4.css'
+import './session-controls.css'
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => undefined))
