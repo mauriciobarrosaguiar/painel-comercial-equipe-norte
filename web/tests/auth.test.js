@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { onRequestPost as login } from '../functions/api/auth/login.js'
 import { onRequestGet as session } from '../functions/api/auth/session.js'
+import { onRequestPost as logout } from '../functions/api/auth/logout.js'
 import { testDatabase } from './d1-fixture.js'
 
 const key = 'chave-administrativa-teste'
@@ -54,4 +55,11 @@ test('sessão assinada libera o painel', async () => {
   })
   assert.equal(response.status, 200)
   assert.equal((await response.json()).usuario.login, 'm0043497')
+})
+
+test('sair encerra a sessão no navegador', async () => {
+  const response = await logout()
+  assert.equal(response.status, 200)
+  assert.match(response.headers.get('set-cookie') || '', /painel_session=/)
+  assert.match(response.headers.get('set-cookie') || '', /Max-Age=0/i)
 })

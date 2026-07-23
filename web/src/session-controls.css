@@ -1,0 +1,47 @@
+.topbar-logout {
+  display: grid;
+  place-items: center;
+  min-height: 36px;
+  padding: 0 12px;
+  color: #8a2b2b;
+  background: #fff;
+  border: 1px solid #e3b7b7;
+  border-radius: 9px;
+  font-size: .72rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.topbar-logout:hover {
+  color: #fff;
+  background: #a53c3c;
+  border-color: #a53c3c;
+}
+
+.topbar-logout:focus-visible {
+  outline: 3px solid #e3b7b780;
+  outline-offset: 2px;
+}
+
+.profile-button {
+  flex: 0 0 auto;
+}
+
+@media (max-width: 520px) {
+  .topbar {
+    padding-inline: 12px;
+  }
+
+  .topbar-actions {
+    gap: 6px;
+  }
+
+  .topbar-install {
+    display: none;
+  }
+
+  .topbar-logout {
+    min-height: 34px;
+    padding-inline: 10px;
+  }
+}

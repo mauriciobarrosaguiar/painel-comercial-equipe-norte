@@ -3,12 +3,19 @@ import IntegrationSettings from './IntegrationSettings'
 import ConsultantsModule from './ConsultantsModule'
 import PendingOrdersOverview from './PendingOrdersOverview'
 import type { SessionUser } from './LoginPage'
+import type { AppPage } from './navigation'
 import './dashboard.css'
 
 type Page = 'dashboard' | 'administracao' | 'consultores'
 type Period = 'mes-atual' | 'mes-anterior' | 'todo-periodo' | 'personalizado'
 type Dashboard = any
-type Props = { user: SessionUser; onLogout: () => void; onInstall: () => void }
+type Props = {
+  user: SessionUser
+  page: Page
+  onNavigate: (page: AppPage) => void
+  onLogout: () => void
+  onInstall: () => void
+}
 
 const modules = [
   ['Visão Geral', 'Indicadores, metas, projeções e desempenho da equipe.', '▦'],
@@ -83,8 +90,7 @@ const resultClass = (value: number) => value >= 100
   ? 'metric-good'
   : value >= 80 ? 'metric-warning' : 'metric-low'
 
-export default function App({ user, onLogout, onInstall }: Props) {
-  const [page, setPage] = useState<Page>('dashboard')
+export default function App({ user, page, onNavigate, onLogout, onInstall }: Props) {
   const [dashboard, setDashboard] = useState<Dashboard>(initial)
   const [state, setState] = useState<'carregando' | 'conectado' | 'erro'>('carregando')
   const [period, setPeriod] = useState<Period>('mes-atual')
@@ -141,14 +147,21 @@ export default function App({ user, onLogout, onInstall }: Props) {
     consultantName,
     uf ? `UF ${uf}` : '',
   ].filter(Boolean).join(' · ')
-  const go = (nextPage: Page) => {
-    setPage(nextPage)
-    window.scrollTo({ top: 0, behavior: 'smooth' })
-  }
   const open = (title: string) => {
-    if (title === 'Administração') go('administracao')
-    else if (title === 'Consultores') go('consultores')
-    else if (title === 'Visão Geral') go('dashboard')
+    const route: Record<string, AppPage> = {
+      'Visão Geral': 'dashboard',
+      Consultores: 'consultores',
+      Clientes: 'clientes',
+      'Foco Semanal': 'foco',
+      Oportunidades: 'oportunidades',
+      'Mercado Farma': 'mercado',
+      'SIP / Redes': 'sips',
+      Histórico: 'historico',
+      Automações: 'automacoes',
+      Administração: 'administracao',
+    }
+    const nextPage = route[title]
+    if (nextPage) onNavigate(nextPage)
   }
   const cards = [
     ['OL sem combate', 'ol_sem_combate', 'meta_ol_sem_combate', 'resultado_ol_sem_combate'],
@@ -159,23 +172,22 @@ export default function App({ user, onLogout, onInstall }: Props) {
   return (
     <div className="app-shell">
       <header className="topbar">
-        <button className="brand brand-button" onClick={() => go('dashboard')}>
+        <button className="brand brand-button" onClick={() => onNavigate('dashboard')}>
           <div className="brand-mark">N</div>
           <div><strong>Painel Comercial</strong><span>Equipe Norte</span></div>
         </button>
         <div className="topbar-actions">
-          <button className="topbar-download" onClick={onInstall}>Baixar app</button>
+          <button className="topbar-download topbar-install" onClick={onInstall}>Baixar app</button>
           <span className="environment-badge">{user.nome}</span>
-          <button className="profile-button" title="Sair" onClick={onLogout}>
-            {initials(user.nome)}
-          </button>
+          <span className="profile-button" aria-hidden="true">{initials(user.nome)}</span>
+          <button className="topbar-logout" type="button" onClick={onLogout}>Sair</button>
         </div>
       </header>
 
       {page === 'administracao' ? (
-        <IntegrationSettings onBack={() => go('dashboard')} />
+        <IntegrationSettings onBack={() => onNavigate('dashboard')} />
       ) : page === 'consultores' ? (
-        <ConsultantsModule onBack={() => go('dashboard')} />
+        <ConsultantsModule onBack={() => onNavigate('dashboard')} />
       ) : (
         <main className="content">
           <section className="hero">
@@ -186,7 +198,7 @@ export default function App({ user, onLogout, onInstall }: Props) {
             </div>
             <div className="hero-actions">
               <button className="secondary-button" onClick={onInstall}>Baixar app mobile</button>
-              <button className="primary-button" onClick={() => go('administracao')}>
+              <button className="primary-button" onClick={() => onNavigate('administracao')}>
                 Central de automações
               </button>
             </div>

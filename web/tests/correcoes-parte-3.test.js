@@ -70,3 +70,18 @@ test('conflitos da auditoria são clicáveis e possuem motivo', () => {
   assert.match(details, /ean/)
   assert.match(details, /produto/)
 })
+
+test('navegação persiste a página na URL e oferece saída visível', () => {
+  const shell = read('src/AppShell.tsx')
+  const app = read('src/App.tsx')
+  const navigation = read('src/navigation.ts')
+  const styles = read('src/session-controls.css')
+  assert.match(navigation, /searchParams\.set\('pagina'/)
+  assert.match(navigation, /history\[method\]/)
+  assert.match(shell, /addEventListener\('popstate'/)
+  assert.match(shell, /savePageInHistory\('dashboard', true\)/)
+  assert.match(app, /onNavigate\(nextPage\)/)
+  assert.match(app, />Sair<\/button>/)
+  assert.match(shell, />Sair<\/button>/)
+  assert.match(styles, /\.topbar-logout/)
+})
