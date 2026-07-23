@@ -193,7 +193,8 @@ export async function onRequestDelete({ request, env }) {
     const pedido = await env.DB.prepare(`
       SELECT pe.id,pe.pedido_origem,pe.status
         FROM pedidos pe
-       WHERE pe.id=? AND pe.consultor_id=? AND ${PEDIDO_NAO_FATURADO}
+        JOIN clientes cl ON cl.id=pe.cliente_id
+       WHERE pe.id=? AND cl.consultor_id=? AND ${PEDIDO_NAO_FATURADO}
     `).bind(pedidoId, consultor).first()
     if (!pedido) return json({ erro: 'Pedido não encontrado ou não pode ser excluído.' }, 404)
 
@@ -203,8 +204,8 @@ export async function onRequestDelete({ request, env }) {
       env.DB.prepare(`
         UPDATE pedidos
            SET ativo=0,excluido_manual=1,atualizado_em=?
-         WHERE id=? AND consultor_id=?
-      `).bind(agora, pedidoId, consultor),
+         WHERE id=?
+      `).bind(agora, pedidoId),
     ])
 
     return json({
