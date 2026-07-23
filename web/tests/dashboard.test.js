@@ -3,6 +3,7 @@ import test from 'node:test'
 
 import { onRequestGet as dashboard } from '../functions/api/dashboard.js'
 import { onRequestGet as consultores } from '../functions/api/consultores.js'
+import { onRequestGet as consultorPedidos } from '../functions/api/consultor-pedidos.js'
 import { testDatabase } from './d1-fixture.js'
 
 test('dashboard separa total, sem combate, combate e não classificados', async () => {
@@ -41,4 +42,29 @@ test('módulo de consultores aplica as mesmas regras do dashboard', async () => 
   assert.equal(body.consultores[0].ol_combate, 40)
   assert.equal(body.consultores[0].clientes_com_venda, 1)
   assert.equal(body.consultores[0].clientes_sem_venda, 1)
+  assert.equal(body.consultores[0].pedidos_faturados, 1)
+  assert.equal(body.consultores[0].pedidos_nao_faturados, 3)
+  assert.equal(body.consultores[0].valor_nao_faturado, 550)
+  assert.equal(body.totais.pedidos_nao_faturados, 3)
+  assert.equal(body.totais.valor_nao_faturado, 550)
+})
+
+test('detalhe do consultor separa pedidos faturados e ainda não faturados', async () => {
+  const response = await consultorPedidos({
+    request: new Request('https://painel.local/api/consultor-pedidos?periodo=todo-periodo&consultor=co1'),
+    env: { DB: testDatabase() },
+  })
+  assert.equal(response.status, 200)
+  const body = await response.json()
+
+  assert.equal(body.consultor.nome, 'Ana')
+  assert.equal(body.resumo.pedidos_faturados, 1)
+  assert.equal(body.resumo.valor_faturado, 200)
+  assert.equal(body.resumo.pedidos_nao_faturados, 3)
+  assert.equal(body.resumo.valor_nao_faturado, 550)
+  assert.equal(body.faturados.length, 1)
+  assert.equal(body.nao_faturados.length, 3)
+  assert.equal(body.nao_faturados.find((item) => item.pedido === 'P4').valor_considerado, 200)
+  assert.equal(body.nao_faturados.find((item) => item.pedido === 'P5').valor_considerado, 300)
+  assert.equal(body.nao_faturados.find((item) => item.pedido === 'P6').valor_considerado, 50)
 })
