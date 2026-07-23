@@ -57,12 +57,16 @@
 .consultant-orders-group-heading span{display:grid;place-items:center;min-width:28px;height:28px;padding:0 8px;color:#0c6548;background:#e8f7f1;border-radius:999px;font-size:.75rem;font-weight:800}
 .consultant-order-list{display:grid;gap:9px;max-height:430px;overflow:auto;padding-right:3px}
 .consultant-order-row{display:grid;grid-template-columns:minmax(130px,.85fr) minmax(170px,1.35fr) minmax(95px,.7fr) minmax(105px,.7fr);gap:10px;align-items:center;padding:11px;background:#fbfcfd;border:1px solid #e0e7ec;border-radius:10px}
+.consultant-order-row.has-actions{grid-template-columns:minmax(120px,.85fr) minmax(155px,1.25fr) minmax(90px,.65fr) minmax(100px,.7fr) auto}
 .consultant-order-row>div{min-width:0}
 .consultant-order-row span,.consultant-order-row small{display:block;color:var(--muted);font-size:.67rem;line-height:1.35}
 .consultant-order-row b,.consultant-order-row strong{display:block;margin:3px 0;color:#203047;font-size:.78rem;overflow-wrap:anywhere}
 .consultant-order-main span{color:#7a5a16;font-weight:700}
 .consultant-order-value{text-align:right}
 .consultant-order-value b{font-size:.85rem}
+.consultant-order-delete{min-height:34px;padding:0 11px;color:#a12e2e;background:#fff;border:1px solid #e3b4b4;border-radius:9px;font-size:.72rem;font-weight:800;cursor:pointer;white-space:nowrap}
+.consultant-order-delete:hover:not(:disabled){color:#fff;background:#b43b3b;border-color:#b43b3b}
+.consultant-order-delete:disabled{opacity:.55;cursor:not-allowed}
 .consultant-orders-empty{margin:0;padding:22px 8px;text-align:center;color:var(--muted);font-size:.8rem}
 .consultant-order-rule{display:block;margin-top:14px;color:var(--muted);font-size:.7rem;line-height:1.45}
 .ranking-empty{padding:34px;text-align:center;color:var(--muted)}
@@ -90,11 +94,13 @@
   .consultant-order-details-heading{align-items:flex-start;flex-direction:column}
   .consultant-download-button{width:100%}
   .consultant-order-summary{grid-template-columns:1fr}
-  .consultant-order-row{grid-template-columns:1fr 1fr}
+  .consultant-order-row,.consultant-order-row.has-actions{grid-template-columns:1fr 1fr}
   .consultant-order-main{grid-column:1/-1}
+  .consultant-order-delete{min-height:38px}
 }
 @media(max-width:460px){
-  .consultant-order-row{grid-template-columns:1fr}
+  .consultant-order-row,.consultant-order-row.has-actions{grid-template-columns:1fr}
   .consultant-order-main{grid-column:auto}
   .consultant-order-value{text-align:left}
+  .consultant-order-delete{width:100%}
 }

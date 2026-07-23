@@ -178,3 +178,39 @@ export async function onRequestGet({ request, env }) {
     return json({ erro: 'Não foi possível carregar os pedidos do consultor.', detalhe }, status)
   }
 }
+
+export async function onRequestDelete({ request, env }) {
+  try {
+    const params = new URL(request.url).searchParams
+    const consultor = texto(params.get('consultor')).slice(0, 180)
+    const pedidoId = texto(params.get('pedido')).slice(0, 180)
+    if (!consultor || !pedidoId) return json({ erro: 'Informe o consultor e o pedido.' }, 400)
+
+    const pedido = await env.DB.prepare(`
+      SELECT pe.id,pe.pedido_origem,pe.status
+        FROM pedidos pe
+        JOIN clientes cl ON cl.id=pe.cliente_id
+       WHERE pe.id=? AND cl.consultor_id=? AND ${PEDIDO_NAO_FATURADO}
+    `).bind(pedidoId, consultor).first()
+    if (!pedido) return json({ erro: 'Pedido não encontrado ou não pode ser excluído.' }, 404)
+
+    const agora = new Date().toISOString()
+    await env.DB.batch([
+      env.DB.prepare('UPDATE itens_pedido SET ativo=0 WHERE pedido_id=?').bind(pedidoId),
+      env.DB.prepare(`
+        UPDATE pedidos
+           SET ativo=0,excluido_manual=1,atualizado_em=?
+         WHERE id=?
+      `).bind(agora, pedidoId),
+    ])
+
+    return json({
+      sucesso: true,
+      mensagem: `Pedido ${texto(pedido.pedido_origem) || pedidoId} excluído.`,
+      pedido: pedidoId,
+    })
+  } catch (error) {
+    const detalhe = error instanceof Error ? error.message : String(error)
+    return json({ erro: 'Não foi possível excluir o pedido.', detalhe }, 500)
+  }
+}
