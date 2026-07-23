@@ -46,18 +46,27 @@ test('Mercado Farma usa buybox suspenso e Excel xlsx real por UF', () => {
 test('ranking usa código do setor em vez da UF do consultor', () => {
   const view = read('src/ConsultantsModule.tsx')
   const api = read('functions/api/consultores.js')
-  assert.match(view, /Setor \{x\.setor/)
-  assert.doesNotMatch(view, /x\.uf\|\|/)
+  assert.match(view, /Setor \{consultant\.setor/)
+  assert.doesNotMatch(view, /consultant\.uf\|\|/)
   for (const setor of ['18150300','18150301','18150302','18150303','18150304','18150305']) assert.match(api, new RegExp(setor))
 })
 
-test('página principal mostra não faturados por consultor', () => {
+test('pedidos ficam dentro do card expansível de cada consultor', () => {
   const app = read('src/App.tsx')
-  const view = read('src/PendingOrdersOverview.tsx')
+  const legacy = read('src/PendingOrdersOverview.tsx')
+  const view = read('src/ConsultantsModule.tsx')
+  const api = read('functions/api/consultor-pedidos.js')
+  assert.match(legacy, /return null/)
   assert.match(app, /PendingOrdersOverview/)
+  assert.match(view, /aria-expanded=\{isExpanded\}/)
+  assert.match(view, /Atendido e ainda não faturado/)
+  assert.match(view, /Pedidos faturados/)
   assert.match(view, /Pedidos ainda não faturados/)
-  assert.match(view, /pedidos_nao_faturados/)
-  assert.match(view, /valor_nao_faturado/)
+  assert.match(view, /Baixar detalhes/)
+  assert.match(view, /\/api\/consultor-pedidos/)
+  assert.match(view, /text\/csv/)
+  assert.match(api, /valor_considerado/)
+  assert.match(api, /PEDIDO_NAO_FATURADO/)
 })
 
 test('conflitos da auditoria são clicáveis e possuem motivo', () => {
