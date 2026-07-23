@@ -36,9 +36,18 @@ jobs:
           node-version: "24"
           cache: npm
           cache-dependency-path: web/package-lock.json
-      - name: Instalar dependências web reproduzíveis
+      - name: Atualizar lock seguro e instalar dependências web
         working-directory: web
-        run: npm ci --ignore-scripts
+        run: |
+          npm update wrangler --package-lock-only --ignore-scripts
+          npm ci --ignore-scripts
+      - name: Publicar lock corrigido
+        uses: actions/upload-artifact@v4
+        with:
+          name: package-lock-corrigido-${{ github.run_id }}
+          path: web/package-lock.json
+          if-no-files-found: error
+          retention-days: 7
       - name: Verificar dependências conhecidas
         id: audit_web
         working-directory: web
