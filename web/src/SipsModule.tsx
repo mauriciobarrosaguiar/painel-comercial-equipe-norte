@@ -4,23 +4,27 @@ import SipSummaryReport, { SipSummaryData } from './SipSummaryReport'
 import './sips.css'
 import './sip-phase4.css'
 
- type Sip = {
+type Sip = {
   id: string
   nome: string
   redes: number
   nomes_redes: string
   clientes_ativos: number
+  cnpjs_vinculados: number
   clientes_com_venda: number
   ol_total: number
   ol_sem_combate: number
   meta_mes: number
   resultado_meta: number
+  gap_80: number
+  gap_90: number
+  gap_100: number
 }
 
 type List = {
   periodo: { inicio: string; fim: string; rotulo: string }
   sips: Sip[]
-  resumos_sip: SipSummaryData[]
+  resumo_sip: SipSummaryData
   totais: {
     sips: number
     redes: number
@@ -126,16 +130,21 @@ export default function SipsModule({ onBack, publicId }: { onBack: () => void; p
   }
 
   const updateSummary = (updated: SipSummaryData) => {
+    const rowById = new Map(updated.linhas.map((row) => [row.id, row]))
     setData((current) => current ? {
       ...current,
-      sips: current.sips.map((sip) => sip.id === updated.sip.id ? {
-        ...sip,
-        meta_mes: updated.resumo_sip.objetivo,
-        resultado_meta: updated.resumo_sip.cobertura,
-      } : sip),
-      resumos_sip: current.resumos_sip.map((summary) => (
-        summary.sip.id === updated.sip.id ? updated : summary
-      )),
+      sips: current.sips.map((sip) => {
+        const row = rowById.get(sip.id)
+        return row ? {
+          ...sip,
+          meta_mes: row.objetivo,
+          resultado_meta: row.cobertura,
+          gap_80: row.gap_80,
+          gap_90: row.gap_90,
+          gap_100: row.gap_100,
+        } : sip
+      }),
+      resumo_sip: updated,
     } : current)
   }
 
@@ -162,6 +171,7 @@ export default function SipsModule({ onBack, publicId }: { onBack: () => void; p
   return (
     <main className="content sips-page">
       <button className="back-button" onClick={onBack}>← Voltar ao painel</button>
+
       <section className="sips-hero">
         <div>
           <span className="eyebrow">Redes comerciais</span>
@@ -205,7 +215,7 @@ export default function SipsModule({ onBack, publicId }: { onBack: () => void; p
         {data?.sips.map((sip) => (
           <button className="sip-card sip-card-button" key={sip.id} onClick={() => void loadDetail(sip.id)}>
             <div><h3>{sip.nome}</h3><p>{sip.redes} redes · {sip.nomes_redes || 'Sem rede informada'}</p></div>
-            <div><span>Clientes</span><strong>{sip.clientes_com_venda}/{sip.clientes_ativos}</strong></div>
+            <div><span>Clientes</span><strong>{sip.clientes_com_venda}/{sip.cnpjs_vinculados || sip.clientes_ativos}</strong></div>
             <div><span>OL total</span><strong>{money.format(sip.ol_total)}</strong></div>
             <div><span>Sem combate</span><strong>{money.format(sip.ol_sem_combate)}</strong></div>
             <div><span>Meta</span><strong>{money.format(sip.meta_mes)}</strong><small>{pct.format(sip.resultado_meta)}%</small></div>
@@ -218,18 +228,14 @@ export default function SipsModule({ onBack, publicId }: { onBack: () => void; p
         <div className="sip-all-summaries-heading">
           <div>
             <span className="eyebrow">Objetivo preço líquido</span>
-            <h2>Resumo de todas as SIPs</h2>
-            <p>As SIPs aparecem uma abaixo da outra no mesmo formato da planilha.</p>
+            <h2>Resultado consolidado por SIP</h2>
+            <p>Cada linha soma todos os CNPJs vinculados ao respectivo grupo.</p>
           </div>
-          <span>{data?.resumos_sip.length || 0} SIPs</span>
+          <span>{data?.sips.length || 0} SIPs</span>
         </div>
-        {loading && !data && <div className="sips-empty">Carregando resumos…</div>}
-        {data?.resumos_sip.map((summary) => (
-          <SipSummaryReport key={summary.sip.id} data={summary} onUpdated={updateSummary} />
-        ))}
-        {!loading && data && !data.resumos_sip.length && (
-          <div className="sips-empty">Nenhuma SIP cadastrada para exibir.</div>
-        )}
+
+        {loading && !data && <div className="sips-empty">Carregando resumo…</div>}
+        {data?.resumo_sip && <SipSummaryReport data={data.resumo_sip} onUpdated={updateSummary} />}
       </section>
 
       {selected && (
