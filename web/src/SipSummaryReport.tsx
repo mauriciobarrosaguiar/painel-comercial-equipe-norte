@@ -98,6 +98,10 @@ export default function SipSummaryReport({
   )), [rows, drafts, editing])
 
   const total = useMemo(() => calculateTotal(displayedRows), [displayedRows])
+  const excelQuery = new URLSearchParams()
+  if (data.periodo.inicio) excelQuery.set('inicio', data.periodo.inicio)
+  if (data.periodo.fim) excelQuery.set('fim', data.periodo.fim)
+  const excelLink = `/api/sips/resumo-geral-xlsx${excelQuery.size ? `?${excelQuery.toString()}` : ''}`
 
   const beginEditing = () => {
     setDrafts(Object.fromEntries(rows.map((row) => [row.id, Number(row.objetivo || 0)])))
@@ -170,7 +174,7 @@ export default function SipSummaryReport({
               </button>
             </>
           )}
-          <a className="secondary-button sip-goal-download" href={data.link_resumo_excel}>Baixar Excel</a>
+          <a className="secondary-button sip-goal-download" href={excelLink}>Baixar Excel</a>
           <a className="secondary-button sip-goal-download" href={data.link_resumo_pdf}>Baixar PDF</a>
         </div>
       </div>
