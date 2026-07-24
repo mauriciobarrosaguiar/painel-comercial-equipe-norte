@@ -1,6 +1,7 @@
 import {
   ITEM_FATURADO,
   ITEM_ATIVO,
+  MIX_SEM_COMBATE,
   PEDIDO_NAO_FATURADO,
   VALOR_ITEM_NAO_FATURADO,
 } from '../_lib/commercial.js'
@@ -15,6 +16,9 @@ const iso = (y, m, d) => `${String(y).padStart(4, '0')}-${String(m).padStart(2, 
 const mostrar = (value) => value ? `${value.slice(8, 10)}/${value.slice(5, 7)}/${value.slice(0, 4)}` : ''
 const numero = (value) => Number.isFinite(Number(value)) ? Number(value) : 0
 const texto = (value) => String(value ?? '').trim()
+const MIX_PRIORITARIO = "UPPER(TRIM(COALESCE(pr.tipo_mix,'')))='PRIORITARIO'"
+const MIX_LANCAMENTO = "UPPER(TRIM(COALESCE(pr.tipo_mix,'')))='LANCAMENTO'"
+const MIX_COMBATE = "UPPER(TRIM(COALESCE(pr.tipo_mix,'')))='COMBATE'"
 
 function periodo(params) {
   const tipo = PERIODOS.has(params.get('periodo')) ? params.get('periodo') : 'mes-atual'
@@ -80,6 +84,8 @@ function normalizarPedido(item, tipo) {
     cliente: texto(item.cliente),
     cidade: texto(item.cidade),
     uf: texto(item.uf),
+    centro_distribuicao: texto(item.centro_distribuicao),
+    uf_centro_distribuicao: texto(item.uf_centro_distribuicao),
     itens: numero(item.itens),
     quantidade_solicitada: numero(item.quantidade_solicitada),
     quantidade_atendida: numero(item.quantidade_atendida),
@@ -88,6 +94,10 @@ function normalizarPedido(item, tipo) {
     valor_atendido_sem_imposto: numero(item.valor_atendido_sem_imposto),
     valor_faturado: numero(item.valor_faturado),
     valor_considerado: numero(item.valor_considerado),
+    valor_sem_combate: numero(item.valor_sem_combate),
+    valor_prioritarios: numero(item.valor_prioritarios),
+    valor_lancamentos: numero(item.valor_lancamentos),
+    valor_combate: numero(item.valor_combate),
   }
 }
 
@@ -105,7 +115,8 @@ const SELECT_BASE = `
 const JOINS = `
     FROM itens_pedido ip
     JOIN pedidos pe ON pe.id=ip.pedido_id
-    JOIN clientes cl ON cl.id=pe.cliente_id`
+    JOIN clientes cl ON cl.id=pe.cliente_id
+    LEFT JOIN produtos pr ON pr.id=ip.produto_id`
 const GROUP_ORDER = `
    GROUP BY pe.id,pe.pedido_origem,pe.nota_fiscal,pe.status,pe.data_pedido,pe.data_faturamento,
             cl.cnpj,cl.nome_fantasia,cl.razao_social,cl.cidade,cl.uf
@@ -127,12 +138,17 @@ export async function onRequestGet({ request, env }) {
        GROUP BY c.id,c.nome
     `).bind(consultor)
     const faturadosStmt = env.DB.prepare(`${SELECT_BASE},
-         COALESCE(SUM(ip.valor_faturado),0) valor_considerado
+         COALESCE(SUM(ip.valor_faturado),0) valor_considerado,
+         0 valor_sem_combate,0 valor_prioritarios,0 valor_lancamentos,0 valor_combate
          ${JOINS}
         WHERE ${faturado.where}
         ${GROUP_ORDER}`).bind(...faturado.valores)
     const pendentesStmt = env.DB.prepare(`${SELECT_BASE},
-         COALESCE(SUM(${VALOR_ITEM_NAO_FATURADO}),0) valor_considerado
+         COALESCE(SUM(${VALOR_ITEM_NAO_FATURADO}),0) valor_considerado,
+         COALESCE(SUM(CASE WHEN ${MIX_SEM_COMBATE} THEN ${VALOR_ITEM_NAO_FATURADO} ELSE 0 END),0) valor_sem_combate,
+         COALESCE(SUM(CASE WHEN ${MIX_PRIORITARIO} THEN ${VALOR_ITEM_NAO_FATURADO} ELSE 0 END),0) valor_prioritarios,
+         COALESCE(SUM(CASE WHEN ${MIX_LANCAMENTO} THEN ${VALOR_ITEM_NAO_FATURADO} ELSE 0 END),0) valor_lancamentos,
+         COALESCE(SUM(CASE WHEN ${MIX_COMBATE} THEN ${VALOR_ITEM_NAO_FATURADO} ELSE 0 END),0) valor_combate
          ${JOINS}
         WHERE ${pendente.where}
         ${GROUP_ORDER}`).bind(...pendente.valores)
@@ -167,10 +183,14 @@ export async function onRequestGet({ request, env }) {
         valor_faturado: somar(faturados, 'valor_faturado'),
         pedidos_nao_faturados: naoFaturados.length,
         valor_nao_faturado: somar(naoFaturados, 'valor_considerado'),
+        valor_nao_faturado_sem_combate: somar(naoFaturados, 'valor_sem_combate'),
+        valor_nao_faturado_prioritarios: somar(naoFaturados, 'valor_prioritarios'),
+        valor_nao_faturado_lancamentos: somar(naoFaturados, 'valor_lancamentos'),
+        valor_nao_faturado_combate: somar(naoFaturados, 'valor_combate'),
       },
       faturados,
       nao_faturados: naoFaturados,
-      regra: 'Faturados usam valor_faturado. Atendido e Atendido parcial usam total_atendido_sem_imposto. Enviado usa valor_total_solicitado_sem_imposto.',
+      regra: 'Atendido e Atendido parcial usam o total atendido sem imposto. Enviado usa o valor solicitado sem imposto. Prioritários e lançamentos já fazem parte do OL sem combate.',
     })
   } catch (error) {
     const detalhe = error instanceof Error ? error.message : String(error)
