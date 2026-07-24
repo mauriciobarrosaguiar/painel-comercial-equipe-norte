@@ -14,12 +14,49 @@ async function requireAdmin(request, env) {
   return null
 }
 
+async function updateSipGoals(body, env) {
+  const entries = Array.isArray(body?.metas_sip) ? body.metas_sip : []
+  if (!entries.length) return null
+  if (entries.length > 1000) return json({ erro: 'Quantidade de SIPs acima do limite.' }, 400)
+
+  const normalized = new Map()
+  for (const item of entries) {
+    const sipId = texto(item?.sip_id).slice(0, 180)
+    const objective = Math.round(Math.max(0, numero(item?.objetivo)) * 100) / 100
+    if (sipId) normalized.set(sipId, objective)
+  }
+  if (!normalized.size) return json({ erro: 'Nenhuma SIP válida foi informada.' }, 400)
+
+  const active = await env.DB.prepare(
+    `SELECT id FROM sips WHERE ativo=1 AND id IN (${[...normalized].map(() => '?').join(',')})`,
+  ).bind(...normalized.keys()).all()
+  const allowed = new Set((active.results || []).map((item) => texto(item.id)))
+  const updates = [...normalized.entries()].filter(([sipId]) => allowed.has(sipId))
+  if (!updates.length) return json({ erro: 'Nenhuma SIP ativa foi encontrada.' }, 404)
+
+  const now = new Date().toISOString()
+  await env.DB.batch(updates.map(([sipId, objective]) => env.DB.prepare(
+    'UPDATE sips SET meta_mes=?,atualizado_em=? WHERE id=? AND ativo=1',
+  ).bind(objective, now, sipId)))
+
+  return json({
+    sucesso: true,
+    mensagem: 'Objetivos totais das SIPs atualizados.',
+    metas_atualizadas: updates.length,
+    objetivo_total: updates.reduce((total, [, objective]) => total + objective, 0),
+    atualizado_em: now,
+  })
+}
+
 export async function onRequestPost({ request, env }) {
   const denial = await requireAdmin(request, env)
   if (denial) return denial
 
   try {
     const body = await request.json()
+    const sipGoalsResponse = await updateSipGoals(body, env)
+    if (sipGoalsResponse) return sipGoalsResponse
+
     const sipId = texto(body?.sip_id).slice(0, 180)
     const entries = Array.isArray(body?.objetivos) ? body.objetivos : []
     if (!sipId) return json({ erro: 'Informe a SIP.' }, 400)
@@ -51,6 +88,7 @@ export async function onRequestPost({ request, env }) {
        WHERE sip_id=? AND cnpj=? AND ativo=1
     `).bind(objective, now, sipId, document))
     await env.DB.batch(statements)
+
     const totalRow = await env.DB.prepare(`
       SELECT COALESCE(SUM(objetivo_preco_liquido),0) objetivo_total
         FROM sip_clientes
