@@ -59,7 +59,7 @@
 }
 
 .sip-goal-report-heading > div:first-child {
-  min-width: 260px;
+  min-width: 300px;
   text-align: left;
 }
 
@@ -124,6 +124,10 @@
   font-variant-numeric: tabular-nums;
 }
 
+.sip-consolidated-table {
+  min-width: 1160px;
+}
+
 .sip-goal-table th,
 .sip-goal-table td {
   padding: 11px 12px;
@@ -141,7 +145,7 @@
 }
 
 .sip-goal-table thead th:first-child {
-  min-width: 320px;
+  min-width: 300px;
 }
 
 .sip-goal-table tbody tr:nth-child(even):not(.sip-goal-total) {
@@ -159,7 +163,7 @@
 
 .sip-goal-client strong {
   color: #315a7d;
-  font-size: .78rem;
+  font-size: .82rem;
 }
 
 .sip-goal-client small {
@@ -171,6 +175,11 @@
 .sip-goal-table td {
   color: #17202b;
   font-size: .76rem;
+}
+
+.sip-goal-count {
+  text-align: center !important;
+  font-weight: 850;
 }
 
 .sip-goal-table input {
