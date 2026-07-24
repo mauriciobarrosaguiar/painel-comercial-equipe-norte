@@ -58,6 +58,19 @@ function faixa(params) {
   }
 }
 
+function comGaps(item) {
+  const objetivo = numero(item.objetivo)
+  const realizado = numero(item.ol_sem_combate)
+  return {
+    ...item,
+    objetivo,
+    cobertura: objetivo > 0 ? realizado / objetivo * 100 : 0,
+    gap_80: realizado - objetivo * 0.8,
+    gap_90: realizado - objetivo * 0.9,
+    gap_100: realizado - objetivo,
+  }
+}
+
 export async function onRequestGet({ request, env }) {
   try {
     const params = new URL(request.url).searchParams
@@ -118,6 +131,7 @@ export async function onRequestGet({ request, env }) {
       SELECT cl.id,cl.cnpj,
              COALESCE(cl.nome_fantasia,cl.razao_social,cl.cnpj) nome,
              cl.cidade,cl.uf,co.nome consultor,cl.nome_gd gd,
+             COALESCE(sc.objetivo_preco_liquido,0) objetivo,
              COALESCE(v.pedidos,0) pedidos,
              COALESCE(v.ol_total,0) ol_total,
              COALESCE(v.ol_sem_combate,0) ol_sem_combate,
@@ -180,8 +194,9 @@ export async function onRequestGet({ request, env }) {
       env.DB.prepare(consultoresPendentesSql).bind(id, inicio, fim),
     ])
 
-    const clientes = (clientesResult.results || []).map((item) => ({
+    let clientes = (clientesResult.results || []).map((item) => ({
       ...item,
+      objetivo: numero(item.objetivo),
       pedidos: numero(item.pedidos),
       ol_total: numero(item.ol_total),
       ol_sem_combate: numero(item.ol_sem_combate),
@@ -192,6 +207,14 @@ export async function onRequestGet({ request, env }) {
       notas_a_faturar: numero(item.notas_a_faturar),
       valor_a_faturar: numero(item.valor_a_faturar),
     }))
+    const metaCadastrada = numero(sip.meta_mes)
+    const objetivosCadastrados = clientes.reduce((total, item) => total + item.objetivo, 0)
+    if (clientes.length && objetivosCadastrados <= 0 && metaCadastrada > 0) {
+      const objetivoPadrao = metaCadastrada / clientes.length
+      clientes = clientes.map((item) => ({ ...item, objetivo: objetivoPadrao }))
+    }
+    clientes = clientes.map(comGaps)
+
     const produtos = (produtosResult.results || []).map((item) => ({
       ...item,
       quantidade: numero(item.quantidade),
@@ -217,6 +240,7 @@ export async function onRequestGet({ request, env }) {
       notas_canceladas: acumulado.notas_canceladas + item.notas_canceladas,
       notas_a_faturar: acumulado.notas_a_faturar + item.notas_a_faturar,
       valor_a_faturar: acumulado.valor_a_faturar + item.valor_a_faturar,
+      objetivo: acumulado.objetivo + item.objetivo,
     }), {
       clientes_ativos: 0,
       clientes_com_venda: 0,
@@ -229,10 +253,13 @@ export async function onRequestGet({ request, env }) {
       notas_canceladas: 0,
       notas_a_faturar: 0,
       valor_a_faturar: 0,
+      objetivo: 0,
     })
-    const meta = numero(sip.meta_mes)
+    const meta = totais.objetivo > 0 ? totais.objetivo : metaCadastrada
     const projetado = projetar(totais.ol_sem_combate, inicio, fim)
     const origin = new URL(request.url).origin
+    const modoPublico = publico ? '1' : '0'
+    const parametrosResumo = `id=${encodeURIComponent(id)}&inicio=${inicio}&fim=${fim}&publico=${modoPublico}`
 
     return json({
       sip: {
@@ -248,11 +275,21 @@ export async function onRequestGet({ request, env }) {
         projecao_ol_sem_combate: projetado,
         projecao_meta: meta > 0 ? projetado / meta * 100 : 0,
       },
+      resumo_sip: {
+        objetivo: meta,
+        realizado: totais.ol_sem_combate,
+        cobertura: meta > 0 ? totais.ol_sem_combate / meta * 100 : 0,
+        gap_80: totais.ol_sem_combate - meta * 0.8,
+        gap_90: totais.ol_sem_combate - meta * 0.9,
+        gap_100: totais.ol_sem_combate - meta,
+      },
       clientes,
       produtos,
       pendentes_por_consultor: pendentesPorConsultor,
       link_publico: `${origin}/?sip=${encodeURIComponent(id)}`,
-      link_exportacao: `${origin}/api/exportar?tipo=sip_detalhado&formato=csv&publico=1&sip_id=${encodeURIComponent(id)}&inicio=${inicio}&fim=${fim}`,
+      link_exportacao: `${origin}/api/exportar?tipo=sip_detalhado&formato=csv&publico=${modoPublico}&sip_id=${encodeURIComponent(id)}&inicio=${inicio}&fim=${fim}`,
+      link_resumo_excel: `${origin}/api/sips/resumo-exportar?${parametrosResumo}&formato=xls`,
+      link_resumo_pdf: `${origin}/api/sips/resumo-exportar?${parametrosResumo}&formato=pdf`,
     })
   } catch (error) {
     return json({

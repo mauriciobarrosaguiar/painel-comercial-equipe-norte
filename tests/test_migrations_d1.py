@@ -35,6 +35,7 @@ def test_migrations_criam_controle_de_versao_da_bussola() -> None:
 
     pedidos = {row[1] for row in connection.execute("PRAGMA table_info(pedidos)")}
     itens = {row[1] for row in connection.execute("PRAGMA table_info(itens_pedido)")}
+    sip_clientes = {row[1] for row in connection.execute("PRAGMA table_info(sip_clientes)")}
     indices = {row[1] for row in connection.execute("PRAGMA index_list(pedidos)")}
 
     assert {"ativo", "ultima_extracao_id"} <= pedidos
@@ -44,6 +45,7 @@ def test_migrations_criam_controle_de_versao_da_bussola() -> None:
         "valor_total_solicitado_sem_imposto",
         "total_atendido_sem_imposto",
     } <= itens
+    assert "objetivo_preco_liquido" in sip_clientes
     assert "idx_pedidos_data_faturamento" in indices
     tabelas = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")}
     assert {"auditorias_calculos", "metas_historico", "sips", "redes", "sip_clientes", "sip_recados"} <= tabelas
