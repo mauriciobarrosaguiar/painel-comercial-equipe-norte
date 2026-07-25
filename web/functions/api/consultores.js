@@ -22,6 +22,9 @@ const mostrar = (value) => value ? `${value.slice(8, 10)}/${value.slice(5, 7)}/$
 const numero = (value) => Number.isFinite(Number(value)) ? Number(value) : 0
 const percentual = (value, base) => numero(base) > 0 ? (numero(value) / numero(base)) * 100 : 0
 const normalizarNome = (value) => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/[^A-Z0-9]+/g, ' ').trim()
+const MIX_PRIORITARIO = "UPPER(TRIM(COALESCE(pr.tipo_mix,'')))='PRIORITARIO'"
+const MIX_LANCAMENTO = "UPPER(TRIM(COALESCE(pr.tipo_mix,'')))='LANCAMENTO'"
+const MIX_COMBATE = "UPPER(TRIM(COALESCE(pr.tipo_mix,'')))='COMBATE'"
 
 function periodo(params) {
   const tipo = PERIODOS.has(params.get('periodo')) ? params.get('periodo') : 'mes-atual'
@@ -83,10 +86,15 @@ export async function onRequestGet({ request, env }) {
       pendentes_periodo AS (
         SELECT cl.consultor_id,
           COUNT(DISTINCT pe.id) pedidos_nao_faturados,
-          COALESCE(SUM(${VALOR_ITEM_NAO_FATURADO}),0) valor_nao_faturado
+          COALESCE(SUM(${VALOR_ITEM_NAO_FATURADO}),0) valor_nao_faturado,
+          COALESCE(SUM(CASE WHEN ${MIX_SEM_COMBATE} THEN ${VALOR_ITEM_NAO_FATURADO} ELSE 0 END),0) valor_nao_faturado_sem_combate,
+          COALESCE(SUM(CASE WHEN ${MIX_PRIORITARIO} THEN ${VALOR_ITEM_NAO_FATURADO} ELSE 0 END),0) valor_nao_faturado_prioritarios,
+          COALESCE(SUM(CASE WHEN ${MIX_LANCAMENTO} THEN ${VALOR_ITEM_NAO_FATURADO} ELSE 0 END),0) valor_nao_faturado_lancamentos,
+          COALESCE(SUM(CASE WHEN ${MIX_COMBATE} THEN ${VALOR_ITEM_NAO_FATURADO} ELSE 0 END),0) valor_nao_faturado_combate
         FROM itens_pedido ip
         JOIN pedidos pe ON pe.id=ip.pedido_id
         JOIN clientes cl ON cl.id=pe.cliente_id
+        LEFT JOIN produtos pr ON pr.id=ip.produto_id
         WHERE ${pendingWhere.join(' AND ')}
         GROUP BY cl.consultor_id
       )
@@ -104,7 +112,11 @@ export async function onRequestGet({ request, env }) {
         COALESCE(m.ol_lancamentos,0) AS meta_ol_lancamentos,
         COALESCE(m.clientes_positivados,0) AS meta_clientes,
         COALESCE(pd.pedidos_nao_faturados,0) AS pedidos_nao_faturados,
-        COALESCE(pd.valor_nao_faturado,0) AS valor_nao_faturado
+        COALESCE(pd.valor_nao_faturado,0) AS valor_nao_faturado,
+        COALESCE(pd.valor_nao_faturado_sem_combate,0) AS valor_nao_faturado_sem_combate,
+        COALESCE(pd.valor_nao_faturado_prioritarios,0) AS valor_nao_faturado_prioritarios,
+        COALESCE(pd.valor_nao_faturado_lancamentos,0) AS valor_nao_faturado_lancamentos,
+        COALESCE(pd.valor_nao_faturado_combate,0) AS valor_nao_faturado_combate
       FROM consultores c
       LEFT JOIN clientes cl ON ${clienteJoin.join(' AND ')}
       LEFT JOIN pedidos pe ON ${pedidoJoin.join(' AND ')}
@@ -114,7 +126,8 @@ export async function onRequestGet({ request, env }) {
       LEFT JOIN pendentes_periodo pd ON pd.consultor_id=c.id
       WHERE c.ativo=1 AND c.origem='PAINEL_EQUIPE'
       GROUP BY c.id,c.nome,m.ol_sem_combate,m.ol_prioritarios,m.ol_lancamentos,m.clientes_positivados,
-               pd.pedidos_nao_faturados,pd.valor_nao_faturado
+               pd.pedidos_nao_faturados,pd.valor_nao_faturado,pd.valor_nao_faturado_sem_combate,
+               pd.valor_nao_faturado_prioritarios,pd.valor_nao_faturado_lancamentos,pd.valor_nao_faturado_combate
       ORDER BY ol_sem_combate DESC,c.nome COLLATE NOCASE`
     const gerenteSql = `SELECT COALESCE(SUM(ol_sem_combate),0) ol_sem_combate,COALESCE(SUM(ol_prioritarios),0) ol_prioritarios,COALESCE(SUM(ol_lancamentos),0) ol_lancamentos,COALESCE(SUM(clientes_positivados),0) clientes_positivados FROM metas WHERE escopo='gerente' AND ${metaCond}`
 
@@ -142,6 +155,10 @@ export async function onRequestGet({ request, env }) {
         clientes_sem_venda: Math.max(0, clientesAtivos - clientesComVenda), pedidos_faturados: pedidos,
         pedidos_nao_faturados: numero(item.pedidos_nao_faturados),
         valor_nao_faturado: numero(item.valor_nao_faturado),
+        valor_nao_faturado_sem_combate: numero(item.valor_nao_faturado_sem_combate),
+        valor_nao_faturado_prioritarios: numero(item.valor_nao_faturado_prioritarios),
+        valor_nao_faturado_lancamentos: numero(item.valor_nao_faturado_lancamentos),
+        valor_nao_faturado_combate: numero(item.valor_nao_faturado_combate),
         ol_total_faturado: olTotalFaturado, ol_sem_combate: olSemCombate, ol_combate: numero(item.ol_combate),
         ol_prioritarios: olPrioritarios, ol_lancamentos: olLancamentos,
         meta_ol_sem_combate: metaOlSemCombate, meta_ol_prioritarios: numero(item.meta_ol_prioritarios),
@@ -164,10 +181,16 @@ export async function onRequestGet({ request, env }) {
       clientes_sem_venda: acc.clientes_sem_venda + item.clientes_sem_venda, pedidos_faturados: acc.pedidos_faturados + item.pedidos_faturados,
       pedidos_nao_faturados: acc.pedidos_nao_faturados + item.pedidos_nao_faturados,
       valor_nao_faturado: acc.valor_nao_faturado + item.valor_nao_faturado,
+      valor_nao_faturado_sem_combate: acc.valor_nao_faturado_sem_combate + item.valor_nao_faturado_sem_combate,
+      valor_nao_faturado_prioritarios: acc.valor_nao_faturado_prioritarios + item.valor_nao_faturado_prioritarios,
+      valor_nao_faturado_lancamentos: acc.valor_nao_faturado_lancamentos + item.valor_nao_faturado_lancamentos,
+      valor_nao_faturado_combate: acc.valor_nao_faturado_combate + item.valor_nao_faturado_combate,
     }), {
       ol_total_faturado: 0, ol_sem_combate: 0, ol_combate: 0, ol_prioritarios: 0, ol_lancamentos: 0,
       clientes_ativos: 0, clientes_com_venda: 0, clientes_sem_venda: 0, pedidos_faturados: 0,
       pedidos_nao_faturados: 0, valor_nao_faturado: 0,
+      valor_nao_faturado_sem_combate: 0, valor_nao_faturado_prioritarios: 0,
+      valor_nao_faturado_lancamentos: 0, valor_nao_faturado_combate: 0,
     })
     const metaGerente = {
       ol_sem_combate: numero(gerente.ol_sem_combate), ol_prioritarios: numero(gerente.ol_prioritarios),

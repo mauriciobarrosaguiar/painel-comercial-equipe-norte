@@ -2,6 +2,12 @@ import { useEffect, useMemo, useState } from 'react'
 import './consultants.css'
 
 type Period = 'mes-atual' | 'mes-anterior' | 'todo-periodo' | 'personalizado'
+type PendingMixValues = {
+  semCombate: number
+  lancamentos: number
+  prioritarios: number
+  combate: number
+}
 type Row = {
   id: string
   nome: string
@@ -12,6 +18,10 @@ type Row = {
   pedidos_faturados: number
   pedidos_nao_faturados: number
   valor_nao_faturado: number
+  valor_nao_faturado_sem_combate: number
+  valor_nao_faturado_lancamentos: number
+  valor_nao_faturado_prioritarios: number
+  valor_nao_faturado_combate: number
   ol_total_faturado: number
   ol_sem_combate: number
   ol_prioritarios: number
@@ -51,6 +61,10 @@ type OrderDetail = {
   valor_atendido_sem_imposto: number
   valor_faturado: number
   valor_considerado: number
+  valor_sem_combate: number
+  valor_lancamentos: number
+  valor_prioritarios: number
+  valor_combate: number
 }
 type ConsultantDetails = {
   consultor: { id: string; nome: string; setor: string }
@@ -60,6 +74,10 @@ type ConsultantDetails = {
     valor_faturado: number
     pedidos_nao_faturados: number
     valor_nao_faturado: number
+    valor_nao_faturado_sem_combate: number
+    valor_nao_faturado_lancamentos: number
+    valor_nao_faturado_prioritarios: number
+    valor_nao_faturado_combate: number
   }
   faturados: OrderDetail[]
   nao_faturados: OrderDetail[]
@@ -96,6 +114,47 @@ const safeFileName = (value: string) => value.normalize('NFD').replace(/[\u0300-
   .replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-|-$/g, '').toLowerCase() || 'consultor'
 const csvCell = (value: unknown) => `"${String(value ?? '').replaceAll('"', '""')}"`
 const csvNumber = (value: number) => Number(value || 0).toFixed(2).replace('.', ',')
+const positive = (value: number) => Math.max(0, Number(value || 0))
+
+function PendingBreakdown({ values, compact = false }: { values: PendingMixValues; compact?: boolean }) {
+  const items = [
+    ['OL sem combate', values.semCombate],
+    ['Lançamentos', values.lancamentos],
+    ['Prioritários', values.prioritarios],
+    ['Combate', values.combate],
+  ] as const
+  return (
+    <div className={`pending-breakdown${compact ? ' is-compact' : ''}`}>
+      <div className="pending-breakdown-grid">
+        {items.map(([label, value]) => (
+          <div className="pending-breakdown-item" key={label}>
+            <span>{label}</span>
+            <b>{money.format(value || 0)}</b>
+          </div>
+        ))}
+      </div>
+      <small className="pending-breakdown-note">Prioritários e lançamentos já compõem o OL sem combate.</small>
+    </div>
+  )
+}
+
+function OrderMix({ order }: { order: OrderDetail }) {
+  const items = [
+    ['OL sem combate', order.valor_sem_combate],
+    ['Lançamentos', order.valor_lancamentos],
+    ['Prioritários', order.valor_prioritarios],
+    ['Combate', order.valor_combate],
+  ] as const
+  return (
+    <div className="consultant-order-mix">
+      {items.map(([label, value]) => (
+        <span className={value > 0 ? 'has-value' : ''} key={label}>
+          {label}: <b>{money.format(value || 0)}</b>
+        </span>
+      ))}
+    </div>
+  )
+}
 
 function OrdersGroup({ title, rows, pending, deletingOrderId, onDelete }: OrdersGroupProps) {
   return (
@@ -141,6 +200,7 @@ function OrdersGroup({ title, rows, pending, deletingOrderId, onDelete }: Orders
                     {deleting ? 'Excluindo…' : 'Excluir'}
                   </button>
                 )}
+                {pending && <OrderMix order={order} />}
               </article>
             )
           })}
@@ -259,7 +319,13 @@ export default function ConsultantsModule({ onBack }: { onBack: () => void }) {
       const result = await response.json()
       if (!response.ok) throw new Error(result.detalhe || result.erro || 'Falha ao excluir pedido')
 
-      const removedValue = Number(order.valor_considerado || 0)
+      const removedValue = positive(order.valor_considerado)
+      const removedMix = {
+        semCombate: positive(order.valor_sem_combate),
+        lancamentos: positive(order.valor_lancamentos),
+        prioritarios: positive(order.valor_prioritarios),
+        combate: positive(order.valor_combate),
+      }
       setDetails((currentState) => {
         const currentDetail = currentState[consultant.id]
         if (!currentDetail) return currentState
@@ -271,6 +337,10 @@ export default function ConsultantsModule({ onBack }: { onBack: () => void }) {
               ...currentDetail.resumo,
               pedidos_nao_faturados: Math.max(0, currentDetail.resumo.pedidos_nao_faturados - 1),
               valor_nao_faturado: Math.max(0, currentDetail.resumo.valor_nao_faturado - removedValue),
+              valor_nao_faturado_sem_combate: Math.max(0, currentDetail.resumo.valor_nao_faturado_sem_combate - removedMix.semCombate),
+              valor_nao_faturado_lancamentos: Math.max(0, currentDetail.resumo.valor_nao_faturado_lancamentos - removedMix.lancamentos),
+              valor_nao_faturado_prioritarios: Math.max(0, currentDetail.resumo.valor_nao_faturado_prioritarios - removedMix.prioritarios),
+              valor_nao_faturado_combate: Math.max(0, currentDetail.resumo.valor_nao_faturado_combate - removedMix.combate),
             },
             nao_faturados: currentDetail.nao_faturados.filter((item) => item.id !== order.id),
           },
@@ -282,6 +352,10 @@ export default function ConsultantsModule({ onBack }: { onBack: () => void }) {
           ...item,
           pedidos_nao_faturados: Math.max(0, item.pedidos_nao_faturados - 1),
           valor_nao_faturado: Math.max(0, item.valor_nao_faturado - removedValue),
+          valor_nao_faturado_sem_combate: Math.max(0, item.valor_nao_faturado_sem_combate - removedMix.semCombate),
+          valor_nao_faturado_lancamentos: Math.max(0, item.valor_nao_faturado_lancamentos - removedMix.lancamentos),
+          valor_nao_faturado_prioritarios: Math.max(0, item.valor_nao_faturado_prioritarios - removedMix.prioritarios),
+          valor_nao_faturado_combate: Math.max(0, item.valor_nao_faturado_combate - removedMix.combate),
         } : item),
       } : currentData)
       setDetailMessages((currentState) => ({
@@ -301,13 +375,15 @@ export default function ConsultantsModule({ onBack }: { onBack: () => void }) {
     if (!result) {
       try { result = await loadDetails(consultant.id) } catch { return }
     }
+    if (!result) return
     const rows = [...result.faturados, ...result.nao_faturados]
     const headers = [
       'Tipo', 'Consultor', 'Setor', 'Pedido', 'Nota fiscal', 'Status', 'Data do pedido',
       'Data de faturamento', 'CNPJ', 'Cliente', 'Cidade', 'UF', 'Centro de distribuição',
       'UF do CD', 'Itens', 'Qtde solicitada', 'Qtde atendida', 'Qtde faturada',
       'Valor solicitado sem imposto', 'Valor atendido sem imposto', 'Valor faturado',
-      'Valor considerado como não faturado',
+      'Valor considerado como não faturado', 'OL sem combate não faturado',
+      'Lançamentos não faturados', 'Prioritários não faturados', 'Combate não faturado',
     ]
     const content = [
       headers.map(csvCell).join(';'),
@@ -319,6 +395,10 @@ export default function ConsultantsModule({ onBack }: { onBack: () => void }) {
         order.itens, order.quantidade_solicitada, order.quantidade_atendida, order.quantidade_faturada,
         csvNumber(order.valor_solicitado_sem_imposto), csvNumber(order.valor_atendido_sem_imposto),
         csvNumber(order.valor_faturado), csvNumber(order.tipo === 'NAO_FATURADO' ? order.valor_considerado : 0),
+        csvNumber(order.tipo === 'NAO_FATURADO' ? order.valor_sem_combate : 0),
+        csvNumber(order.tipo === 'NAO_FATURADO' ? order.valor_lancamentos : 0),
+        csvNumber(order.tipo === 'NAO_FATURADO' ? order.valor_prioritarios : 0),
+        csvNumber(order.tipo === 'NAO_FATURADO' ? order.valor_combate : 0),
       ].map(csvCell).join(';')),
     ].join('\r\n')
     const blob = new Blob([`\uFEFF${content}`], { type: 'text/csv;charset=utf-8' })
@@ -348,7 +428,7 @@ export default function ConsultantsModule({ onBack }: { onBack: () => void }) {
       <section className="filters consultants-filters">
         <label>
           <span>Período</span>
-          <select value={period} onChange={(event) => setPeriod(event.target.value as Period)}>
+          <select value={period} onChange={(event: { target: { value: string } }) => setPeriod(event.target.value as Period)}>
             <option value="mes-atual">Mês atual</option>
             <option value="mes-anterior">Mês anterior</option>
             <option value="todo-periodo">Todo o período</option>
@@ -357,15 +437,15 @@ export default function ConsultantsModule({ onBack }: { onBack: () => void }) {
         </label>
         <label>
           <span>UF da carteira</span>
-          <select value={uf} onChange={(event) => setUf(event.target.value)}>
+          <select value={uf} onChange={(event: { target: { value: string } }) => setUf(event.target.value)}>
             <option value="">Todas as UFs</option>
             {(data?.ufs || []).map((item) => <option key={item}>{item}</option>)}
           </select>
         </label>
         {period === 'personalizado' && (
           <>
-            <label><span>Data inicial</span><input type="date" value={start} onChange={(event) => setStart(event.target.value)} /></label>
-            <label><span>Data final</span><input type="date" value={end} onChange={(event) => setEnd(event.target.value)} /></label>
+            <label><span>Data inicial</span><input type="date" value={start} onChange={(event: { target: { value: string } }) => setStart(event.target.value)} /></label>
+            <label><span>Data final</span><input type="date" value={end} onChange={(event: { target: { value: string } }) => setEnd(event.target.value)} /></label>
           </>
         )}
       </section>
@@ -398,13 +478,19 @@ export default function ConsultantsModule({ onBack }: { onBack: () => void }) {
       <section className="consultants-ranking">
         <div className="ranking-heading">
           <div><h2>Ranking de resultados</h2><small>Clique no consultor para abrir os pedidos.</small></div>
-          <span>{data?.consultores.length || 0} consultores</span>
+          <span>{(data?.consultores || []).length} consultores</span>
         </div>
         <div className="consultant-card-list">
           {loading && <div className="ranking-empty">Carregando resultados…</div>}
           {!loading && (data?.consultores || []).map((consultant, index) => {
             const isExpanded = expanded === consultant.id
             const detail = details[consultant.id]
+            const cardMix: PendingMixValues = {
+              semCombate: consultant.valor_nao_faturado_sem_combate,
+              lancamentos: consultant.valor_nao_faturado_lancamentos,
+              prioritarios: consultant.valor_nao_faturado_prioritarios,
+              combate: consultant.valor_nao_faturado_combate,
+            }
             return (
               <article className={`consultant-result-card${isExpanded ? ' is-expanded' : ''}`} key={consultant.id}>
                 <button
@@ -437,9 +523,10 @@ export default function ConsultantsModule({ onBack }: { onBack: () => void }) {
                     <small>Meta {money.format(consultant.meta_ol_lancamentos)} · <b className={cls(ratio(consultant.ol_lancamentos, consultant.meta_ol_lancamentos))}>{pct.format(ratio(consultant.ol_lancamentos, consultant.meta_ol_lancamentos))}%</b></small>
                   </div>
                   <div className="consultant-metric consultant-pending-metric">
-                    <span>Atendido e ainda não faturado</span>
+                    <span>Atendidos e ainda não faturados</span>
                     <strong>{num.format(consultant.pedidos_nao_faturados)} · {money.format(consultant.valor_nao_faturado)}</strong>
-                    <small>pedidos/notas · clique para detalhar</small>
+                    <small className="consultant-pending-caption">pedidos/notas · clique para detalhar</small>
+                    <PendingBreakdown values={cardMix} compact />
                   </div>
                   <span className="consultant-expand-icon" aria-hidden="true">{isExpanded ? '−' : '+'}</span>
                 </button>
@@ -466,10 +553,16 @@ export default function ConsultantsModule({ onBack }: { onBack: () => void }) {
                             <strong>{num.format(detail.resumo.pedidos_faturados)}</strong>
                             <b>{money.format(detail.resumo.valor_faturado)}</b>
                           </article>
-                          <article className="pending">
+                          <article className="pending consultant-order-summary-pending">
                             <span>Ainda não faturados</span>
                             <strong>{num.format(detail.resumo.pedidos_nao_faturados)}</strong>
                             <b>{money.format(detail.resumo.valor_nao_faturado)}</b>
+                            <PendingBreakdown values={{
+                              semCombate: detail.resumo.valor_nao_faturado_sem_combate,
+                              lancamentos: detail.resumo.valor_nao_faturado_lancamentos,
+                              prioritarios: detail.resumo.valor_nao_faturado_prioritarios,
+                              combate: detail.resumo.valor_nao_faturado_combate,
+                            }} />
                           </article>
                         </div>
                         <div className="consultant-orders-columns">
@@ -490,7 +583,7 @@ export default function ConsultantsModule({ onBack }: { onBack: () => void }) {
               </article>
             )
           })}
-          {!loading && !data?.consultores.length && <div className="ranking-empty">Nenhum consultor encontrado.</div>}
+          {!loading && !(data?.consultores || []).length && <div className="ranking-empty">Nenhum consultor encontrado.</div>}
         </div>
       </section>
     </main>
