@@ -59,7 +59,7 @@ test('pedidos ficam dentro do card expansível de cada consultor', () => {
   assert.match(legacy, /return null/)
   assert.match(app, /PendingOrdersOverview/)
   assert.match(view, /aria-expanded=\{isExpanded\}/)
-  assert.match(view, /Atendido e ainda não faturado/)
+  assert.match(view, /Atendidos? e ainda não faturados?/)
   assert.match(view, /Pedidos faturados/)
   assert.match(view, /Pedidos ainda não faturados/)
   assert.match(view, /Baixar detalhes/)
