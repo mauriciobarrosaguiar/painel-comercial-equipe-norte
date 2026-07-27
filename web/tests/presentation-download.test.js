@@ -81,3 +81,5 @@ test('página principal mostra Baixar imagens mantendo os filtros atuais', () =>
   assert.match(endpoint, /meta_ol_prioritarios/)
   assert.match(endpoint, /Foco Semanal/)
 })
+
+// Mantém a validação da exportação visual ativa no pipeline completo.
