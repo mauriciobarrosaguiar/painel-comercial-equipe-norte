@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import ConsultantPerformanceReport from './ConsultantPerformanceReport'
 import './consultants.css'
 
 type Period = 'mes-atual' | 'mes-anterior' | 'todo-periodo' | 'personalizado'
@@ -232,6 +233,16 @@ export default function ConsultantsModule({ onBack }: { onBack: () => void }) {
       : period === 'personalizado'
         ? { inicio: start, fim: end }
         : { inicio: '', fim: '' }, [period, start, end])
+
+  const reportQuery = useMemo(() => {
+    const params = new URLSearchParams({ periodo: period })
+    if (selected.inicio && selected.fim) {
+      params.set('inicio', selected.inicio)
+      params.set('fim', selected.fim)
+    }
+    if (uf) params.set('uf', uf)
+    return params.toString()
+  }, [period, selected.inicio, selected.fim, uf])
 
   useEffect(() => {
     if (period === 'personalizado' && (!start || !end)) return undefined
@@ -474,6 +485,15 @@ export default function ConsultantsModule({ onBack }: { onBack: () => void }) {
           <small>{num.format(totals.clientes_sem_venda || 0)} sem venda</small>
         </article>
       </section>
+
+      <ConsultantPerformanceReport
+        rows={data?.consultores || []}
+        totals={totals}
+        periodLabel={data?.periodo.rotulo || 'Mês atual'}
+        xlsxUrl={`/api/consultores/resumo-xlsx?${reportQuery}`}
+        pdfUrl={`/api/consultores/resumo-pdf?${reportQuery}`}
+        loading={loading}
+      />
 
       <section className="consultants-ranking">
         <div className="ranking-heading">
