@@ -16,20 +16,17 @@ test('apresentação exige sessão ou chave administrativa', async () => {
   assert.equal(response.status, 401)
 })
 
-test('download gera PPTX verdadeiro com Consultores, SIP e Foco Semanal', async () => {
+test('download gera PPTX verdadeiro com metas, GAPs e focos vigentes/encerrados', async () => {
   const response = await exportPresentation({
     request: new Request(
-      'https://painel.local/api/apresentacao-painel?periodo=personalizado&inicio=2026-07-01&fim=2026-07-31&foco_inicio=2026-07-07&foco_fim=2026-07-13',
+      'https://painel.local/api/apresentacao-painel?periodo=personalizado&inicio=2026-07-01&fim=2026-07-31',
       { headers: { 'x-admin-key': ADMIN_KEY } },
     ),
     env: { DB: testDatabase(), PAINEL_ADMIN_KEY: ADMIN_KEY },
   })
 
   assert.equal(response.status, 200)
-  assert.equal(
-    response.headers.get('content-type'),
-    'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-  )
+  assert.equal(response.headers.get('content-type'), 'application/vnd.openxmlformats-officedocument.presentationml.presentation')
   assert.match(response.headers.get('content-disposition') || '', /painel-equipe-norte-2026-07\.pptx/)
 
   const bytes = new Uint8Array(await response.arrayBuffer())
@@ -42,12 +39,14 @@ test('download gera PPTX verdadeiro com Consultores, SIP e Foco Semanal', async 
     'ppt/presentation.xml',
     'ppt/slideMasters/slideMaster1.xml',
     'ppt/slideLayouts/slideLayout1.xml',
-    'ppt/slides/slide1.xml',
-    'ppt/slides/slide2.xml',
     'PAINEL COMERCIAL',
-    'Consultores',
-    'SIP / Redes',
-    'Foco Semanal',
+    'Consultores — Sem Combate',
+    'Consultores — Prioritários e Lançamentos',
+    'SIP — Objetivo e GAP',
+    'GAP 90%',
+    'GAP 80%',
+    'SIP — Mix faturado',
+    'Foco Semanal — ENCERRADO',
     'SIP Teste',
     'Linha',
   ]) assert.ok(archiveText.includes(content), `Conteúdo ausente no PPTX: ${content}`)
@@ -56,7 +55,7 @@ test('download gera PPTX verdadeiro com Consultores, SIP e Foco Semanal', async 
 test('página principal oferece botão Baixar PPT com os filtros atuais', () => {
   const app = read('src/App.tsx')
   const styles = read('src/dashboard.css')
-  const endpoint = read('functions/api/apresentacao-painel.js')
+  const endpoint = read('functions/api/apresentacao-painel-v2.js')
   const pptx = read('functions/_lib/pptx-compatible.js')
 
   assert.match(app, /Baixar PPT/)
@@ -64,6 +63,9 @@ test('página principal oferece botão Baixar PPT com os filtros atuais', () => 
   assert.match(app, /presentationQuery/)
   assert.match(styles, /dashboard-ppt-button/)
   assert.match(endpoint, /Consultores, SIP e Foco Semanal/)
+  assert.match(endpoint, /meta_ol_prioritarios/)
+  assert.match(endpoint, /gap90/)
+  assert.match(endpoint, /focusData\.ongoing/)
   assert.match(endpoint, /application\/vnd\.openxmlformats-officedocument\.presentationml\.presentation/)
   assert.match(pptx, /ppt\/presentation\.xml/)
   assert.match(pptx, /slideMaster1\.xml/)
