@@ -52,6 +52,7 @@ function PercentCell({ value }: { value: number }) {
 
 export default function ConsultantPerformanceReport({ rows, totals, periodLabel, xlsxUrl, pdfUrl, loading }: Props) {
   const managerGoal = totals.meta_gerente || {}
+  const compatibleXlsxUrl = xlsxUrl.replace('/resumo-xlsx', '/resumo-excel')
   const totalRow: ReportRow = {
     id: 'total-equipe',
     nome: 'TOTAL EQUIPE NORTE',
@@ -117,7 +118,7 @@ export default function ConsultantPerformanceReport({ rows, totals, periodLabel,
         </div>
         <div className="consultant-report-actions">
           <span>{periodLabel}</span>
-          <a href={xlsxUrl}>Baixar Excel</a>
+          <a href={compatibleXlsxUrl}>Baixar Excel</a>
           <a href={pdfUrl}>Baixar PDF</a>
         </div>
       </div>
