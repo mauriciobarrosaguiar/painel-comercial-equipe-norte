@@ -1,1 +1,1 @@
-export { onRequestGet } from './apresentacao-painel-v2.js'
+export { onRequestGet } from './apresentacao-painel-v3.js'
