@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import Iterable
 
 from selenium.common.exceptions import TimeoutException
@@ -8,8 +9,60 @@ from selenium.webdriver.common.by import By
 from src import mercadofarma_inventory as antigo
 
 
+_PERCENTUAL_RE = re.compile(r"(?<!\d)(\d{1,3}(?:[\.,]\d{1,2})?)\s*%")
+
+
 def _texto(root, selectors: Iterable[tuple]) -> str:
     return antigo.safe_text(root, selectors)
+
+
+def _texto_percentual(root) -> str:
+    """Lê o desconto visível da própria oferta, sem herdar o badge de outra distribuidora."""
+    if root is None:
+        return ""
+    candidatos: list[tuple[int, int, str]] = []
+    seletores = [
+        "[data-testid*='discount']",
+        "[data-test-id*='discount']",
+        "[class*='discount']",
+        "span",
+        "small",
+        "p",
+        "div",
+    ]
+    vistos: set[str] = set()
+    for seletor in seletores:
+        try:
+            elementos = root.find_elements(By.CSS_SELECTOR, seletor)
+        except Exception:
+            continue
+        for elemento in elementos:
+            identificador = getattr(elemento, "id", "") or str(id(elemento))
+            if identificador in vistos:
+                continue
+            vistos.add(identificador)
+            try:
+                if hasattr(elemento, "is_displayed") and not elemento.is_displayed():
+                    continue
+                texto = (elemento.text or "").strip()
+            except Exception:
+                continue
+            if not texto:
+                continue
+            for percentual in _PERCENTUAL_RE.findall(texto):
+                valor = float(percentual.replace(",", "."))
+                if 0 <= valor <= 100:
+                    exato = 0 if _PERCENTUAL_RE.fullmatch(texto) else 1
+                    candidatos.append((exato, len(texto), f"{percentual}%"))
+    if not candidatos:
+        try:
+            texto_raiz = (root.text or "").strip()
+        except Exception:
+            texto_raiz = ""
+        correspondencia = _PERCENTUAL_RE.search(texto_raiz)
+        return correspondencia.group(0) if correspondencia else ""
+    candidatos.sort(key=lambda item: (item[0], item[1]))
+    return candidatos[0][2]
 
 
 def _linhas_genericas(popover) -> list:
@@ -82,7 +135,7 @@ def _extrair_linha(root, ean: str, nome_produto: str, desconto_root=None):
         (By.XPATH, ".//*[self::h4 or self::h5][contains(normalize-space(.),'R$')]")
     ])
     sem_imposto_txt = antigo._find_text_by_keywords(root, ['sem imposto'])
-    desconto_txt = antigo._find_text_by_keywords(desconto_root or root, ['%'])
+    desconto_txt = _texto_percentual(desconto_root or root)
 
     if not nome_dist or not preco_final_txt:
         return None
@@ -136,7 +189,7 @@ def processar_ean_catalogo_atualizado(driver, ean: str) -> list[dict]:
             linhas = _linhas_genericas(popover)
             registros = []
             for item in linhas:
-                linha = _extrair_linha(item, ean, nome_produto, desconto_root=card_produto)
+                linha = _extrair_linha(item, ean, nome_produto, desconto_root=item)
                 if linha:
                     registros.append(linha)
             if registros:
