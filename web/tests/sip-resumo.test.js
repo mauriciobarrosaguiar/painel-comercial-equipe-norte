@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs'
 
 import { onRequestGet as listarSips } from '../functions/api/sips.js'
 import { onRequestGet as exportarResumoGeral } from '../functions/api/sips/resumo-geral-exportar.js'
-import { onRequestGet as exportarResumoXlsx } from '../functions/api/sips/resumo-geral-xlsx.js'
+import { onRequestGet as exportarResumoXlsx } from '../functions/api/sips/resumo-geral-excel.js'
 import { testDatabase } from './d1-fixture.js'
 
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8')
@@ -37,7 +37,7 @@ test('resumo consolida todos os CNPJs de cada SIP em uma única linha', async ()
 test('download Excel gera arquivo XLSX verdadeiro', async () => {
   const response = await exportarResumoXlsx({
     request: new Request(
-      'https://painel.local/api/sips/resumo-geral-xlsx?inicio=2026-07-01&fim=2026-07-31',
+      'https://painel.local/api/sips/resumo-geral-excel?inicio=2026-07-01&fim=2026-07-31',
       { headers: { 'x-admin-key': ADMIN_KEY } },
     ),
     env: { DB: testDatabase(), PAINEL_ADMIN_KEY: ADMIN_KEY },
@@ -80,13 +80,13 @@ test('página mostra uma única tabela consolidada por SIP e usa XLSX real', () 
   const module = read('src/SipsModule.tsx')
   const styles = read('src/sip-summary.css')
   const endpoint = read('functions/api/sips/objetivos.js')
-  const xlsxEndpoint = read('functions/api/sips/resumo-geral-xlsx.js')
+  const xlsxEndpoint = read('functions/api/sips/resumo-geral-excel.js')
 
   for (const label of ['SIP', 'CNPJs', 'OBJETIVO', 'REALIZADO', 'COBERTURA', 'GAP 100%', 'GAP 90%', 'GAP 80%', 'TOTAL DISTRITAL']) {
     assert.match(report, new RegExp(label))
   }
   assert.match(report, /Cada linha soma todos os CNPJs vinculados à SIP/)
-  assert.match(report, /resumo-geral-xlsx/)
+  assert.match(report, /resumo-geral-excel/)
   assert.match(module, /<SipSummaryReport data=\{data\.resumo_sip\}/)
   assert.doesNotMatch(module, /resumos_sip\.map/)
   assert.match(styles, /sip-consolidated-table/)
