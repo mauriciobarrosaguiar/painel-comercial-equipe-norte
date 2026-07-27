@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import IntegrationSettings from './IntegrationSettings'
 import ConsultantsModule from './ConsultantsModule'
 import PendingOrdersOverview from './PendingOrdersOverview'
+import DownloadImagesButton from './DownloadImagesButton'
 import type { SessionUser } from './LoginPage'
 import type { AppPage } from './navigation'
 import './dashboard.css'
@@ -207,9 +208,7 @@ export default function App({ user, page, onNavigate, onLogout, onInstall }: Pro
               <p>Acompanhe a operação da Equipe Norte em um único lugar.</p>
             </div>
             <div className="hero-actions">
-              <a className="secondary-button dashboard-ppt-button" href={`/api/apresentacao-painel?${presentationQuery}`}>
-                Baixar PPT
-              </a>
+              <DownloadImagesButton query={presentationQuery} />
               <button className="secondary-button" onClick={onInstall}>Baixar app mobile</button>
               <button className="primary-button" onClick={() => onNavigate('administracao')}>
                 Central de automações
