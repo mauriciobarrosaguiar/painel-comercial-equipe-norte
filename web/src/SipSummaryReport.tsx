@@ -101,7 +101,7 @@ export default function SipSummaryReport({
   const excelQuery = new URLSearchParams()
   if (data.periodo.inicio) excelQuery.set('inicio', data.periodo.inicio)
   if (data.periodo.fim) excelQuery.set('fim', data.periodo.fim)
-  const excelLink = `/api/sips/resumo-geral-xlsx${excelQuery.size ? `?${excelQuery.toString()}` : ''}`
+  const excelLink = `/api/sips/resumo-geral-excel${excelQuery.size ? `?${excelQuery.toString()}` : ''}`
 
   const beginEditing = () => {
     setDrafts(Object.fromEntries(rows.map((row) => [row.id, Number(row.objetivo || 0)])))
