@@ -53,6 +53,7 @@ export default function SipsModule({ onBack, publicId }: { onBack: () => void; p
   const [error, setError] = useState('')
   const [showForm, setShowForm] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [deletingSipId, setDeletingSipId] = useState('')
   const [message, setMessage] = useState('')
 
   async function loadList() {
@@ -120,6 +121,38 @@ export default function SipsModule({ onBack, publicId }: { onBack: () => void; p
       setError(reason instanceof Error ? reason.message : String(reason))
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function deleteSip(sip: Sip) {
+    const totalCnpjs = sip.cnpjs_vinculados || sip.clientes_ativos || 0
+    const confirmed = window.confirm(
+      `Excluir a SIP "${sip.nome}"?\n\nEla possui ${num.format(totalCnpjs)} CNPJs vinculados. A SIP deixará de aparecer no painel e o link público será desativado.`,
+    )
+    if (!confirmed) return
+
+    setDeletingSipId(sip.id)
+    setError('')
+    setMessage('')
+    try {
+      const response = await fetch('/api/sips/excluir', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ sip_id: sip.id }),
+      })
+      const result = await response.json()
+      if (!response.ok) throw new Error(result.detalhe || result.erro || 'Falha ao excluir a SIP.')
+
+      if (selected === sip.id) {
+        setSelected('')
+        setDetail(null)
+      }
+      await loadList()
+      setMessage(result.mensagem || `SIP ${sip.nome} excluída com sucesso.`)
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason))
+    } finally {
+      setDeletingSipId('')
     }
   }
 
@@ -213,14 +246,26 @@ export default function SipsModule({ onBack, publicId }: { onBack: () => void; p
       <section className="sips-list">
         <div className="sips-heading"><h2>SIPs cadastradas</h2><span>{data?.sips.length || 0}</span></div>
         {data?.sips.map((sip) => (
-          <button className="sip-card sip-card-button" key={sip.id} onClick={() => void loadDetail(sip.id)}>
-            <div><h3>{sip.nome}</h3><p>{sip.redes} redes · {sip.nomes_redes || 'Sem rede informada'}</p></div>
-            <div><span>Clientes</span><strong>{sip.clientes_com_venda}/{sip.cnpjs_vinculados || sip.clientes_ativos}</strong></div>
-            <div><span>OL total</span><strong>{money.format(sip.ol_total)}</strong></div>
-            <div><span>Sem combate</span><strong>{money.format(sip.ol_sem_combate)}</strong></div>
-            <div><span>Meta</span><strong>{money.format(sip.meta_mes)}</strong><small>{pct.format(sip.resultado_meta)}%</small></div>
-            <b>Ver resultado →</b>
-          </button>
+          <article className="sip-card sip-card-row" key={sip.id}>
+            <button className="sip-card-main" type="button" onClick={() => void loadDetail(sip.id)}>
+              <div><h3>{sip.nome}</h3><p>{sip.redes} redes · {sip.nomes_redes || 'Sem rede informada'}</p></div>
+              <div><span>Clientes</span><strong>{sip.clientes_com_venda}/{sip.cnpjs_vinculados || sip.clientes_ativos}</strong></div>
+              <div><span>OL total</span><strong>{money.format(sip.ol_total)}</strong></div>
+              <div><span>Sem combate</span><strong>{money.format(sip.ol_sem_combate)}</strong></div>
+              <div><span>Meta</span><strong>{money.format(sip.meta_mes)}</strong><small>{pct.format(sip.resultado_meta)}%</small></div>
+              <b>Ver resultado →</b>
+            </button>
+            <button
+              className="sip-delete-button"
+              type="button"
+              onClick={() => void deleteSip(sip)}
+              disabled={deletingSipId === sip.id}
+              aria-label={`Excluir SIP ${sip.nome}`}
+              title={`Excluir SIP ${sip.nome}`}
+            >
+              {deletingSipId === sip.id ? 'Excluindo…' : 'Excluir SIP'}
+            </button>
+          </article>
         ))}
       </section>
 

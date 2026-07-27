@@ -32,14 +32,14 @@ export async function onRequestPost({ request, env }) {
         'UPDATE sips SET ativo=0,acesso_publico_ativo=0,atualizado_em=? WHERE id=? AND ativo=1',
       ).bind(now, sipId),
       env.DB.prepare(
-        'UPDATE sip_clientes SET ativo=0,atualizado_em=? WHERE sip_id=? AND ativo=1',
-      ).bind(now, sipId),
+        'UPDATE sip_clientes SET ativo=0 WHERE sip_id=? AND ativo=1',
+      ).bind(sipId),
       env.DB.prepare(
-        'UPDATE sip_redes SET ativo=0,atualizado_em=? WHERE sip_id=? AND ativo=1',
-      ).bind(now, sipId),
+        'UPDATE sip_redes SET ativo=0 WHERE sip_id=? AND ativo=1',
+      ).bind(sipId),
       env.DB.prepare(
-        'UPDATE sip_recados SET ativo=0,atualizado_em=? WHERE sip_id=? AND ativo=1',
-      ).bind(now, sipId),
+        'UPDATE sip_recados SET ativo=0 WHERE sip_id=? AND ativo=1',
+      ).bind(sipId),
     ])
 
     return json({
