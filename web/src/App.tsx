@@ -108,6 +108,16 @@ export default function App({ user, page, onNavigate, onLogout, onInstall }: Pro
           : { inicio: '', fim: '' },
     [period, start, end],
   )
+  const presentationQuery = useMemo(() => {
+    const params = new URLSearchParams({ periodo: period })
+    if (selected.inicio && selected.fim) {
+      params.set('inicio', selected.inicio)
+      params.set('fim', selected.fim)
+    }
+    if (consultant) params.set('consultor', consultant)
+    if (uf) params.set('uf', uf)
+    return params.toString()
+  }, [period, consultant, uf, selected.inicio, selected.fim])
 
   useEffect(() => {
     if (period === 'personalizado' && (!start || !end)) return undefined
@@ -197,6 +207,9 @@ export default function App({ user, page, onNavigate, onLogout, onInstall }: Pro
               <p>Acompanhe a operação da Equipe Norte em um único lugar.</p>
             </div>
             <div className="hero-actions">
+              <a className="secondary-button dashboard-ppt-button" href={`/api/apresentacao-painel?${presentationQuery}`}>
+                Baixar PPT
+              </a>
               <button className="secondary-button" onClick={onInstall}>Baixar app mobile</button>
               <button className="primary-button" onClick={() => onNavigate('administracao')}>
                 Central de automações
