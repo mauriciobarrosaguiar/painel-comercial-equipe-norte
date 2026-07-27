@@ -1,10 +1,11 @@
 import { FormEvent, useEffect, useState } from 'react'
 import SipDetailView, { SipDetail } from './SipDetailView'
+import SipEditDialog from './SipEditDialog'
 import SipSummaryReport, { SipSummaryData } from './SipSummaryReport'
 import './sips.css'
 import './sip-phase4.css'
 
-type Sip = {
+ type Sip = {
   id: string
   nome: string
   redes: number
@@ -49,6 +50,7 @@ export default function SipsModule({ onBack, publicId }: { onBack: () => void; p
   const [data, setData] = useState<List | null>(null)
   const [detail, setDetail] = useState<Detail | null>(null)
   const [selected, setSelected] = useState(publicId || '')
+  const [editingSip, setEditingSip] = useState<Sip | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [showForm, setShowForm] = useState(false)
@@ -156,6 +158,13 @@ export default function SipsModule({ onBack, publicId }: { onBack: () => void; p
     }
   }
 
+  async function finishEditing(messageText: string) {
+    await loadList()
+    setEditingSip(null)
+    setMessage(messageText)
+    setError('')
+  }
+
   async function copy() {
     if (!detail) return
     await navigator.clipboard.writeText(detail.link_publico)
@@ -255,16 +264,27 @@ export default function SipsModule({ onBack, publicId }: { onBack: () => void; p
               <div><span>Meta</span><strong>{money.format(sip.meta_mes)}</strong><small>{pct.format(sip.resultado_meta)}%</small></div>
               <b>Ver resultado →</b>
             </button>
-            <button
-              className="sip-delete-button"
-              type="button"
-              onClick={() => void deleteSip(sip)}
-              disabled={deletingSipId === sip.id}
-              aria-label={`Excluir SIP ${sip.nome}`}
-              title={`Excluir SIP ${sip.nome}`}
-            >
-              {deletingSipId === sip.id ? 'Excluindo…' : 'Excluir SIP'}
-            </button>
+            <div className="sip-card-actions">
+              <button
+                className="sip-edit-button"
+                type="button"
+                onClick={() => setEditingSip(sip)}
+                aria-label={`Editar SIP ${sip.nome}`}
+                title={`Editar SIP ${sip.nome}`}
+              >
+                Editar SIP
+              </button>
+              <button
+                className="sip-delete-button"
+                type="button"
+                onClick={() => void deleteSip(sip)}
+                disabled={deletingSipId === sip.id}
+                aria-label={`Excluir SIP ${sip.nome}`}
+                title={`Excluir SIP ${sip.nome}`}
+              >
+                {deletingSipId === sip.id ? 'Excluindo…' : 'Excluir SIP'}
+              </button>
+            </div>
           </article>
         ))}
       </section>
@@ -282,6 +302,14 @@ export default function SipsModule({ onBack, publicId }: { onBack: () => void; p
         {loading && !data && <div className="sips-empty">Carregando resumo…</div>}
         {data?.resumo_sip && <SipSummaryReport data={data.resumo_sip} onUpdated={updateSummary} />}
       </section>
+
+      {editingSip && (
+        <SipEditDialog
+          sip={editingSip}
+          onClose={() => setEditingSip(null)}
+          onSaved={(messageText) => finishEditing(messageText)}
+        />
+      )}
 
       {selected && (
         <div className="sip-detail-backdrop" onClick={() => { setSelected(''); setDetail(null) }}>
