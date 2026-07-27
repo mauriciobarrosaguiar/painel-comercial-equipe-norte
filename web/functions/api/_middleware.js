@@ -3,7 +3,13 @@ import { repairPptxBytes } from '../_lib/pptx-repair.js'
 export async function onRequest(context) {
   const url = new URL(context.request.url)
   const response = await context.next()
-  if (context.request.method !== 'GET' || url.pathname !== '/api/apresentacao-painel' || !response.ok) return response
+  const contentType = response.headers.get('content-type') || ''
+  if (
+    context.request.method !== 'GET'
+    || url.pathname !== '/api/apresentacao-painel'
+    || !response.ok
+    || !contentType.includes('presentationml.presentation')
+  ) return response
   const original = response.clone()
   try {
     const repaired = await repairPptxBytes(new Uint8Array(await response.arrayBuffer()))
