@@ -40,13 +40,18 @@ test('download gera PPTX verdadeiro com metas, GAPs e focos vigentes/encerrados'
     'ppt/slideMasters/slideMaster1.xml',
     'ppt/slideLayouts/slideLayout1.xml',
     'PAINEL COMERCIAL',
-    'Consultores — Sem Combate',
-    'Consultores — Prioritários e Lançamentos',
-    'SIP — Objetivo e GAP',
+    'Consultores — Resultado Consolidado',
+    'META SC',
+    'REAL P',
+    'REAL L',
+    'SIP — Objetivo, Mix e GAP',
     'GAP 90%',
     'GAP 80%',
-    'SIP — Mix faturado',
+    'PRIORITÁRIOS',
+    'LANÇAMENTOS',
     'Foco Semanal — ENCERRADO',
+    'META DO PRODUTO',
+    'QTDE FATURADA',
     'SIP Teste',
     'Linha',
   ]) assert.ok(archiveText.includes(content), `Conteúdo ausente no PPTX: ${content}`)
@@ -55,7 +60,7 @@ test('download gera PPTX verdadeiro com metas, GAPs e focos vigentes/encerrados'
 test('página principal oferece botão Baixar PPT com os filtros atuais', () => {
   const app = read('src/App.tsx')
   const styles = read('src/dashboard.css')
-  const endpoint = read('functions/api/apresentacao-painel-v2.js')
+  const endpoint = read('functions/api/apresentacao-painel-v3.js')
   const pptx = read('functions/_lib/pptx-compatible.js')
 
   assert.match(app, /Baixar PPT/)
