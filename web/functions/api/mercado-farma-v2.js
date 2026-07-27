@@ -6,6 +6,13 @@ const text = value => String(value ?? '').trim()
 const number = value => Number.isFinite(Number(value)) ? Number(value) : 0
 const cleanCnpj = value => text(value).replace(/\D/g, '')
 const normalize = value => text(value).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/\s+/g, ' ').trim()
+const discountFromBase = item => {
+  const saved = number(item.desconto)
+  if (saved) return saved
+  const pf = number(item.pf_distribuidora)
+  const final = number(item.preco_com_imposto)
+  return pf > 0 && final > 0 && final <= pf ? 1 - final / pf : 0
+}
 
 function addSearchConditions(conditions, binds, search) {
   const tokens = normalize(search).split(' ').filter(Boolean).slice(0, 8)
@@ -91,7 +98,7 @@ export async function onRequestGet({ request, env }) {
       },
       resultados: (rowsResult.results || []).map(item => ({
         ...item,
-        estoque: number(item.estoque), desconto: number(item.desconto), pf_distribuidora: number(item.pf_distribuidora),
+        estoque: number(item.estoque), desconto: discountFromBase(item), pf_distribuidora: number(item.pf_distribuidora),
         pf_fabrica: number(item.pf_fabrica), preco_com_imposto: number(item.preco_com_imposto),
         preco_sem_imposto: number(item.preco_sem_imposto), melhor_preco: item.melhor_preco === null ? null : number(item.melhor_preco),
       })),

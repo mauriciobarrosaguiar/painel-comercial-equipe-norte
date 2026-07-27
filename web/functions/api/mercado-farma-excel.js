@@ -1,1 +1,1 @@
-export { onRequestGet } from './mercado-farma-excel-v2.js'
+export { onRequestGet } from './mercado-farma-excel-v3.js'
