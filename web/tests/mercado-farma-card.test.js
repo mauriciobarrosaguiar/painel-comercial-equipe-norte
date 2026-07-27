@@ -11,9 +11,9 @@ test('cards do Mercado Farma exibem buybox, carrinho e busca de cliente', () => 
   }
 })
 
-test('API entrega preços numéricos e aplica a UF do cliente', () => {
+test('API entrega preços numéricos, desconto da base e aplica a UF do cliente', () => {
   const source = read('functions/api/mercado-farma-v2.js')
-  for (const expected of ['desconto: number(item.desconto)', 'pf_distribuidora: number(item.pf_distribuidora)', 'pf_fabrica: number(item.pf_fabrica)', 'cliente_cnpj', 'effectiveUf', 'uf_aplicada']) {
+  for (const expected of ['desconto: discountFromBase(item)', 'pf_distribuidora: number(item.pf_distribuidora)', 'pf_fabrica: number(item.pf_fabrica)', 'cliente_cnpj', 'effectiveUf', 'uf_aplicada']) {
     assert.match(source, new RegExp(expected.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
   }
 })
