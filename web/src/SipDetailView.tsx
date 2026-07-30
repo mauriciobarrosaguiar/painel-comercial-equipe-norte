@@ -1,4 +1,5 @@
 import './sip-pending.css'
+import './sip-goal-progress.css'
 
 export type SipProduct = {
   ean: string
@@ -83,6 +84,7 @@ const pct = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 1, maximumFr
 const date = (value: string | null) => value
   ? value.slice(0, 10).split('-').reverse().join('/')
   : 'Sem compra'
+const missingTo = (realized: number, objective: number, target: number) => Math.max(0, objective * target - realized)
 
 export default function SipDetailView({
   detail,
@@ -95,6 +97,19 @@ export default function SipDetailView({
   const projection = totals.projecao_ol_sem_combate ?? totals.ol_sem_combate
   const projectionPercent = totals.projecao_meta ?? totals.resultado_meta
   const pendingConsultants = detail.pendentes_por_consultor || []
+  const objective = Number(detail.resumo_sip?.objetivo ?? detail.sip.meta_mes ?? 0)
+  const realized = Number(detail.resumo_sip?.realizado ?? totals.ol_sem_combate ?? 0)
+  const hasGoal = objective > 0
+  const goalBands = [
+    { label: 'Falta para 80%', target: 0.8 },
+    { label: 'Falta para 90%', target: 0.9 },
+    { label: 'Falta para 100%', target: 1 },
+  ].map((band) => ({
+    ...band,
+    targetValue: objective * band.target,
+    missing: missingTo(realized, objective, band.target),
+    reached: hasGoal && realized >= objective * band.target,
+  }))
 
   return (
     <div className="sip-detail-content">
@@ -128,6 +143,25 @@ export default function SipDetailView({
           <strong>{num.format(totals.notas_a_faturar)}</strong>
           <small>{money.format(totals.valor_a_faturar || 0)}</small>
         </article>
+      </section>
+
+      <section className="sip-goal-progress" aria-label="Quanto falta para atingir as metas da SIP">
+        {goalBands.map((band) => (
+          <article
+            key={band.label}
+            className={`${band.reached ? 'is-reached' : ''}${hasGoal ? '' : ' no-goal'}`.trim()}
+          >
+            <span>{band.label}</span>
+            <strong>
+              {!hasGoal
+                ? 'Meta não cadastrada'
+                : band.reached ? 'Meta atingida' : money.format(band.missing)}
+            </strong>
+            <small>
+              Faixa de {Math.round(band.target * 100)}%: {money.format(band.targetValue)}
+            </small>
+          </article>
+        ))}
       </section>
 
       <section className="sip-pending-list">
