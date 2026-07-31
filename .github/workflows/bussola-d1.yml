@@ -7,8 +7,6 @@ on:
         description: "Identificador do disparo feito pelo painel"
         required: false
         default: ""
-  schedule:
-    - cron: "*/30 * * * *"
 
 permissions:
   contents: read
