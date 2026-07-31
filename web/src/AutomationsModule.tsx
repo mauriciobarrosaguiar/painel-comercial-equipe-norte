@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import AutomationScheduleSettings from './AutomationScheduleSettings'
 import './operations.css'
 
 type Command = {
@@ -148,6 +149,8 @@ export default function AutomationsModule({ onBack }: { onBack: () => void }) {
     {error && <div className="alert alert-error"><strong>Não foi possível concluir:</strong> {error}</div>}
     {message && <div className="alert alert-success">{message}</div>}
     {data.aviso && <div className="alert alert-error">{data.aviso}</div>}
+
+    <AutomationScheduleSettings />
 
     <section className="automation-actions">
       {actions.map(([type, title, description]) => <article key={type}>
