@@ -8,6 +8,9 @@ on:
     paths:
       - .github/workflows/processar-comandos-painel.yml
       - web/functions/api/automacoes.js
+      - web/functions/api/configuracoes-automacao.js
+      - web/functions/api/internal/agendar-automacoes.js
+      - web/migrations/10020_configuracoes_automacao.sql
   schedule:
     - cron: "*/5 * * * *"
 
@@ -28,6 +31,21 @@ jobs:
       PAINEL_ADMIN_KEY: ${{ secrets.PAINEL_ADMIN_KEY }}
       GH_TOKEN: ${{ github.token }}
     steps:
+      - name: Criar comandos automáticos vencidos
+        shell: bash
+        run: |
+          set -u
+          echo "Verificando intervalos configurados no painel..."
+          if curl --fail-with-body --silent --show-error \
+            --request POST "${PAINEL_URL}/api/internal/agendar-automacoes" \
+            --header "x-admin-key: ${PAINEL_ADMIN_KEY}" \
+            --header "content-type: application/json" \
+            --data '{}' > agendamentos.json; then
+            cat agendamentos.json
+          else
+            echo "::warning::Não foi possível consultar os intervalos agora. A fila existente continuará sendo processada e a próxima verificação ocorrerá em até 5 minutos."
+          fi
+
       - name: Processar fila do painel
         shell: bash
         run: |
