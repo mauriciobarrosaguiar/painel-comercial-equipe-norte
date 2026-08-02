@@ -49,6 +49,30 @@ jobs:
           CLOUDFLARE_D1_DATABASE: painel-equipe-norte-db
         run: python scripts/extrair_bussola_d1_corrigido.py
 
+      - name: Atualizar mês fechado com faturamentos retroativos
+        env:
+          PAINEL_URL: https://painel-equipe-norte.pages.dev
+          PAINEL_ADMIN_KEY: ${{ secrets.PAINEL_ADMIN_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          ANO_MES=$(date -u -d "$(date -u +%Y-%m-01) -1 month" +%Y-%m)
+          jq -n \
+            --arg ano_mes "$ANO_MES" \
+            '{
+              ano_mes:$ano_mes,
+              automatico:true,
+              reprocessar:true,
+              somente_se_alterado:true,
+              apenas_fechado:true,
+              motivo:"Atualização automática após extração da Bússola: faturamentos retroativos incorporados ao mês fechado."
+            }' > reconciliar-fechamento.json
+          curl --fail-with-body --silent --show-error \
+            --request POST "${PAINEL_URL}/api/internal/fechamento-mensal" \
+            --header "x-admin-key: ${PAINEL_ADMIN_KEY}" \
+            --header "content-type: application/json" \
+            --data @reconciliar-fechamento.json | tee reconciliacao-fechamento.json
+
   finalizar_comando:
     if: ${{ always() && github.event_name == 'workflow_dispatch' && inputs.command_id != '' }}
     needs: extrair
@@ -65,7 +89,7 @@ jobs:
           set -euo pipefail
           if [ "$RESULTADO" = "success" ]; then
             STATUS="concluido"
-            MENSAGEM="Extração do Bússola concluída e sincronizada no painel."
+            MENSAGEM="Extração do Bússola concluída, sincronizada e os meses fechados foram reconciliados."
             ERRO=""
           else
             STATUS="erro"
