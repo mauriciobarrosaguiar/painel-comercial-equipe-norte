@@ -63,7 +63,7 @@ export async function onRequestGet({ request, env }) {
       pedidoParams.push(faixa.inicio, faixa.fim)
     }
 
-    const faturamentoWhere = [PEDIDO_FATURADO]
+    const faturamentoWhere = [PEDIDO_FATURADO, ITEM_ATIVO]
     const faturamentoParams = []
     if (faixa.inicio && faixa.fim) {
       faturamentoWhere.push('DATE(COALESCE(pe.data_faturamento,pe.data_pedido)) BETWEEN DATE(?) AND DATE(?)')
