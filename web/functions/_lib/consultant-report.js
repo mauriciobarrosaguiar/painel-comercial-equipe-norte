@@ -11,6 +11,7 @@ const PERIODOS = new Set(['mes-atual', 'mes-anterior', 'todo-periodo', 'personal
 const MIX_PRIORITARIO = "UPPER(TRIM(COALESCE(pr.tipo_mix,'')))='PRIORITARIO'"
 const MIX_LANCAMENTO = "UPPER(TRIM(COALESCE(pr.tipo_mix,'')))='LANCAMENTO'"
 const MIX_COMBATE = "UPPER(TRIM(COALESCE(pr.tipo_mix,'')))='COMBATE'"
+const CONSULTOR_FATURAMENTO = 'COALESCE(pe.consultor_bussola_id,pe.consultor_id,cl.consultor_id)'
 const SETORES = {
   'ALESSANDRA FREITAS SA': '18150300',
   'MAURICIO BARROS DE AGUIAR': '18150301',
@@ -101,15 +102,20 @@ export async function loadConsultantReport(request, env) {
   const period = periodFrom(params)
   const uf = text(params.get('uf')).toUpperCase().slice(0, 2)
 
-  const clientJoin = ['cl.consultor_id=c.id', 'cl.carteira_importada=1', 'cl.ativo=1']
-  const clientParams = []
-  if (uf) { clientJoin.push("UPPER(TRIM(COALESCE(cl.uf,'')))=?"); clientParams.push(uf) }
+  const sectorWhere = ['cl.carteira_importada=1', 'cl.ativo=1']
+  const sectorParams = []
+  if (uf) { sectorWhere.push("UPPER(TRIM(COALESCE(cl.uf,'')))=?"); sectorParams.push(uf) }
 
-  const orderJoin = ['pe.cliente_id=cl.id', PEDIDO_FATURADO]
-  const orderParams = []
+  const revenueWhere = [PEDIDO_FATURADO, ITEM_ATIVO]
+  const revenueParams = []
   if (period.inicio && period.fim) {
-    orderJoin.push('DATE(COALESCE(pe.data_faturamento,pe.data_pedido)) BETWEEN DATE(?) AND DATE(?)')
-    orderParams.push(period.inicio, period.fim)
+    revenueWhere.push('DATE(COALESCE(pe.data_faturamento,pe.data_pedido)) BETWEEN DATE(?) AND DATE(?)')
+    revenueParams.push(period.inicio, period.fim)
+  }
+  if (uf) {
+    revenueWhere.push('cl.carteira_importada=1')
+    revenueWhere.push("UPPER(TRIM(COALESCE(cl.uf,'')))=?")
+    revenueParams.push(uf)
   }
 
   const pendingWhere = [PEDIDO_NAO_FATURADO, ITEM_ATIVO, 'cl.carteira_importada=1', 'cl.ativo=1']
@@ -131,6 +137,23 @@ export async function loadConsultantReport(request, env) {
         SUM(ol_lancamentos) ol_lancamentos
       FROM metas WHERE escopo='consultor' AND ${metaCondition}
       GROUP BY consultor_id
+    ), setores_carteira AS (
+      SELECT cl.consultor_id,MIN(NULLIF(TRIM(cl.setor_rep),'')) setor_carteira
+        FROM clientes cl
+       WHERE ${sectorWhere.join(' AND ')}
+       GROUP BY cl.consultor_id
+    ), faturamento_periodo AS (
+      SELECT ${CONSULTOR_FATURAMENTO} consultor_id,
+        COALESCE(SUM(ip.valor_faturado),0) ol_total_faturado,
+        COALESCE(SUM(CASE WHEN ${MIX_SEM_COMBATE} THEN ip.valor_faturado ELSE 0 END),0) ol_sem_combate,
+        COALESCE(SUM(CASE WHEN ${MIX_PRIORITARIO} THEN ip.valor_faturado ELSE 0 END),0) ol_prioritarios,
+        COALESCE(SUM(CASE WHEN ${MIX_LANCAMENTO} THEN ip.valor_faturado ELSE 0 END),0) ol_lancamentos
+      FROM itens_pedido ip
+      JOIN pedidos pe ON pe.id=ip.pedido_id
+      LEFT JOIN clientes cl ON cl.id=pe.cliente_id
+      LEFT JOIN produtos pr ON pr.id=ip.produto_id
+      WHERE ${revenueWhere.join(' AND ')}
+      GROUP BY ${CONSULTOR_FATURAMENTO}
     ), pendentes_periodo AS (
       SELECT cl.consultor_id,
         COALESCE(SUM(${VALOR_ITEM_NAO_FATURADO}),0) valor_nao_faturado,
@@ -145,11 +168,11 @@ export async function loadConsultantReport(request, env) {
       WHERE ${pendingWhere.join(' AND ')}
       GROUP BY cl.consultor_id
     )
-    SELECT c.id,c.nome,MIN(NULLIF(TRIM(cl.setor_rep),'')) setor_carteira,
-      COALESCE(SUM(ip.valor_faturado),0) ol_total_faturado,
-      COALESCE(SUM(CASE WHEN ${MIX_SEM_COMBATE} THEN ip.valor_faturado ELSE 0 END),0) ol_sem_combate,
-      COALESCE(SUM(CASE WHEN ${MIX_PRIORITARIO} THEN ip.valor_faturado ELSE 0 END),0) ol_prioritarios,
-      COALESCE(SUM(CASE WHEN ${MIX_LANCAMENTO} THEN ip.valor_faturado ELSE 0 END),0) ol_lancamentos,
+    SELECT c.id,c.nome,sc.setor_carteira,
+      COALESCE(fp.ol_total_faturado,0) ol_total_faturado,
+      COALESCE(fp.ol_sem_combate,0) ol_sem_combate,
+      COALESCE(fp.ol_prioritarios,0) ol_prioritarios,
+      COALESCE(fp.ol_lancamentos,0) ol_lancamentos,
       COALESCE(m.ol_sem_combate,0) meta_ol_sem_combate,
       COALESCE(m.ol_prioritarios,0) meta_ol_prioritarios,
       COALESCE(m.ol_lancamentos,0) meta_ol_lancamentos,
@@ -159,16 +182,11 @@ export async function loadConsultantReport(request, env) {
       COALESCE(pd.valor_nao_faturado_lancamentos,0) valor_nao_faturado_lancamentos,
       COALESCE(pd.valor_nao_faturado_combate,0) valor_nao_faturado_combate
     FROM consultores c
-    LEFT JOIN clientes cl ON ${clientJoin.join(' AND ')}
-    LEFT JOIN pedidos pe ON ${orderJoin.join(' AND ')}
-    LEFT JOIN itens_pedido ip ON ip.pedido_id=pe.id AND ${ITEM_ATIVO}
-    LEFT JOIN produtos pr ON pr.id=ip.produto_id
+    LEFT JOIN setores_carteira sc ON sc.consultor_id=c.id
+    LEFT JOIN faturamento_periodo fp ON fp.consultor_id=c.id
     LEFT JOIN metas_periodo m ON m.consultor_id=c.id
     LEFT JOIN pendentes_periodo pd ON pd.consultor_id=c.id
     WHERE c.ativo=1 AND c.origem='PAINEL_EQUIPE'
-    GROUP BY c.id,c.nome,m.ol_sem_combate,m.ol_prioritarios,m.ol_lancamentos,
-      pd.valor_nao_faturado,pd.valor_nao_faturado_sem_combate,pd.valor_nao_faturado_prioritarios,
-      pd.valor_nao_faturado_lancamentos,pd.valor_nao_faturado_combate
     ORDER BY ol_sem_combate DESC,c.nome COLLATE NOCASE
   `
   const managerSql = `
@@ -179,7 +197,7 @@ export async function loadConsultantReport(request, env) {
   `
 
   const [reportResult, managerResult] = await env.DB.batch([
-    env.DB.prepare(reportSql).bind(...metaParams, ...pendingParams, ...clientParams, ...orderParams),
+    env.DB.prepare(reportSql).bind(...metaParams, ...sectorParams, ...revenueParams, ...pendingParams),
     env.DB.prepare(managerSql).bind(...metaParams),
   ])
 
@@ -205,5 +223,5 @@ export async function loadConsultantReport(request, env) {
   }).filter((item) => item.id && item.nome)
 
   const managerGoal = managerResult.results?.[0] || {}
-  return { period, uf, rows, total: totalize(rows, managerGoal) }
+  return { period, uf, rows, total: totalize(rows, managerGoal), regra_faturamento: 'Representante de origem do Bússola.' }
 }

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import os
+import re
+import unicodedata
 from typing import Any
 from uuid import uuid4
 
@@ -16,6 +18,55 @@ somente_digitos = legacy.somente_digitos
 numero = legacy.numero
 data_iso = legacy.data_iso
 id_estavel = legacy.id_estavel
+
+
+def normalizar_nome(valor: Any) -> str:
+    entrada = texto(valor)
+    if not entrada:
+        return ""
+    entrada = unicodedata.normalize("NFD", entrada)
+    entrada = "".join(ch for ch in entrada if unicodedata.category(ch) != "Mn")
+    return re.sub(r"[^A-Z0-9]+", " ", entrada.upper()).strip()
+
+
+def nome_principal_representante(valor: Any) -> str:
+    partes = [normalizar_nome(parte) for parte in texto(valor).split("/")]
+    return next((parte for parte in partes if parte), normalizar_nome(valor))
+
+
+def linhas_resultado(dados: dict[str, Any]) -> list[dict[str, Any]]:
+    resultados = dados.get("result") or []
+    if not resultados:
+        return []
+    return resultados[0].get("results") or []
+
+
+def carregar_consultores_oficiais(database_id: str) -> dict[str, str]:
+    dados = legacy.executar(
+        database_id,
+        "SELECT id,nome FROM consultores WHERE ativo=1 AND origem='PAINEL_EQUIPE'",
+    )
+    return {
+        normalizar_nome(linha.get("nome")): texto(linha.get("id"))
+        for linha in linhas_resultado(dados)
+        if normalizar_nome(linha.get("nome")) and texto(linha.get("id"))
+    }
+
+
+def localizar_consultor_bussola(representante: Any, consultores: dict[str, str]) -> str | None:
+    nome = nome_principal_representante(representante)
+    if not nome:
+        return None
+    if nome in consultores:
+        return consultores[nome]
+
+    candidatos = [
+        consultor_id
+        for nome_oficial, consultor_id in consultores.items()
+        if nome_oficial and (nome_oficial in nome or nome in nome_oficial)
+    ]
+    candidatos_unicos = list(dict.fromkeys(candidatos))
+    return candidatos_unicos[0] if len(candidatos_unicos) == 1 else None
 
 
 def sincronizar() -> None:
@@ -48,6 +99,7 @@ def sincronizar() -> None:
         total_extraido = len(base_extraida)
         base = deduplicar_exportacao_bussola(base_extraida)
         duplicatas_ignoradas = total_extraido - len(base)
+        consultores_oficiais = carregar_consultores_oficiais(database_id)
 
         legacy.executar(
             database_id,
@@ -61,6 +113,8 @@ def sincronizar() -> None:
               pedido_origem TEXT NOT NULL,
               nota_fiscal TEXT,
               cliente_id TEXT,
+              representante_bussola TEXT,
+              consultor_bussola_id TEXT,
               centro_distribuicao TEXT,
               uf_centro_distribuicao TEXT,
               data_pedido TEXT,
@@ -94,8 +148,8 @@ def sincronizar() -> None:
             """,
         )
 
-        # O Bússola fornece pedidos, itens, CNPJ e EAN.
-        # Ele NÃO define a carteira, o consultor, o GD ou a UF do cliente.
+        # CNPJ continua definindo a carteira atual, o GD e a UF do cliente.
+        # O representante do Bússola é preservado separadamente apenas para atribuir a origem da venda.
         linhas_clientes: dict[str, list[Any]] = {}
         linhas_produtos: dict[str, list[Any]] = {}
 
@@ -172,6 +226,7 @@ def sincronizar() -> None:
 
         linhas_pedidos: list[list[Any]] = []
         linhas_itens: list[list[Any]] = []
+        pedidos_com_consultor_bussola = 0
 
         for (pedido_origem, nota_fiscal), grupo in base.groupby(["_pedido", "_nota"], dropna=False):
             primeira = grupo.iloc[0]
@@ -179,6 +234,13 @@ def sincronizar() -> None:
             cliente_id = id_estavel("cli", cnpj) if cnpj else None
             pedido_id = id_estavel("ped", pedido_origem, nota_fiscal)
             valor_total = float(grupo["valor_faturado"].map(numero).sum())
+            representante_bussola = texto(primeira.get("representante"))
+            consultor_bussola_id = localizar_consultor_bussola(
+                representante_bussola,
+                consultores_oficiais,
+            )
+            if consultor_bussola_id:
+                pedidos_com_consultor_bussola += 1
 
             linhas_pedidos.append(
                 [
@@ -187,6 +249,8 @@ def sincronizar() -> None:
                     pedido_origem,
                     nota_fiscal,
                     cliente_id,
+                    representante_bussola or None,
+                    consultor_bussola_id,
                     texto(primeira.get("centro_distribuicao")),
                     texto(primeira.get("uf_centro_distribuicao")),
                     data_iso(primeira.get("data_do_pedido")),
@@ -227,6 +291,7 @@ def sincronizar() -> None:
                 "bussola_pedidos_staging_v2",
                 [
                     "run_id", "id", "pedido_origem", "nota_fiscal", "cliente_id",
+                    "representante_bussola", "consultor_bussola_id",
                     "centro_distribuicao", "uf_centro_distribuicao", "data_pedido",
                     "data_faturamento", "status", "valor_faturado", "atualizado_em",
                 ],
@@ -262,10 +327,12 @@ def sincronizar() -> None:
                     "sql": """
                     INSERT INTO pedidos
                       (id,pedido_origem,nota_fiscal,cliente_id,consultor_id,
+                       consultor_bussola_id,representante_bussola,
                        centro_distribuicao,uf_centro_distribuicao,data_pedido,
                        data_faturamento,status,valor_faturado,origem,atualizado_em,
                        ativo,ultima_extracao_id)
                     SELECT s.id,s.pedido_origem,s.nota_fiscal,s.cliente_id,c.consultor_id,
+                           s.consultor_bussola_id,s.representante_bussola,
                            s.centro_distribuicao,s.uf_centro_distribuicao,s.data_pedido,
                            s.data_faturamento,s.status,s.valor_faturado,'BUSSOLA',s.atualizado_em,
                            1,?
@@ -277,6 +344,8 @@ def sincronizar() -> None:
                       nota_fiscal=excluded.nota_fiscal,
                       cliente_id=excluded.cliente_id,
                       consultor_id=excluded.consultor_id,
+                      consultor_bussola_id=excluded.consultor_bussola_id,
+                      representante_bussola=excluded.representante_bussola,
                       centro_distribuicao=excluded.centro_distribuicao,
                       uf_centro_distribuicao=excluded.uf_centro_distribuicao,
                       data_pedido=excluded.data_pedido,
@@ -330,6 +399,7 @@ def sincronizar() -> None:
         legacy.executar(database_id, "DELETE FROM bussola_pedidos_staging_v2 WHERE run_id=?", [run_uuid])
         legacy.executar(database_id, "DELETE FROM bussola_itens_staging_v2 WHERE run_id=?", [run_uuid])
 
+        pedidos_sem_consultor_bussola = len(linhas_pedidos) - pedidos_com_consultor_bussola
         resumo = json.dumps(
             {
                 "linhas": int(len(base)),
@@ -337,7 +407,10 @@ def sincronizar() -> None:
                 "duplicatas_ignoradas": int(duplicatas_ignoradas),
                 "pedidos": int(len(linhas_pedidos)),
                 "itens": int(len(linhas_itens)),
+                "pedidos_com_consultor_bussola": int(pedidos_com_consultor_bussola),
+                "pedidos_sem_consultor_bussola": int(pedidos_sem_consultor_bussola),
                 "regra_carteira": "PAINEL_EQUIPE_NORTE",
+                "regra_faturamento_consultor": "REPRESENTANTE_BUSSOLA_COM_FALLBACK_CARTEIRA",
                 "campo_valor": "valor_faturado",
                 "sincronizado_em": timestamp,
             },
@@ -356,7 +429,11 @@ def sincronizar() -> None:
         legacy.executar(
             database_id,
             "UPDATE integracao_credenciais SET status='conectada',mensagem_status=?,testado_em=? WHERE integracao='BUSSOLA'",
-            [f"Conexão validada. {len(linhas_pedidos)} pedidos sincronizados pela carteira do Painel Equipe Norte.", timestamp],
+            [
+                f"Conexão validada. {len(linhas_pedidos)} pedidos sincronizados; "
+                f"{pedidos_com_consultor_bussola} vinculados ao representante de origem.",
+                timestamp,
+            ],
         )
         legacy.executar(
             database_id,
@@ -364,15 +441,17 @@ def sincronizar() -> None:
             [
                 len(base),
                 f"{len(linhas_pedidos)} pedidos e {len(linhas_itens)} itens sincronizados; "
-                f"{duplicatas_ignoradas} duplicatas ignoradas.",
+                f"{duplicatas_ignoradas} duplicatas ignoradas; "
+                f"{pedidos_com_consultor_bussola} pedidos vinculados ao representante de origem.",
                 timestamp,
                 extracao_id,
             ],
         )
         print(
             f"Bússola sincronizado corretamente: {len(linhas_pedidos)} pedidos, "
-            f"{len(linhas_itens)} itens, {len(base)} linhas e "
-            f"{duplicatas_ignoradas} duplicatas ignoradas."
+            f"{len(linhas_itens)} itens, {len(base)} linhas, "
+            f"{duplicatas_ignoradas} duplicatas ignoradas e "
+            f"{pedidos_com_consultor_bussola} pedidos vinculados ao representante de origem."
         )
     except Exception as exc:
         finalizado = pd.Timestamp.now(tz="America/Sao_Paulo").isoformat()

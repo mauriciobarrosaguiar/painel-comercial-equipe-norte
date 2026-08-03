@@ -18,7 +18,7 @@ export function testDatabase() {
     CREATE TABLE consultores(id TEXT PRIMARY KEY,nome TEXT,uf TEXT,ativo INTEGER,origem TEXT,atualizado_em TEXT);
     CREATE TABLE clientes(id TEXT PRIMARY KEY,cnpj TEXT,razao_social TEXT,nome_fantasia TEXT,cidade TEXT,uf TEXT,consultor_id TEXT,nome_gd TEXT,grupo_economico TEXT,rede_associacao TEXT,bandeira TEXT,situacao TEXT,ativo INTEGER,carteira_importada INTEGER,setor_rep TEXT);
     CREATE TABLE produtos(id TEXT PRIMARY KEY,ean TEXT,descricao TEXT,laboratorio TEXT,tipo_mix TEXT,mercado_farma_ativo INTEGER,ativo INTEGER);
-    CREATE TABLE pedidos(id TEXT PRIMARY KEY,pedido_origem TEXT,nota_fiscal TEXT,cliente_id TEXT,consultor_id TEXT,data_pedido TEXT,data_faturamento TEXT,status TEXT,valor_faturado REAL,origem TEXT,ativo INTEGER,atualizado_em TEXT);
+    CREATE TABLE pedidos(id TEXT PRIMARY KEY,pedido_origem TEXT,nota_fiscal TEXT,cliente_id TEXT,consultor_id TEXT,data_pedido TEXT,data_faturamento TEXT,status TEXT,valor_faturado REAL,origem TEXT,ativo INTEGER,atualizado_em TEXT,consultor_bussola_id TEXT,representante_bussola TEXT);
     CREATE TABLE itens_pedido(id TEXT PRIMARY KEY,pedido_id TEXT,produto_id TEXT,ean TEXT,descricao TEXT,quantidade_solicitada REAL DEFAULT 0,quantidade_atendida REAL DEFAULT 0,quantidade_faturada REAL,valor_faturado REAL,ativo INTEGER,preco_unitario_sem_imposto REAL DEFAULT 0,preco_unitario_com_imposto REAL DEFAULT 0,valor_total_solicitado_sem_imposto REAL DEFAULT 0,total_atendido_sem_imposto REAL DEFAULT 0);
     CREATE TABLE metas(id TEXT PRIMARY KEY,consultor_id TEXT,escopo TEXT,ano_mes TEXT,ol_sem_combate REAL,ol_prioritarios REAL,ol_lancamentos REAL,clientes_positivados INTEGER,importacao_id TEXT,atualizado_em TEXT,UNIQUE(ano_mes,escopo,consultor_id));
     CREATE TABLE metas_historico(id INTEGER PRIMARY KEY AUTOINCREMENT,meta_id TEXT,ano_mes TEXT,escopo TEXT,consultor_id TEXT,ol_sem_combate REAL,ol_prioritarios REAL,ol_lancamentos REAL,clientes_positivados INTEGER,importacao_anterior_id TEXT,nova_importacao_id TEXT,substituida_em TEXT);
@@ -49,12 +49,12 @@ export function testDatabase() {
       ('combate','333','Combate','EMS Genéricos','COMBATE',0,1),
       ('desconhecido','444','Desconhecido','EMS Genéricos','SEM CLASSIFICACAO',0,1);
     INSERT INTO pedidos VALUES
-      ('p1','P1','NF1','cl1','co1','2026-07-10','2026-07-10','FATURADO',200,'BUSSOLA',1,'2026-07-10'),
-      ('p2','P2','NF2','cl1','co1','2026-07-10','2026-07-10','NAO FATURADO',700,'BUSSOLA',1,'2026-07-10'),
-      ('p3','P3','NF3','cl1','co1','2026-07-10','2026-07-10','FATURADO',800,'BUSSOLA',0,'2026-07-10'),
-      ('p4','P4','0-0','cl1','co1','2026-07-11',NULL,'ATENDIDO',0,'BUSSOLA',1,'2026-07-11'),
-      ('p5','P5','0-0','cl2','co1','2026-07-12',NULL,'ENVIADO',0,'BUSSOLA',1,'2026-07-12'),
-      ('p6','P6','0-0','cl1','co1','2026-07-13',NULL,'ATENDIDO PARCIAL',0,'BUSSOLA',1,'2026-07-13');
+      ('p1','P1','NF1','cl1','co1','2026-07-10','2026-07-10','FATURADO',200,'BUSSOLA',1,'2026-07-10',NULL,NULL),
+      ('p2','P2','NF2','cl1','co1','2026-07-10','2026-07-10','NAO FATURADO',700,'BUSSOLA',1,'2026-07-10',NULL,NULL),
+      ('p3','P3','NF3','cl1','co1','2026-07-10','2026-07-10','FATURADO',800,'BUSSOLA',0,'2026-07-10',NULL,NULL),
+      ('p4','P4','0-0','cl1','co1','2026-07-11',NULL,'ATENDIDO',0,'BUSSOLA',1,'2026-07-11',NULL,NULL),
+      ('p5','P5','0-0','cl2','co1','2026-07-12',NULL,'ENVIADO',0,'BUSSOLA',1,'2026-07-12',NULL,NULL),
+      ('p6','P6','0-0','cl1','co1','2026-07-13',NULL,'ATENDIDO PARCIAL',0,'BUSSOLA',1,'2026-07-13',NULL,NULL);
     INSERT INTO itens_pedido(id,pedido_id,produto_id,ean,descricao,quantidade_faturada,valor_faturado,ativo,preco_unitario_sem_imposto,preco_unitario_com_imposto) VALUES
       ('i1','p1','linha','111','Linha',1,100,1,90,100),
       ('i2','p1','prioritario','222','Prioritário',1,50,1,45,50),
@@ -85,6 +85,7 @@ export function testDatabase() {
     INSERT INTO colaboradores_acesso(id,login,email,nome,consultor_id,ativo) VALUES('ac-co1','m0043497','m0043497@ems.com.br','Ana','co1',1);
   `)
   return {
+    raw: db,
     prepare(sql) { return statement(db, sql) },
     async batch(items) { return Promise.all(items.map((item) => item.all())) },
   }

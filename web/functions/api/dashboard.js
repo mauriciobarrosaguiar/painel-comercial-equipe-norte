@@ -16,6 +16,7 @@ const iso = (y, m, d) => `${String(y).padStart(4, '0')}-${String(m).padStart(2, 
 const mostrar = (v) => v ? `${v.slice(8, 10)}/${v.slice(5, 7)}/${v.slice(0, 4)}` : ''
 const numero = (v) => Number.isFinite(Number(v)) ? Number(v) : 0
 const percentual = (valor, meta) => numero(meta) > 0 ? (numero(valor) / numero(meta)) * 100 : 0
+const CONSULTOR_FATURAMENTO = 'COALESCE(pe.consultor_bussola_id,pe.consultor_id,cl.consultor_id)'
 
 function periodo(params) {
   const tipo = PERIODOS.has(params.get('periodo')) ? params.get('periodo') : 'mes-atual'
@@ -51,9 +52,12 @@ function filtros(params) {
     cond.push('DATE(COALESCE(pe.data_faturamento,pe.data_pedido)) BETWEEN DATE(?) AND DATE(?)')
     valores.push(faixa.inicio, faixa.fim)
   }
-  if (consultor || uf) cond.push('cl.carteira_importada=1')
-  if (consultor) { cond.push('cl.consultor_id=?'); valores.push(consultor) }
-  if (uf) { cond.push("UPPER(TRIM(COALESCE(cl.uf,'')))=?"); valores.push(uf) }
+  if (consultor) { cond.push(`${CONSULTOR_FATURAMENTO}=?`); valores.push(consultor) }
+  if (uf) {
+    cond.push('cl.carteira_importada=1')
+    cond.push("UPPER(TRIM(COALESCE(cl.uf,'')))=?")
+    valores.push(uf)
+  }
 
   const condClientesVenda = [ITEM_FATURADO, 'cl.carteira_importada=1', 'cl.ativo=1', 'ip.valor_faturado>0']
   const valoresClientesVenda = []
@@ -311,7 +315,7 @@ export async function onRequestGet({ request, env }) {
       regra_calculo: {
         valor: 'itens_pedido.valor_faturado (coluna AA do Bússola)',
         data: 'data_faturamento; data_pedido apenas como fallback',
-        carteira: 'Painel Equipe Norte por CNPJ para filtros de consultor e UF',
+        carteira: 'Faturamento pelo representante de origem do Bússola; carteira, clientes e UF permanecem vinculados ao CNPJ do Painel Equipe Norte.',
         nao_faturados: 'Atendido/Atendido parcial usam total_atendido_sem_imposto; Enviado usa valor_total_solicitado_sem_imposto. Contagem distinta por pedido.',
         projecao: 'Dias úteis, excluindo sábados, domingos e feriados comerciais nacionais.',
       },
