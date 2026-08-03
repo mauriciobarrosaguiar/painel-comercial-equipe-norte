@@ -22,6 +22,33 @@ def normalizado(value) -> str:
     return str(value or "").strip().upper()
 
 
+def moeda(frame: pd.DataFrame, coluna: str) -> float:
+    return round(float(frame[coluna].fillna(0).sum()), 2)
+
+
+def calcular(frame: pd.DataFrame, quantidade: str, preco: str) -> float:
+    total = frame[quantidade].fillna(0).astype(float) * frame[preco].fillna(0).astype(float)
+    return round(float(total.sum()), 2)
+
+
+def resumo_valores(frame: pd.DataFrame) -> dict[str, float | int]:
+    return {
+        "pedidos": int(frame["pedido_id"].astype(str).nunique()),
+        "linhas": int(len(frame)),
+        "solicitado_sem_imposto": moeda(frame, "valor_total_solicitado_sem_imposto"),
+        "solicitado_com_imposto": moeda(frame, "valor_total_solicitado_com_imposto"),
+        "atendido_sem_imposto": moeda(frame, "total_atendido_sem_imposto"),
+        "atendido_com_imposto": moeda(frame, "total_atendido_com_imposto"),
+        "faturado_exportado": moeda(frame, "valor_faturado"),
+        "faturado_calculado_sem_imposto": calcular(frame, "quantidade_faturada", "preco_unitario_sem_imposto"),
+        "faturado_calculado_com_imposto": calcular(frame, "quantidade_faturada", "preco_unitario_com_imposto"),
+        "atendido_calculado_sem_imposto": calcular(frame, "quantidade_atendida", "preco_unitario_sem_imposto"),
+        "atendido_calculado_com_imposto": calcular(frame, "quantidade_atendida", "preco_unitario_com_imposto"),
+        "solicitado_calculado_sem_imposto": calcular(frame, "quantidade_solicitada", "preco_unitario_sem_imposto"),
+        "solicitado_calculado_com_imposto": calcular(frame, "quantidade_solicitada", "preco_unitario_com_imposto"),
+    }
+
+
 def main() -> None:
     if RUNTIME.exists():
         shutil.rmtree(RUNTIME)
@@ -54,29 +81,15 @@ def main() -> None:
     mauricio = base[representante.str.contains("MAURICIO BARROS DE AGUIAR", regex=False)].copy()
 
     resumo = {
-        "linhas_brutas": int(len(bruto)),
-        "linhas_tratadas": int(len(base)),
-        "pedidos_gerais": int(base["pedido_id"].astype(str).nunique()),
-        "solicitado_geral": round(float(base["valor_total_solicitado_sem_imposto"].sum()), 2),
-        "atendido_geral": round(float(base["total_atendido_sem_imposto"].sum()), 2),
-        "faturado_geral": round(float(base["valor_faturado"].sum()), 2),
-        "pedidos_mauricio": int(mauricio["pedido_id"].astype(str).nunique()),
-        "linhas_mauricio": int(len(mauricio)),
-        "solicitado_mauricio": round(float(mauricio["valor_total_solicitado_sem_imposto"].sum()), 2),
-        "atendido_mauricio": round(float(mauricio["total_atendido_sem_imposto"].sum()), 2),
-        "faturado_mauricio": round(float(mauricio["valor_faturado"].sum()), 2),
+        "geral": resumo_valores(base),
+        "mauricio": resumo_valores(mauricio),
         "status_mauricio": {
-            normalizado(status): {
-                "pedidos": int(grupo["pedido_id"].astype(str).nunique()),
-                "solicitado": round(float(grupo["valor_total_solicitado_sem_imposto"].sum()), 2),
-                "atendido": round(float(grupo["total_atendido_sem_imposto"].sum()), 2),
-                "faturado": round(float(grupo["valor_faturado"].sum()), 2),
-            }
+            normalizado(status): resumo_valores(grupo)
             for status, grupo in mauricio.groupby("status_pedido", dropna=False)
         },
         "colunas_origem": [str(coluna) for coluna in bruto.columns],
     }
-    print("EXTRACAO_MENSAL_JULHO_BUSSOLA=" + json.dumps(resumo, ensure_ascii=False, sort_keys=True))
+    print("COMPARACAO_VALORES_JULHO_BUSSOLA=" + json.dumps(resumo, ensure_ascii=False, sort_keys=True))
 
 
 if __name__ == "__main__":
