@@ -1,11 +1,11 @@
-import { FormEvent, useEffect, useState } from 'react'
+import { FormEvent, useEffect, useMemo, useState } from 'react'
 import SipDetailView, { SipDetail } from './SipDetailView'
 import SipEditDialog from './SipEditDialog'
 import SipSummaryReport, { SipSummaryData } from './SipSummaryReport'
 import './sips.css'
 import './sip-phase4.css'
 
- type Sip = {
+type Sip = {
   id: string
   nome: string
   redes: number
@@ -46,10 +46,44 @@ const money = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL
 const num = new Intl.NumberFormat('pt-BR')
 const pct = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })
 
+function currentMonth() {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric',
+    month: '2-digit',
+  }).formatToParts(new Date()).map((part) => [part.type, part.value]))
+  return `${parts.year}-${parts.month}`
+}
+
+function initialMonth() {
+  const month = new URLSearchParams(window.location.search).get('mes') || ''
+  return /^\d{4}-\d{2}$/.test(month) ? month : currentMonth()
+}
+
+function monthRange(month: string) {
+  const [year, monthNumber] = month.split('-').map(Number)
+  const lastDay = new Date(Date.UTC(year, monthNumber, 0)).getUTCDate()
+  return {
+    inicio: `${month}-01`,
+    fim: `${month}-${String(lastDay).padStart(2, '0')}`,
+  }
+}
+
+function monthLabel(month: string) {
+  const [year, monthNumber] = month.split('-').map(Number)
+  const label = new Intl.DateTimeFormat('pt-BR', {
+    month: 'long',
+    year: 'numeric',
+    timeZone: 'America/Sao_Paulo',
+  }).format(new Date(Date.UTC(year, monthNumber - 1, 15, 12)))
+  return label.charAt(0).toUpperCase() + label.slice(1)
+}
+
 export default function SipsModule({ onBack, publicId }: { onBack: () => void; publicId?: string }) {
   const [data, setData] = useState<List | null>(null)
   const [detail, setDetail] = useState<Detail | null>(null)
   const [selected, setSelected] = useState(publicId || '')
+  const [selectedMonth, setSelectedMonth] = useState(initialMonth)
   const [editingSip, setEditingSip] = useState<Sip | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -58,20 +92,44 @@ export default function SipsModule({ onBack, publicId }: { onBack: () => void; p
   const [deletingSipId, setDeletingSipId] = useState('')
   const [message, setMessage] = useState('')
 
-  async function loadList() {
-    const response = await fetch('/api/sips?periodo=mes-atual', { cache: 'no-store' })
+  const selectedRange = useMemo(() => monthRange(selectedMonth), [selectedMonth])
+  const publicLink = useMemo(() => {
+    if (!detail) return ''
+    const url = new URL(detail.link_publico, window.location.origin)
+    url.searchParams.set('mes', selectedMonth)
+    return url.toString()
+  }, [detail, selectedMonth])
+
+  function updateMonthInUrl(month: string) {
+    const url = new URL(window.location.href)
+    url.searchParams.set('mes', month)
+    window.history.replaceState(null, '', url)
+  }
+
+  async function loadList(month = selectedMonth) {
+    const range = monthRange(month)
+    const query = new URLSearchParams({
+      periodo: 'personalizado',
+      inicio: range.inicio,
+      fim: range.fim,
+    })
+    const response = await fetch(`/api/sips?${query}`, { cache: 'no-store' })
     const result = await response.json()
     if (!response.ok) throw new Error(result.detalhe || result.erro)
     setData(result)
   }
 
-  async function loadDetail(id: string) {
+  async function loadDetail(id: string, month = selectedMonth) {
     setLoading(true)
     try {
-      const response = await fetch(
-        `/api/sips/detalhe?id=${encodeURIComponent(id)}${publicId ? '&publico=1' : ''}`,
-        { cache: 'no-store' },
-      )
+      const range = monthRange(month)
+      const query = new URLSearchParams({
+        id,
+        inicio: range.inicio,
+        fim: range.fim,
+      })
+      if (publicId) query.set('publico', '1')
+      const response = await fetch(`/api/sips/detalhe?${query}`, { cache: 'no-store' })
       const result = await response.json()
       if (!response.ok) throw new Error(result.detalhe || result.erro)
       setDetail(result)
@@ -84,11 +142,32 @@ export default function SipsModule({ onBack, publicId }: { onBack: () => void; p
     }
   }
 
+  async function changeMonth(month: string) {
+    if (!/^\d{4}-\d{2}$/.test(month)) return
+    setSelectedMonth(month)
+    updateMonthInUrl(month)
+    setLoading(true)
+    setError('')
+    setMessage('')
+    try {
+      if (publicId) {
+        await loadDetail(publicId, month)
+      } else {
+        await loadList(month)
+        if (selected) await loadDetail(selected, month)
+      }
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason))
+    } finally {
+      setLoading(false)
+    }
+  }
+
   useEffect(() => {
     void (async () => {
       try {
-        if (publicId) await loadDetail(publicId)
-        else await loadList()
+        if (publicId) await loadDetail(publicId, selectedMonth)
+        else await loadList(selectedMonth)
       } catch (reason) {
         setError(reason instanceof Error ? reason.message : String(reason))
       } finally {
@@ -117,8 +196,8 @@ export default function SipsModule({ onBack, publicId }: { onBack: () => void; p
       if (!response.ok) throw new Error(result.detalhe || result.erro)
       setMessage(`${result.nome} cadastrada com ${result.clientes_vinculados} clientes.`)
       setShowForm(false)
-      await loadList()
-      await loadDetail(result.id)
+      await loadList(selectedMonth)
+      await loadDetail(result.id, selectedMonth)
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason))
     } finally {
@@ -149,7 +228,7 @@ export default function SipsModule({ onBack, publicId }: { onBack: () => void; p
         setSelected('')
         setDetail(null)
       }
-      await loadList()
+      await loadList(selectedMonth)
       setMessage(result.mensagem || `SIP ${sip.nome} excluída com sucesso.`)
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason))
@@ -159,16 +238,16 @@ export default function SipsModule({ onBack, publicId }: { onBack: () => void; p
   }
 
   async function finishEditing(messageText: string) {
-    await loadList()
+    await loadList(selectedMonth)
     setEditingSip(null)
     setMessage(messageText)
     setError('')
   }
 
   async function copy() {
-    if (!detail) return
-    await navigator.clipboard.writeText(detail.link_publico)
-    setMessage('Link individual copiado.')
+    if (!publicLink) return
+    await navigator.clipboard.writeText(publicLink)
+    setMessage(`Link individual de ${monthLabel(selectedMonth)} copiado.`)
   }
 
   const updateSummary = (updated: SipSummaryData) => {
@@ -190,6 +269,21 @@ export default function SipsModule({ onBack, publicId }: { onBack: () => void; p
     } : current)
   }
 
+  const monthFilter = (id: string) => (
+    <label className="sip-month-filter" htmlFor={id}>
+      <span>Mês analisado</span>
+      <input
+        id={id}
+        type="month"
+        value={selectedMonth}
+        max={currentMonth()}
+        onChange={(event) => void changeMonth(event.target.value)}
+        disabled={loading}
+      />
+      <small>{monthLabel(selectedMonth)}</small>
+    </label>
+  )
+
   if (publicId) {
     return (
       <main className="content sip-public-page">
@@ -199,13 +293,14 @@ export default function SipsModule({ onBack, publicId }: { onBack: () => void; p
             <h1>{detail?.sip.nome || 'Resultado SIP'}</h1>
             <p>Vendas, notas e produtos dos CNPJs vinculados.</p>
           </div>
-          <div className="sip-hero-actions">
+          <div className="sip-hero-actions sip-hero-actions-period">
+            {monthFilter('sip-public-month')}
             <span>{detail?.periodo.inicio?.split('-').reverse().join('/')} a {detail?.periodo.fim?.split('-').reverse().join('/')}</span>
             {detail && <a className="secondary-button sip-download" href={detail.link_exportacao}>Baixar vendas detalhadas</a>}
           </div>
         </section>
         {error && <div className="alert alert-error">{error}</div>}
-        {loading ? <div className="sips-empty">Carregando…</div> : detail && <SipDetailView detail={detail} publicView />}
+        {loading ? <div className="sips-empty">Carregando {monthLabel(selectedMonth)}…</div> : detail && <SipDetailView detail={detail} publicView />}
       </main>
     )
   }
@@ -220,7 +315,8 @@ export default function SipsModule({ onBack, publicId }: { onBack: () => void; p
           <h1>SIP / Redes</h1>
           <p>Resultados, notas e exportações individuais por SIP.</p>
         </div>
-        <div className="sip-hero-actions">
+        <div className="sip-hero-actions sip-hero-actions-period">
+          {monthFilter('sip-admin-month')}
           <span>{data?.periodo.rotulo || 'Mês atual'}</span>
           <button className="secondary-button" onClick={() => setShowForm((current) => !current)}>Cadastrar SIP</button>
         </div>
@@ -253,10 +349,10 @@ export default function SipsModule({ onBack, publicId }: { onBack: () => void; p
       </section>
 
       <section className="sips-list">
-        <div className="sips-heading"><h2>SIPs cadastradas</h2><span>{data?.sips.length || 0}</span></div>
+        <div className="sips-heading"><h2>SIPs cadastradas — {monthLabel(selectedMonth)}</h2><span>{data?.sips.length || 0}</span></div>
         {data?.sips.map((sip) => (
           <article className="sip-card sip-card-row" key={sip.id}>
-            <button className="sip-card-main" type="button" onClick={() => void loadDetail(sip.id)}>
+            <button className="sip-card-main" type="button" onClick={() => void loadDetail(sip.id, selectedMonth)}>
               <div><h3>{sip.nome}</h3><p>{sip.redes} redes · {sip.nomes_redes || 'Sem rede informada'}</p></div>
               <div><span>Clientes</span><strong>{sip.clientes_com_venda}/{sip.cnpjs_vinculados || sip.clientes_ativos}</strong></div>
               <div><span>OL total</span><strong>{money.format(sip.ol_total)}</strong></div>
@@ -293,7 +389,7 @@ export default function SipsModule({ onBack, publicId }: { onBack: () => void; p
         <div className="sip-all-summaries-heading">
           <div>
             <span className="eyebrow">Objetivo preço líquido</span>
-            <h2>Resultado consolidado por SIP</h2>
+            <h2>Resultado consolidado por SIP — {monthLabel(selectedMonth)}</h2>
             <p>Cada linha soma todos os CNPJs vinculados ao respectivo grupo.</p>
           </div>
           <span>{data?.sips.length || 0} SIPs</span>
@@ -315,10 +411,14 @@ export default function SipsModule({ onBack, publicId }: { onBack: () => void; p
         <div className="sip-detail-backdrop" onClick={() => { setSelected(''); setDetail(null) }}>
           <aside className="sip-detail-panel" onClick={(event) => event.stopPropagation()}>
             <button className="detail-close" onClick={() => { setSelected(''); setDetail(null) }}>×</button>
-            {loading ? <div className="sips-empty">Carregando…</div> : detail && (
+            {loading ? <div className="sips-empty">Carregando {monthLabel(selectedMonth)}…</div> : detail && (
               <>
+                <div className="sip-detail-month-row">
+                  {monthFilter('sip-detail-month')}
+                  <span>{detail.periodo.inicio.split('-').reverse().join('/')} a {detail.periodo.fim.split('-').reverse().join('/')}</span>
+                </div>
                 <div className="sip-share">
-                  <code>{detail.link_publico}</code>
+                  <code>{publicLink}</code>
                   <button className="outline-button" onClick={() => void copy()}>Copiar link</button>
                   <a className="primary-action sip-download" href={detail.link_exportacao}>Baixar vendas</a>
                 </div>
