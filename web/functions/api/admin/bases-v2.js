@@ -271,7 +271,7 @@ async function importarMetas(env, rows, nome, anoMes) {
     `).bind(anoMes, token, agora, JSON.stringify(consultores)),
     env.DB.prepare(`
       INSERT INTO metas(id,ano_mes,escopo,consultor_id,ol_sem_combate,ol_prioritarios,ol_lancamentos,clientes_positivados,demanda_sem_combate,importacao_id,atualizado_em)
-      VALUES(?,?,'gerente',NULL,?,?,?,?,?,?,?,?)
+      VALUES(?,?,'gerente',NULL,?,?,?,?,?,?,?)
       ON CONFLICT(id) DO UPDATE SET ol_sem_combate=excluded.ol_sem_combate,ol_prioritarios=excluded.ol_prioritarios,ol_lancamentos=excluded.ol_lancamentos,clientes_positivados=excluded.clientes_positivados,demanda_sem_combate=excluded.demanda_sem_combate,importacao_id=excluded.importacao_id,atualizado_em=excluded.atualizado_em
     `).bind(gerenteId, anoMes, gerente.ol_sem_combate, gerente.ol_prioritarios, gerente.ol_lancamentos, gerente.clientes_positivados, gerente.demanda_sem_combate, token, agora),
     env.DB.prepare("DELETE FROM metas WHERE ano_mes=? AND COALESCE(importacao_id,'')<>?").bind(anoMes, token),
