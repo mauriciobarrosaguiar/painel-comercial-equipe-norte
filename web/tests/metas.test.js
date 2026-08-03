@@ -65,7 +65,7 @@ test('arquivo de metas respeita a linha do GD e não soma o GD novamente aos con
 
   const gerente = await database.prepare("SELECT ol_sem_combate,ol_prioritarios,ol_lancamentos,demanda_sem_combate FROM metas WHERE ano_mes='2026-08' AND escopo='gerente'").first()
   const consultores = await database.prepare("SELECT COUNT(*) total,SUM(ol_sem_combate) soma FROM metas WHERE ano_mes='2026-08' AND escopo='consultor'").first()
-  assert.deepEqual(gerente, { ol_sem_combate: 1000, ol_prioritarios: 500, ol_lancamentos: 200, demanda_sem_combate: 900 })
+  assert.deepEqual({ ...gerente }, { ol_sem_combate: 1000, ol_prioritarios: 500, ol_lancamentos: 200, demanda_sem_combate: 900 })
   assert.equal(Number(consultores.total), 2)
   assert.equal(Number(consultores.soma), 1000)
 })
@@ -102,7 +102,7 @@ test('arquivo conjunto importa metas e classifica MIX pelo código SAP', async (
   assert.equal(result.produtos_mix.nao_encontrados, 1)
 
   const products = await database.prepare("SELECT sku,tipo_mix FROM produtos WHERE sku IN ('10018','10086','37063') ORDER BY sku").all()
-  assert.deepEqual(products.results, [
+  assert.deepEqual(products.results.map((row) => ({ ...row })), [
     { sku: '10018', tipo_mix: 'COMBATE' },
     { sku: '10086', tipo_mix: 'PRIORITARIO' },
     { sku: '37063', tipo_mix: 'LANCAMENTO' },
