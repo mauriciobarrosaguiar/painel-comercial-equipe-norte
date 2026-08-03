@@ -7,10 +7,12 @@ on:
       - main
     paths:
       - .github/workflows/processar-comandos-painel.yml
+      - scripts/extrair_bussola_d1_corrigido.py
       - web/functions/api/automacoes.js
       - web/functions/api/configuracoes-automacao.js
       - web/functions/api/internal/agendar-automacoes.js
       - web/migrations/10020_configuracoes_automacao.sql
+      - web/migrations/10021_consultor_origem_bussola.sql
   schedule:
     - cron: "*/5 * * * *"
 
