@@ -1,5 +1,5 @@
 import { ChangeEvent, useEffect, useMemo, useState } from 'react'
-import { readSheet, readSheetNames } from 'read-excel-file/browser'
+import readWorkbook, { readSheet } from 'read-excel-file/browser'
 
 type ApiBaseType = 'painel' | 'metas' | 'produtos_mix' | 'produtos_mercado_farma'
 type CardType = ApiBaseType | 'metas_mix'
@@ -119,7 +119,8 @@ function findSheet(sheetNames: string[], matcher: (name: string) => boolean) {
 }
 async function parseCombinedWorkbook(file: File): Promise<CombinedWorkbook> {
   validateFile(file, true)
-  const sheetNames = await readSheetNames(file)
+  const workbook = await readWorkbook(file)
+  const sheetNames = workbook.map(({ sheet }) => sheet)
   const metasSheet = findSheet(sheetNames, (name) => name === 'metas' || name.includes('meta'))
   const prioritariosSheet = findSheet(sheetNames, (name) => name.includes('priorit') || name.includes('lanc'))
   const combateSheet = findSheet(sheetNames, (name) => name === 'combate' || name.includes('combate'))
@@ -130,11 +131,10 @@ async function parseCombinedWorkbook(file: File): Promise<CombinedWorkbook> {
   ].filter(Boolean)
   if (missing.length) throw new Error(`Não encontrei as abas obrigatórias: ${missing.join(', ')}.`)
 
-  const [metasMatrix, prioritariosMatrix, combateMatrix] = await Promise.all([
-    readSheet(file, { sheet: metasSheet }),
-    readSheet(file, { sheet: prioritariosSheet }),
-    readSheet(file, { sheet: combateSheet }),
-  ])
+  const matrixFor = (sheetName: string): unknown[][] => workbook.find(({ sheet }) => sheet === sheetName)?.data || []
+  const metasMatrix = matrixFor(metasSheet)
+  const prioritariosMatrix = matrixFor(prioritariosSheet)
+  const combateMatrix = matrixFor(combateSheet)
   const metasHeader = findHeader(metasMatrix, 'metas')
   if (metasHeader < 0) throw new Error('A aba METAS não possui os cabeçalhos COLABORADOR/CONSULTOR esperados.')
   const metas = parseMetas(metasMatrix, metasHeader)
