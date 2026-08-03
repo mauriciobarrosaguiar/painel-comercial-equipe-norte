@@ -105,7 +105,6 @@ function normalizarPedido(item, tipo) {
 
 const SELECT_BASE = `
   SELECT pe.id,pe.pedido_origem,pe.nota_fiscal,pe.status,pe.data_pedido,pe.data_faturamento,
-         pe.centro_distribuicao,pe.uf_centro_distribuicao,
          cl.cnpj,COALESCE(NULLIF(TRIM(cl.nome_fantasia),''),NULLIF(TRIM(cl.razao_social),''),'Cliente sem nome') cliente,
          cl.cidade,cl.uf,
          COUNT(DISTINCT ip.id) itens,
@@ -122,7 +121,6 @@ const JOINS = `
     LEFT JOIN produtos pr ON pr.id=ip.produto_id`
 const GROUP_ORDER = `
    GROUP BY pe.id,pe.pedido_origem,pe.nota_fiscal,pe.status,pe.data_pedido,pe.data_faturamento,
-            pe.centro_distribuicao,pe.uf_centro_distribuicao,
             cl.cnpj,cl.nome_fantasia,cl.razao_social,cl.cidade,cl.uf
    ORDER BY DATE(COALESCE(pe.data_faturamento,pe.data_pedido)) DESC,pe.pedido_origem DESC`
 
