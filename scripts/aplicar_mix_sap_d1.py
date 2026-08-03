@@ -18,21 +18,30 @@ def main() -> None:
           atualizado_em TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         );
 
+        -- O template mensal contém somente as exceções do MIX.
+        -- Todo produto não listado é produto de Linha e deve entrar
+        -- no OL Sem Combate.
         UPDATE produtos
-           SET tipo_mix=COALESCE((
+           SET tipo_mix='LINHA',
+               mix_importacao_id=NULL,
+               atualizado_em=CURRENT_TIMESTAMP
+         WHERE ativo=1;
+
+        UPDATE produtos
+           SET tipo_mix=(
                  SELECT mapa.tipo_mix
                    FROM produtos_mix_sap mapa
                   WHERE mapa.ativo=1
                     AND TRIM(mapa.sku)=TRIM(COALESCE(produtos.sku,''))
                   LIMIT 1
-               ),tipo_mix),
-               mix_importacao_id=COALESCE((
+               ),
+               mix_importacao_id=(
                  SELECT mapa.importacao_id
                    FROM produtos_mix_sap mapa
                   WHERE mapa.ativo=1
                     AND TRIM(mapa.sku)=TRIM(COALESCE(produtos.sku,''))
                   LIMIT 1
-               ),mix_importacao_id),
+               ),
                atualizado_em=CURRENT_TIMESTAMP
          WHERE EXISTS(
                SELECT 1
@@ -42,7 +51,10 @@ def main() -> None:
          );
         """,
     )
-    print("Classificações de MIX por código SAP aplicadas aos produtos extraídos do Bússola.")
+    print(
+        "Classificação MIX aplicada: produtos não listados ficaram como Linha; "
+        "Prioritários, Lançamentos e Combate foram aplicados pelo código SAP."
+    )
 
 
 if __name__ == "__main__":
