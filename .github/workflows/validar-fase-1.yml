@@ -28,12 +28,6 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt
           python -m pip install pytest
-      - name: Diagnosticar faturamento agregado de julho
-        env:
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_API_TOKEN }}
-          CLOUDFLARE_D1_DATABASE: painel-equipe-norte-db
-        run: python scripts/diagnosticar_bussola_julho.py
       - name: Testar regras, migrações e legado
         run: python -m pytest -q
       - name: Configurar Node.js
