@@ -17,11 +17,12 @@ export function testDatabase() {
   db.exec(`
     CREATE TABLE consultores(id TEXT PRIMARY KEY,nome TEXT,uf TEXT,ativo INTEGER,origem TEXT,atualizado_em TEXT);
     CREATE TABLE clientes(id TEXT PRIMARY KEY,cnpj TEXT,razao_social TEXT,nome_fantasia TEXT,cidade TEXT,uf TEXT,consultor_id TEXT,nome_gd TEXT,grupo_economico TEXT,rede_associacao TEXT,bandeira TEXT,situacao TEXT,ativo INTEGER,carteira_importada INTEGER,setor_rep TEXT);
-    CREATE TABLE produtos(id TEXT PRIMARY KEY,ean TEXT,descricao TEXT,laboratorio TEXT,tipo_mix TEXT,mercado_farma_ativo INTEGER,ativo INTEGER);
+    CREATE TABLE produtos(id TEXT PRIMARY KEY,ean TEXT UNIQUE,sku TEXT,descricao TEXT,laboratorio TEXT,tipo_mix TEXT,mercado_farma_ativo INTEGER,ativo INTEGER,mix_importacao_id TEXT,mercado_farma_importacao_id TEXT,atualizado_em TEXT);
+    CREATE TABLE produtos_mix_sap(sku TEXT PRIMARY KEY,molecula TEXT,descricao TEXT,tipo_mix TEXT,ativo INTEGER,importacao_id TEXT,atualizado_em TEXT);
     CREATE TABLE pedidos(id TEXT PRIMARY KEY,pedido_origem TEXT,nota_fiscal TEXT,cliente_id TEXT,consultor_id TEXT,data_pedido TEXT,data_faturamento TEXT,status TEXT,valor_faturado REAL,origem TEXT,ativo INTEGER,atualizado_em TEXT);
     CREATE TABLE itens_pedido(id TEXT PRIMARY KEY,pedido_id TEXT,produto_id TEXT,ean TEXT,descricao TEXT,quantidade_solicitada REAL DEFAULT 0,quantidade_atendida REAL DEFAULT 0,quantidade_faturada REAL,valor_faturado REAL,ativo INTEGER,preco_unitario_sem_imposto REAL DEFAULT 0,preco_unitario_com_imposto REAL DEFAULT 0,valor_total_solicitado_sem_imposto REAL DEFAULT 0,total_atendido_sem_imposto REAL DEFAULT 0);
-    CREATE TABLE metas(id TEXT PRIMARY KEY,consultor_id TEXT,escopo TEXT,ano_mes TEXT,ol_sem_combate REAL,ol_prioritarios REAL,ol_lancamentos REAL,clientes_positivados INTEGER,importacao_id TEXT,atualizado_em TEXT,UNIQUE(ano_mes,escopo,consultor_id));
-    CREATE TABLE metas_historico(id INTEGER PRIMARY KEY AUTOINCREMENT,meta_id TEXT,ano_mes TEXT,escopo TEXT,consultor_id TEXT,ol_sem_combate REAL,ol_prioritarios REAL,ol_lancamentos REAL,clientes_positivados INTEGER,importacao_anterior_id TEXT,nova_importacao_id TEXT,substituida_em TEXT);
+    CREATE TABLE metas(id TEXT PRIMARY KEY,consultor_id TEXT,escopo TEXT,ano_mes TEXT,ol_sem_combate REAL,ol_prioritarios REAL,ol_lancamentos REAL,clientes_positivados INTEGER,demanda_sem_combate REAL DEFAULT 0,importacao_id TEXT,atualizado_em TEXT,UNIQUE(ano_mes,escopo,consultor_id));
+    CREATE TABLE metas_historico(id INTEGER PRIMARY KEY AUTOINCREMENT,meta_id TEXT,ano_mes TEXT,escopo TEXT,consultor_id TEXT,ol_sem_combate REAL,ol_prioritarios REAL,ol_lancamentos REAL,clientes_positivados INTEGER,demanda_sem_combate REAL DEFAULT 0,importacao_anterior_id TEXT,nova_importacao_id TEXT,substituida_em TEXT);
     CREATE TABLE importacoes(id TEXT PRIMARY KEY,tipo TEXT,nome_arquivo TEXT,total_registros INTEGER,status TEXT,criado_em TEXT);
     CREATE TABLE extracoes(id TEXT PRIMARY KEY,tipo TEXT,status TEXT,total_registros INTEGER,mensagem TEXT,erro TEXT,iniciado_em TEXT,finalizado_em TEXT,criado_em TEXT);
     CREATE TABLE auditorias_calculos(id TEXT PRIMARY KEY,periodo_inicio TEXT,periodo_fim TEXT,status TEXT,total_alertas INTEGER,resultado_json TEXT,criado_em TEXT);
@@ -43,11 +44,11 @@ export function testDatabase() {
     INSERT INTO clientes(id,cnpj,nome_fantasia,cidade,uf,consultor_id,nome_gd,ativo,carteira_importada,setor_rep) VALUES
       ('cl1','11111111000111','Farmácia A','Belém','PA','co1','GD Norte',1,1,'m0043497'),
       ('cl2','22222222000122','Farmácia B','Belém','PA','co1','GD Norte',1,1,'m0043497');
-    INSERT INTO produtos VALUES
-      ('linha','111','Linha','EMS Genéricos','LINHA',1,1),
-      ('prioritario','222','Prioritário','EMS Genéricos','PRIORITARIO',1,1),
-      ('combate','333','Combate','EMS Genéricos','COMBATE',0,1),
-      ('desconhecido','444','Desconhecido','EMS Genéricos','SEM CLASSIFICACAO',0,1);
+    INSERT INTO produtos(id,ean,sku,descricao,laboratorio,tipo_mix,mercado_farma_ativo,ativo,atualizado_em) VALUES
+      ('linha','111','10018','Linha','EMS Genéricos','LINHA',1,1,'2026-07-01'),
+      ('prioritario','222','10086','Prioritário','EMS Genéricos','PRIORITARIO',1,1,'2026-07-01'),
+      ('combate','333','10302','Combate','EMS Genéricos','COMBATE',0,1,'2026-07-01'),
+      ('desconhecido','444','37063','Desconhecido','EMS Genéricos','SEM CLASSIFICACAO',0,1,'2026-07-01');
     INSERT INTO pedidos VALUES
       ('p1','P1','NF1','cl1','co1','2026-07-10','2026-07-10','FATURADO',200,'BUSSOLA',1,'2026-07-10'),
       ('p2','P2','NF2','cl1','co1','2026-07-10','2026-07-10','NAO FATURADO',700,'BUSSOLA',1,'2026-07-10'),
@@ -69,7 +70,8 @@ export function testDatabase() {
       ('i10','p5','linha','111','Linha',1,300,0),
       ('i11','p6','linha','111','Linha',1,100,50),
       ('i12','p6','prioritario','222','Prioritário',1,40,0);
-    INSERT INTO metas VALUES('mg',NULL,'gerente','2026-07',1000,300,200,2,'imp','2026-07-01');
+    INSERT INTO metas(id,consultor_id,escopo,ano_mes,ol_sem_combate,ol_prioritarios,ol_lancamentos,clientes_positivados,demanda_sem_combate,importacao_id,atualizado_em)
+      VALUES('mg',NULL,'gerente','2026-07',1000,300,200,2,0,'imp','2026-07-01');
     INSERT INTO extracoes VALUES('ex1','BUSSOLA','concluido',7,'OK','','2026-07-10T10:00:00Z','2026-07-10T10:05:00Z','2026-07-10T10:00:00Z');
     INSERT INTO sips VALUES('sip1','SIP Teste',1000,80,1,1,'2026-07-01');
     INSERT INTO redes VALUES('rede1','Rede Teste',1);
