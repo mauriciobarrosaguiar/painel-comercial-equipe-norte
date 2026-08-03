@@ -23,6 +23,24 @@ function parametros(value) {
   }
 }
 
+async function liberarExecucoesTravadas(env, agoraIso) {
+  const result = await env.DB.prepare(`
+    UPDATE comandos_automacao
+       SET status='erro',
+           erro='Execução interrompida por tempo excedido. A automação foi liberada para um novo disparo.',
+           finalizado_em=?,
+           atualizado_em=?
+     WHERE status='executando'
+       AND iniciado_em IS NOT NULL
+       AND (
+         (tipo='BUSSOLA' AND datetime(iniciado_em)<=datetime(?,'-75 minutes'))
+         OR
+         (tipo<>'BUSSOLA' AND datetime(iniciado_em)<=datetime(?,'-2 hours'))
+       )
+  `).bind(agoraIso, agoraIso, agoraIso, agoraIso).run()
+  return Number(result.meta?.changes || 0)
+}
+
 export async function onRequestPost({ request, env }) {
   const negado = await admin(request, env)
   if (negado) return negado
@@ -30,6 +48,7 @@ export async function onRequestPost({ request, env }) {
   try {
     const agora = new Date()
     const agoraIso = agora.toISOString()
+    const execucoesExpiradas = await liberarExecucoesTravadas(env, agoraIso)
     const vencidas = await env.DB.prepare(`
       SELECT tipo,intervalo_minutos,parametros_json,proxima_execucao_em
         FROM configuracoes_automacao
@@ -94,6 +113,7 @@ export async function onRequestPost({ request, env }) {
       agendados,
       ignorados,
       total_agendados: agendados.length,
+      execucoes_expiradas: execucoesExpiradas,
       verificado_em: agoraIso,
     })
   } catch (error) {
