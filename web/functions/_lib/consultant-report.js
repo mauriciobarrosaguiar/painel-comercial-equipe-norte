@@ -106,7 +106,7 @@ export async function loadConsultantReport(request, env) {
   const sectorParams = []
   if (uf) { sectorWhere.push("UPPER(TRIM(COALESCE(cl.uf,'')))=?"); sectorParams.push(uf) }
 
-  const revenueWhere = [PEDIDO_FATURADO]
+  const revenueWhere = [PEDIDO_FATURADO, ITEM_ATIVO]
   const revenueParams = []
   if (period.inicio && period.fim) {
     revenueWhere.push('DATE(COALESCE(pe.data_faturamento,pe.data_pedido)) BETWEEN DATE(?) AND DATE(?)')
