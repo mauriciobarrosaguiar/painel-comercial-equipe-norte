@@ -1,4 +1,10 @@
-from scripts.extrair_bussola_d1_corrigido import (
+import os
+
+os.environ.setdefault("CLOUDFLARE_ACCOUNT_ID", "conta-teste")
+os.environ.setdefault("CLOUDFLARE_API_TOKEN", "token-teste")
+os.environ.setdefault("CLOUDFLARE_D1_DATABASE", "banco-teste")
+
+from scripts.extrair_bussola_d1_corrigido import (  # noqa: E402
     localizar_consultor_bussola,
     nome_principal_representante,
     normalizar_nome,
