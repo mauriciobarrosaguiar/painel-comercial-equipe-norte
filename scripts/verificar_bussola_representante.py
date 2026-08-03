@@ -46,12 +46,21 @@ def main() -> None:
       FROM itens_pedido ip
       JOIN pedidos pe ON pe.id=ip.pedido_id
       LEFT JOIN clientes cl ON cl.id=pe.cliente_id
-      LEFT JOIN consultores co ON co.id=COALESCE(pe.consultor_bussola_id,pe.consultor_id,cl.consultor_id)
+      LEFT JOIN consultores co_origem ON co_origem.id=pe.consultor_bussola_id
+      LEFT JOIN consultores co_carteira ON co_carteira.id=cl.consultor_id
      WHERE pe.ativo=1 AND ip.ativo=1
        AND DATE(pe.data_pedido) BETWEEN DATE('2026-07-01') AND DATE('2026-07-31')
     """
-    mauricio = "UPPER(TRIM(COALESCE(co.nome,'')))='MAURICIO BARROS DE AGUIAR'"
-    representante_mauricio = "UPPER(TRIM(COALESCE(pe.representante_bussola,''))) LIKE '%MAURICIO BARROS DE AGUIAR%'"
+    origem_mauricio = "UPPER(TRIM(COALESCE(co_origem.nome,'')))='MAURICIO BARROS DE AGUIAR'"
+    carteira_mauricio = "UPPER(TRIM(COALESCE(co_carteira.nome,'')))='MAURICIO BARROS DE AGUIAR'"
+
+    resumo = """
+      SELECT ROUND(COALESCE(SUM(ip.valor_total_solicitado_sem_imposto),0),2) solicitado,
+             ROUND(COALESCE(SUM(ip.total_atendido_sem_imposto),0),2) atendido,
+             ROUND(COALESCE(SUM(ip.valor_faturado),0),2) faturado,
+             COUNT(DISTINCT pe.id) pedidos,
+             COUNT(ip.id) itens
+    """
 
     dados = {
         "ultima_extracao": query(db, """
@@ -61,83 +70,25 @@ def main() -> None:
            ORDER BY COALESCE(finalizado_em,iniciado_em,criado_em) DESC
            LIMIT 1
         """),
-        "sincronizacao": query(db, """
-          SELECT valor_json,atualizado_em
-            FROM configuracoes
-           WHERE chave='bussola_ultima_sincronizacao'
-           LIMIT 1
-        """),
-        "vinculos": query(db, """
-          SELECT COUNT(DISTINCT CASE WHEN pe.consultor_bussola_id IS NOT NULL THEN pe.id END) pedidos_com_representante,
-                 COUNT(DISTINCT pe.id) pedidos_ativos
-            FROM pedidos pe
-           WHERE pe.origem='BUSSOLA' AND pe.ativo=1
-        """),
-        "mauricio_resumo_emissao_todos_status": query(db, f"""
-          SELECT ROUND(COALESCE(SUM(ip.valor_total_solicitado_sem_imposto),0),2) solicitado,
-                 ROUND(COALESCE(SUM(ip.total_atendido_sem_imposto),0),2) atendido,
-                 ROUND(COALESCE(SUM(ip.valor_faturado),0),2) faturado,
-                 COUNT(DISTINCT pe.id) pedidos,
-                 COUNT(ip.id) itens
-          {base_joins} AND {mauricio}
-        """),
-        "mauricio_resumo_emissao_status_faturado": query(db, f"""
-          SELECT ROUND(COALESCE(SUM(ip.valor_total_solicitado_sem_imposto),0),2) solicitado,
-                 ROUND(COALESCE(SUM(ip.total_atendido_sem_imposto),0),2) atendido,
-                 ROUND(COALESCE(SUM(ip.valor_faturado),0),2) faturado,
-                 COUNT(DISTINCT pe.id) pedidos,
-                 COUNT(ip.id) itens
-          {base_joins} AND {mauricio}
-            AND UPPER(TRIM(COALESCE(pe.status,''))) IN ('FATURADO','FATURADO PARCIAL','FATURADO RECUPERADO')
-        """),
-        "representante_mauricio_resumo_emissao": query(db, f"""
-          SELECT ROUND(COALESCE(SUM(ip.valor_total_solicitado_sem_imposto),0),2) solicitado,
-                 ROUND(COALESCE(SUM(ip.total_atendido_sem_imposto),0),2) atendido,
-                 ROUND(COALESCE(SUM(ip.valor_faturado),0),2) faturado,
-                 COUNT(DISTINCT pe.id) pedidos,
-                 COUNT(ip.id) itens
-          {base_joins} AND {representante_mauricio}
-        """),
-        "mauricio_por_status_emissao": query(db, f"""
+        "somente_origem_mauricio": query(db, f"{resumo} {base_joins} AND {origem_mauricio}"),
+        "somente_carteira_mauricio": query(db, f"{resumo} {base_joins} AND {carteira_mauricio}"),
+        "uniao_origem_ou_carteira": query(db, f"{resumo} {base_joins} AND ({origem_mauricio} OR {carteira_mauricio})"),
+        "intersecao_origem_e_carteira": query(db, f"{resumo} {base_joins} AND {origem_mauricio} AND {carteira_mauricio}"),
+        "origem_apenas_fora_carteira": query(db, f"{resumo} {base_joins} AND {origem_mauricio} AND NOT ({carteira_mauricio})"),
+        "carteira_apenas_outra_origem": query(db, f"{resumo} {base_joins} AND {carteira_mauricio} AND NOT ({origem_mauricio})"),
+        "uniao_por_status": query(db, f"""
           SELECT UPPER(TRIM(COALESCE(pe.status,'SEM STATUS'))) status,
                  ROUND(COALESCE(SUM(ip.valor_total_solicitado_sem_imposto),0),2) solicitado,
                  ROUND(COALESCE(SUM(ip.total_atendido_sem_imposto),0),2) atendido,
                  ROUND(COALESCE(SUM(ip.valor_faturado),0),2) faturado,
-                 COUNT(DISTINCT pe.id) pedidos,
-                 COUNT(ip.id) itens
-          {base_joins} AND {mauricio}
+                 COUNT(DISTINCT pe.id) pedidos
+          {base_joins}
+            AND ({origem_mauricio} OR {carteira_mauricio})
           GROUP BY UPPER(TRIM(COALESCE(pe.status,'SEM STATUS')))
           ORDER BY solicitado DESC
         """),
-        "por_representante_emissao": query(db, f"""
-          SELECT COALESCE(NULLIF(TRIM(pe.representante_bussola),''),'SEM REPRESENTANTE') representante,
-                 COALESCE(NULLIF(TRIM(co.nome),''),'SEM CONSULTOR') consultor,
-                 ROUND(COALESCE(SUM(ip.valor_total_solicitado_sem_imposto),0),2) solicitado,
-                 ROUND(COALESCE(SUM(ip.total_atendido_sem_imposto),0),2) atendido,
-                 ROUND(COALESCE(SUM(ip.valor_faturado),0),2) faturado,
-                 COUNT(DISTINCT pe.id) pedidos,
-                 COUNT(ip.id) itens
-          {base_joins}
-          GROUP BY COALESCE(NULLIF(TRIM(pe.representante_bussola),''),'SEM REPRESENTANTE'),
-                   COALESCE(NULLIF(TRIM(co.nome),''),'SEM CONSULTOR')
-          ORDER BY faturado DESC
-        """),
-        "mauricio_data_faturamento": query(db, """
-          SELECT ROUND(COALESCE(SUM(ip.valor_total_solicitado_sem_imposto),0),2) solicitado,
-                 ROUND(COALESCE(SUM(ip.total_atendido_sem_imposto),0),2) atendido,
-                 ROUND(COALESCE(SUM(ip.valor_faturado),0),2) faturado,
-                 COUNT(DISTINCT pe.id) pedidos,
-                 COUNT(ip.id) itens
-            FROM itens_pedido ip
-            JOIN pedidos pe ON pe.id=ip.pedido_id
-            LEFT JOIN clientes cl ON cl.id=pe.cliente_id
-            JOIN consultores co ON co.id=COALESCE(pe.consultor_bussola_id,pe.consultor_id,cl.consultor_id)
-           WHERE pe.ativo=1 AND ip.ativo=1
-             AND DATE(COALESCE(pe.data_faturamento,pe.data_pedido)) BETWEEN DATE('2026-07-01') AND DATE('2026-07-31')
-             AND UPPER(TRIM(COALESCE(co.nome,'')))='MAURICIO BARROS DE AGUIAR'
-        """),
     }
-    print("VERIFICACAO_BUSSOLA_REPRESENTANTE=" + json.dumps(dados, ensure_ascii=False, sort_keys=True))
+    print("VERIFICACAO_BUSSOLA_UNIAO=" + json.dumps(dados, ensure_ascii=False, sort_keys=True))
 
 
 if __name__ == "__main__":
