@@ -42,6 +42,17 @@ def query(db: str, sql: str, params: list[Any] | None = None) -> list[dict[str, 
 
 def main() -> None:
     db = database_id()
+    base_joins = """
+      FROM itens_pedido ip
+      JOIN pedidos pe ON pe.id=ip.pedido_id
+      LEFT JOIN clientes cl ON cl.id=pe.cliente_id
+      LEFT JOIN consultores co ON co.id=COALESCE(pe.consultor_bussola_id,pe.consultor_id,cl.consultor_id)
+     WHERE pe.ativo=1 AND ip.ativo=1
+       AND DATE(pe.data_pedido) BETWEEN DATE('2026-07-01') AND DATE('2026-07-31')
+    """
+    mauricio = "UPPER(TRIM(COALESCE(co.nome,'')))='MAURICIO BARROS DE AGUIAR'"
+    representante_mauricio = "UPPER(TRIM(COALESCE(pe.representante_bussola,''))) LIKE '%MAURICIO BARROS DE AGUIAR%'"
+
     dados = {
         "ultima_extracao": query(db, """
           SELECT status,total_registros,mensagem,iniciado_em,finalizado_em
@@ -62,8 +73,59 @@ def main() -> None:
             FROM pedidos pe
            WHERE pe.origem='BUSSOLA' AND pe.ativo=1
         """),
-        "mauricio_julho": query(db, """
-          SELECT ROUND(COALESCE(SUM(ip.valor_faturado),0),2) total,
+        "mauricio_resumo_emissao_todos_status": query(db, f"""
+          SELECT ROUND(COALESCE(SUM(ip.valor_total_solicitado_sem_imposto),0),2) solicitado,
+                 ROUND(COALESCE(SUM(ip.total_atendido_sem_imposto),0),2) atendido,
+                 ROUND(COALESCE(SUM(ip.valor_faturado),0),2) faturado,
+                 COUNT(DISTINCT pe.id) pedidos,
+                 COUNT(ip.id) itens
+          {base_joins} AND {mauricio}
+        """),
+        "mauricio_resumo_emissao_status_faturado": query(db, f"""
+          SELECT ROUND(COALESCE(SUM(ip.valor_total_solicitado_sem_imposto),0),2) solicitado,
+                 ROUND(COALESCE(SUM(ip.total_atendido_sem_imposto),0),2) atendido,
+                 ROUND(COALESCE(SUM(ip.valor_faturado),0),2) faturado,
+                 COUNT(DISTINCT pe.id) pedidos,
+                 COUNT(ip.id) itens
+          {base_joins} AND {mauricio}
+            AND UPPER(TRIM(COALESCE(pe.status,''))) IN ('FATURADO','FATURADO PARCIAL','FATURADO RECUPERADO')
+        """),
+        "representante_mauricio_resumo_emissao": query(db, f"""
+          SELECT ROUND(COALESCE(SUM(ip.valor_total_solicitado_sem_imposto),0),2) solicitado,
+                 ROUND(COALESCE(SUM(ip.total_atendido_sem_imposto),0),2) atendido,
+                 ROUND(COALESCE(SUM(ip.valor_faturado),0),2) faturado,
+                 COUNT(DISTINCT pe.id) pedidos,
+                 COUNT(ip.id) itens
+          {base_joins} AND {representante_mauricio}
+        """),
+        "mauricio_por_status_emissao": query(db, f"""
+          SELECT UPPER(TRIM(COALESCE(pe.status,'SEM STATUS'))) status,
+                 ROUND(COALESCE(SUM(ip.valor_total_solicitado_sem_imposto),0),2) solicitado,
+                 ROUND(COALESCE(SUM(ip.total_atendido_sem_imposto),0),2) atendido,
+                 ROUND(COALESCE(SUM(ip.valor_faturado),0),2) faturado,
+                 COUNT(DISTINCT pe.id) pedidos,
+                 COUNT(ip.id) itens
+          {base_joins} AND {mauricio}
+          GROUP BY UPPER(TRIM(COALESCE(pe.status,'SEM STATUS')))
+          ORDER BY solicitado DESC
+        """),
+        "por_representante_emissao": query(db, f"""
+          SELECT COALESCE(NULLIF(TRIM(pe.representante_bussola),''),'SEM REPRESENTANTE') representante,
+                 COALESCE(NULLIF(TRIM(co.nome),''),'SEM CONSULTOR') consultor,
+                 ROUND(COALESCE(SUM(ip.valor_total_solicitado_sem_imposto),0),2) solicitado,
+                 ROUND(COALESCE(SUM(ip.total_atendido_sem_imposto),0),2) atendido,
+                 ROUND(COALESCE(SUM(ip.valor_faturado),0),2) faturado,
+                 COUNT(DISTINCT pe.id) pedidos,
+                 COUNT(ip.id) itens
+          {base_joins}
+          GROUP BY COALESCE(NULLIF(TRIM(pe.representante_bussola),''),'SEM REPRESENTANTE'),
+                   COALESCE(NULLIF(TRIM(co.nome),''),'SEM CONSULTOR')
+          ORDER BY faturado DESC
+        """),
+        "mauricio_data_faturamento": query(db, """
+          SELECT ROUND(COALESCE(SUM(ip.valor_total_solicitado_sem_imposto),0),2) solicitado,
+                 ROUND(COALESCE(SUM(ip.total_atendido_sem_imposto),0),2) atendido,
+                 ROUND(COALESCE(SUM(ip.valor_faturado),0),2) faturado,
                  COUNT(DISTINCT pe.id) pedidos,
                  COUNT(ip.id) itens
             FROM itens_pedido ip
@@ -71,7 +133,6 @@ def main() -> None:
             LEFT JOIN clientes cl ON cl.id=pe.cliente_id
             JOIN consultores co ON co.id=COALESCE(pe.consultor_bussola_id,pe.consultor_id,cl.consultor_id)
            WHERE pe.ativo=1 AND ip.ativo=1
-             AND UPPER(TRIM(COALESCE(pe.status,''))) IN ('FATURADO','FATURADO PARCIAL','FATURADO RECUPERADO')
              AND DATE(COALESCE(pe.data_faturamento,pe.data_pedido)) BETWEEN DATE('2026-07-01') AND DATE('2026-07-31')
              AND UPPER(TRIM(COALESCE(co.nome,'')))='MAURICIO BARROS DE AGUIAR'
         """),
