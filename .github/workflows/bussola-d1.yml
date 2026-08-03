@@ -1,6 +1,15 @@
 name: Extrair Bússola para D1
 
 on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/bussola-d1.yml
+      - scripts/extrair_bussola_d1.py
+      - scripts/extrair_bussola_d1_corrigido.py
+      - src/bussola_web.py
+      - src/tratamento.py
   workflow_dispatch:
     inputs:
       command_id:
