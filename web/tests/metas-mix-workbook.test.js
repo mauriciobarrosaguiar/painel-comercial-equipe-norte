@@ -7,7 +7,8 @@ const workflow = readFileSync(new URL('../../.github/workflows/bussola-d1.yml', 
 const helper = readFileSync(new URL('../../scripts/aplicar_mix_sap_d1.py', import.meta.url), 'utf8')
 
 test('tela aceita arquivo único com as três abas oficiais', () => {
-  assert.match(ui, /readSheetNames/)
+  assert.match(ui, /readWorkbook/)
+  assert.match(ui, /workbook\.map/)
   assert.match(ui, /METAS/)
   assert.match(ui, /PRIORITÁRIOS_LANÇ/)
   assert.match(ui, /COMBATE/)
