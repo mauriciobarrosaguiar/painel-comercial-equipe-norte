@@ -1,6 +1,8 @@
 name: Extrair Bússola para D1
 
 on:
+  schedule:
+    - cron: "*/30 * * * *"
   workflow_dispatch:
     inputs:
       command_id:
@@ -18,7 +20,7 @@ concurrency:
 jobs:
   extrair:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
 
     steps:
       - name: Baixar repositório
