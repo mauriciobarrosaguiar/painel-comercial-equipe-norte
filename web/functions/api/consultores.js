@@ -25,6 +25,7 @@ const normalizarNome = (value) => String(value || '').normalize('NFD').replace(/
 const MIX_PRIORITARIO = "UPPER(TRIM(COALESCE(pr.tipo_mix,'')))='PRIORITARIO'"
 const MIX_LANCAMENTO = "UPPER(TRIM(COALESCE(pr.tipo_mix,'')))='LANCAMENTO'"
 const MIX_COMBATE = "UPPER(TRIM(COALESCE(pr.tipo_mix,'')))='COMBATE'"
+const CONSULTOR_FATURAMENTO = 'COALESCE(pe.consultor_bussola_id,pe.consultor_id,cl.consultor_id)'
 
 function periodo(params) {
   const tipo = PERIODOS.has(params.get('periodo')) ? params.get('periodo') : 'mes-atual'
@@ -62,6 +63,18 @@ export async function onRequestGet({ request, env }) {
       pedidoParams.push(faixa.inicio, faixa.fim)
     }
 
+    const faturamentoWhere = [PEDIDO_FATURADO]
+    const faturamentoParams = []
+    if (faixa.inicio && faixa.fim) {
+      faturamentoWhere.push('DATE(COALESCE(pe.data_faturamento,pe.data_pedido)) BETWEEN DATE(?) AND DATE(?)')
+      faturamentoParams.push(faixa.inicio, faixa.fim)
+    }
+    if (uf) {
+      faturamentoWhere.push('cl.carteira_importada=1')
+      faturamentoWhere.push("UPPER(TRIM(COALESCE(cl.uf,'')))=?")
+      faturamentoParams.push(uf)
+    }
+
     const pendingWhere = [PEDIDO_NAO_FATURADO, ITEM_ATIVO, 'cl.carteira_importada=1', 'cl.ativo=1']
     const pendingParams = []
     if (faixa.inicio && faixa.fim) {
@@ -83,6 +96,32 @@ export async function onRequestGet({ request, env }) {
         FROM metas WHERE escopo='consultor' AND ${metaCond}
         GROUP BY consultor_id
       ),
+      carteira_periodo AS (
+        SELECT c.id consultor_id,MIN(NULLIF(TRIM(cl.setor_rep),'')) setor_carteira,
+          COUNT(DISTINCT cl.id) clientes_ativos,
+          COUNT(DISTINCT CASE WHEN pe.id IS NOT NULL AND COALESCE(ip.valor_faturado,0)>0 THEN cl.id END) clientes_com_venda
+        FROM consultores c
+        LEFT JOIN clientes cl ON ${clienteJoin.join(' AND ')}
+        LEFT JOIN pedidos pe ON ${pedidoJoin.join(' AND ')}
+        LEFT JOIN itens_pedido ip ON ip.pedido_id=pe.id AND ${ITEM_ATIVO}
+        WHERE c.ativo=1 AND c.origem='PAINEL_EQUIPE'
+        GROUP BY c.id
+      ),
+      faturamento_periodo AS (
+        SELECT ${CONSULTOR_FATURAMENTO} consultor_id,
+          COUNT(DISTINCT pe.id) pedidos_faturados,
+          COALESCE(SUM(ip.valor_faturado),0) ol_total_faturado,
+          COALESCE(SUM(CASE WHEN ${MIX_SEM_COMBATE} THEN ip.valor_faturado ELSE 0 END),0) ol_sem_combate,
+          COALESCE(SUM(CASE WHEN ${MIX_COMBATE} THEN ip.valor_faturado ELSE 0 END),0) ol_combate,
+          COALESCE(SUM(CASE WHEN ${MIX_PRIORITARIO} THEN ip.valor_faturado ELSE 0 END),0) ol_prioritarios,
+          COALESCE(SUM(CASE WHEN ${MIX_LANCAMENTO} THEN ip.valor_faturado ELSE 0 END),0) ol_lancamentos
+        FROM itens_pedido ip
+        JOIN pedidos pe ON pe.id=ip.pedido_id
+        LEFT JOIN clientes cl ON cl.id=pe.cliente_id
+        LEFT JOIN produtos pr ON pr.id=ip.produto_id
+        WHERE ${faturamentoWhere.join(' AND ')}
+        GROUP BY ${CONSULTOR_FATURAMENTO}
+      ),
       pendentes_periodo AS (
         SELECT cl.consultor_id,
           COUNT(DISTINCT pe.id) pedidos_nao_faturados,
@@ -98,41 +137,42 @@ export async function onRequestGet({ request, env }) {
         WHERE ${pendingWhere.join(' AND ')}
         GROUP BY cl.consultor_id
       )
-      SELECT c.id,c.nome,MIN(NULLIF(TRIM(cl.setor_rep),'')) AS setor_carteira,
-        COUNT(DISTINCT cl.id) AS clientes_ativos,
-        COUNT(DISTINCT CASE WHEN pe.id IS NOT NULL AND COALESCE(ip.valor_faturado,0)>0 THEN cl.id END) AS clientes_com_venda,
-        COUNT(DISTINCT CASE WHEN pe.id IS NOT NULL AND COALESCE(ip.valor_faturado,0)>0 THEN pe.id END) AS pedidos_faturados,
-        COALESCE(SUM(ip.valor_faturado),0) AS ol_total_faturado,
-        COALESCE(SUM(CASE WHEN ${MIX_SEM_COMBATE} THEN ip.valor_faturado ELSE 0 END),0) AS ol_sem_combate,
-        COALESCE(SUM(CASE WHEN UPPER(TRIM(COALESCE(pr.tipo_mix,'')))='COMBATE' THEN ip.valor_faturado ELSE 0 END),0) AS ol_combate,
-        COALESCE(SUM(CASE WHEN UPPER(COALESCE(pr.tipo_mix,''))='PRIORITARIO' THEN ip.valor_faturado ELSE 0 END),0) AS ol_prioritarios,
-        COALESCE(SUM(CASE WHEN UPPER(COALESCE(pr.tipo_mix,''))='LANCAMENTO' THEN ip.valor_faturado ELSE 0 END),0) AS ol_lancamentos,
-        COALESCE(m.ol_sem_combate,0) AS meta_ol_sem_combate,
-        COALESCE(m.ol_prioritarios,0) AS meta_ol_prioritarios,
-        COALESCE(m.ol_lancamentos,0) AS meta_ol_lancamentos,
-        COALESCE(m.clientes_positivados,0) AS meta_clientes,
-        COALESCE(pd.pedidos_nao_faturados,0) AS pedidos_nao_faturados,
-        COALESCE(pd.valor_nao_faturado,0) AS valor_nao_faturado,
-        COALESCE(pd.valor_nao_faturado_sem_combate,0) AS valor_nao_faturado_sem_combate,
-        COALESCE(pd.valor_nao_faturado_prioritarios,0) AS valor_nao_faturado_prioritarios,
-        COALESCE(pd.valor_nao_faturado_lancamentos,0) AS valor_nao_faturado_lancamentos,
-        COALESCE(pd.valor_nao_faturado_combate,0) AS valor_nao_faturado_combate
+      SELECT c.id,c.nome,cp.setor_carteira,
+        COALESCE(cp.clientes_ativos,0) clientes_ativos,
+        COALESCE(cp.clientes_com_venda,0) clientes_com_venda,
+        COALESCE(fp.pedidos_faturados,0) pedidos_faturados,
+        COALESCE(fp.ol_total_faturado,0) ol_total_faturado,
+        COALESCE(fp.ol_sem_combate,0) ol_sem_combate,
+        COALESCE(fp.ol_combate,0) ol_combate,
+        COALESCE(fp.ol_prioritarios,0) ol_prioritarios,
+        COALESCE(fp.ol_lancamentos,0) ol_lancamentos,
+        COALESCE(m.ol_sem_combate,0) meta_ol_sem_combate,
+        COALESCE(m.ol_prioritarios,0) meta_ol_prioritarios,
+        COALESCE(m.ol_lancamentos,0) meta_ol_lancamentos,
+        COALESCE(m.clientes_positivados,0) meta_clientes,
+        COALESCE(pd.pedidos_nao_faturados,0) pedidos_nao_faturados,
+        COALESCE(pd.valor_nao_faturado,0) valor_nao_faturado,
+        COALESCE(pd.valor_nao_faturado_sem_combate,0) valor_nao_faturado_sem_combate,
+        COALESCE(pd.valor_nao_faturado_prioritarios,0) valor_nao_faturado_prioritarios,
+        COALESCE(pd.valor_nao_faturado_lancamentos,0) valor_nao_faturado_lancamentos,
+        COALESCE(pd.valor_nao_faturado_combate,0) valor_nao_faturado_combate
       FROM consultores c
-      LEFT JOIN clientes cl ON ${clienteJoin.join(' AND ')}
-      LEFT JOIN pedidos pe ON ${pedidoJoin.join(' AND ')}
-      LEFT JOIN itens_pedido ip ON ip.pedido_id=pe.id AND ${ITEM_ATIVO}
-      LEFT JOIN produtos pr ON pr.id=ip.produto_id
+      LEFT JOIN carteira_periodo cp ON cp.consultor_id=c.id
+      LEFT JOIN faturamento_periodo fp ON fp.consultor_id=c.id
       LEFT JOIN metas_periodo m ON m.consultor_id=c.id
       LEFT JOIN pendentes_periodo pd ON pd.consultor_id=c.id
       WHERE c.ativo=1 AND c.origem='PAINEL_EQUIPE'
-      GROUP BY c.id,c.nome,m.ol_sem_combate,m.ol_prioritarios,m.ol_lancamentos,m.clientes_positivados,
-               pd.pedidos_nao_faturados,pd.valor_nao_faturado,pd.valor_nao_faturado_sem_combate,
-               pd.valor_nao_faturado_prioritarios,pd.valor_nao_faturado_lancamentos,pd.valor_nao_faturado_combate
       ORDER BY ol_sem_combate DESC,c.nome COLLATE NOCASE`
     const gerenteSql = `SELECT COALESCE(SUM(ol_sem_combate),0) ol_sem_combate,COALESCE(SUM(ol_prioritarios),0) ol_prioritarios,COALESCE(SUM(ol_lancamentos),0) ol_lancamentos,COALESCE(SUM(clientes_positivados),0) clientes_positivados FROM metas WHERE escopo='gerente' AND ${metaCond}`
 
     const [rankingResult, gerenteResult, ufsResult, extracaoResult] = await env.DB.batch([
-      env.DB.prepare(rankingSql).bind(...metaParams, ...pendingParams, ...clienteParams, ...pedidoParams),
+      env.DB.prepare(rankingSql).bind(
+        ...metaParams,
+        ...clienteParams,
+        ...pedidoParams,
+        ...faturamentoParams,
+        ...pendingParams,
+      ),
       env.DB.prepare(gerenteSql).bind(...metaParams),
       env.DB.prepare("SELECT DISTINCT UPPER(TRIM(uf)) AS uf FROM clientes WHERE carteira_importada=1 AND ativo=1 AND LENGTH(TRIM(COALESCE(uf,'')))=2 ORDER BY uf"),
       env.DB.prepare("SELECT finalizado_em FROM extracoes WHERE tipo='BUSSOLA' AND status='concluido' AND finalizado_em IS NOT NULL ORDER BY finalizado_em DESC LIMIT 1"),
@@ -218,6 +258,7 @@ export async function onRequestGet({ request, env }) {
         ticket_medio_pedido: totais.pedidos_faturados > 0 ? totais.ol_total_faturado / totais.pedidos_faturados : 0,
       },
       atualizado_em: extracaoResult.results?.[0]?.finalizado_em || null,
+      regra_faturamento: 'Representante de origem do Bússola, com fallback para o vínculo oficial quando ausente.',
     })
   } catch (error) {
     const detalhe = error instanceof Error ? error.message : String(error)
