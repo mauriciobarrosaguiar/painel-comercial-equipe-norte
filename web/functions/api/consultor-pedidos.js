@@ -19,6 +19,7 @@ const texto = (value) => String(value ?? '').trim()
 const MIX_PRIORITARIO = "UPPER(TRIM(COALESCE(pr.tipo_mix,'')))='PRIORITARIO'"
 const MIX_LANCAMENTO = "UPPER(TRIM(COALESCE(pr.tipo_mix,'')))='LANCAMENTO'"
 const MIX_COMBATE = "UPPER(TRIM(COALESCE(pr.tipo_mix,'')))='COMBATE'"
+const CONSULTOR_FATURAMENTO = 'COALESCE(pe.consultor_bussola_id,pe.consultor_id,cl.consultor_id)'
 
 function periodo(params) {
   const tipo = PERIODOS.has(params.get('periodo')) ? params.get('periodo') : 'mes-atual'
@@ -47,22 +48,23 @@ function periodo(params) {
 function filtros(params, consultor, status) {
   const faixa = periodo(params)
   const uf = texto(params.get('uf')).toUpperCase().slice(0, 2)
+  const faturado = status === 'faturado'
   const condicoes = [
-    status === 'faturado' ? ITEM_FATURADO : PEDIDO_NAO_FATURADO,
-    ...(status === 'faturado' ? [] : [ITEM_ATIVO]),
-    'cl.consultor_id=?',
-    'cl.carteira_importada=1',
-    'cl.ativo=1',
+    faturado ? ITEM_FATURADO : PEDIDO_NAO_FATURADO,
+    ...(faturado ? [] : [ITEM_ATIVO]),
+    faturado ? `${CONSULTOR_FATURAMENTO}=?` : 'cl.consultor_id=?',
+    ...(faturado ? [] : ['cl.carteira_importada=1', 'cl.ativo=1']),
   ]
   const valores = [consultor]
 
   if (faixa.inicio && faixa.fim) {
-    condicoes.push(status === 'faturado'
+    condicoes.push(faturado
       ? 'DATE(COALESCE(pe.data_faturamento,pe.data_pedido)) BETWEEN DATE(?) AND DATE(?)'
       : 'DATE(pe.data_pedido) BETWEEN DATE(?) AND DATE(?)')
     valores.push(faixa.inicio, faixa.fim)
   }
   if (uf) {
+    condicoes.push('cl.carteira_importada=1')
     condicoes.push("UPPER(TRIM(COALESCE(cl.uf,'')))=?")
     valores.push(uf)
   }
@@ -103,6 +105,7 @@ function normalizarPedido(item, tipo) {
 
 const SELECT_BASE = `
   SELECT pe.id,pe.pedido_origem,pe.nota_fiscal,pe.status,pe.data_pedido,pe.data_faturamento,
+         pe.centro_distribuicao,pe.uf_centro_distribuicao,
          cl.cnpj,COALESCE(NULLIF(TRIM(cl.nome_fantasia),''),NULLIF(TRIM(cl.razao_social),''),'Cliente sem nome') cliente,
          cl.cidade,cl.uf,
          COUNT(DISTINCT ip.id) itens,
@@ -115,10 +118,11 @@ const SELECT_BASE = `
 const JOINS = `
     FROM itens_pedido ip
     JOIN pedidos pe ON pe.id=ip.pedido_id
-    JOIN clientes cl ON cl.id=pe.cliente_id
+    LEFT JOIN clientes cl ON cl.id=pe.cliente_id
     LEFT JOIN produtos pr ON pr.id=ip.produto_id`
 const GROUP_ORDER = `
    GROUP BY pe.id,pe.pedido_origem,pe.nota_fiscal,pe.status,pe.data_pedido,pe.data_faturamento,
+            pe.centro_distribuicao,pe.uf_centro_distribuicao,
             cl.cnpj,cl.nome_fantasia,cl.razao_social,cl.cidade,cl.uf
    ORDER BY DATE(COALESCE(pe.data_faturamento,pe.data_pedido)) DESC,pe.pedido_origem DESC`
 
@@ -190,7 +194,7 @@ export async function onRequestGet({ request, env }) {
       },
       faturados,
       nao_faturados: naoFaturados,
-      regra: 'Atendido e Atendido parcial usam o total atendido sem imposto. Enviado usa o valor solicitado sem imposto. Prioritários e lançamentos já fazem parte do OL sem combate.',
+      regra: 'Faturados são atribuídos ao representante de origem do Bússola. Atendidos e enviados permanecem vinculados à carteira atual do cliente.',
     })
   } catch (error) {
     const detalhe = error instanceof Error ? error.message : String(error)
