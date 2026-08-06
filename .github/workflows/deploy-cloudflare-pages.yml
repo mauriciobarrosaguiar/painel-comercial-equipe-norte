@@ -128,7 +128,7 @@ jobs:
             echo "Chave administrativa configurada no Cloudflare Pages."
           fi
 
-      - name: Configurar disparo imediato do GitHub Actions
+      - name: Configurar disparo imediato do GitHub Actions no Pages
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -136,7 +136,7 @@ jobs:
         shell: bash
         run: |
           if [ -z "${PAINEL_GITHUB_ACTIONS_TOKEN:-}" ]; then
-            echo "::warning::Adicione o secret PAINEL_GITHUB_ACTIONS_TOKEN com permissão Actions: write para ativar o disparo imediato. A fila de contingência continuará funcionando."
+            echo "::warning::Adicione o secret PAINEL_GITHUB_ACTIONS_TOKEN com permissão Actions: write para ativar o disparo imediato."
           else
             printf '%s' "$PAINEL_GITHUB_ACTIONS_TOKEN" | npx wrangler pages secret put GITHUB_ACTIONS_TOKEN --project-name painel-equipe-norte
             echo "Token de disparo imediato configurado no Cloudflare Pages."
@@ -147,3 +147,30 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: npx wrangler pages deploy dist --project-name painel-equipe-norte --branch main --commit-hash "$GITHUB_SHA" --commit-dirty=true --skip-caching
+
+      - name: Publicar processador de automações no Cloudflare Worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx wrangler deploy --config automation-worker/wrangler.jsonc
+
+      - name: Configurar segredos do processador Cloudflare
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          PAINEL_ADMIN_KEY: ${{ secrets.PAINEL_ADMIN_KEY }}
+          PAINEL_GITHUB_ACTIONS_TOKEN: ${{ secrets.PAINEL_GITHUB_ACTIONS_TOKEN || secrets.GITHUB_PAT || secrets.GH_PAT || secrets.PAT_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${PAINEL_ADMIN_KEY:-}" ]; then
+            echo "::error::PAINEL_ADMIN_KEY é obrigatório para o processador Cloudflare."
+            exit 1
+          fi
+          if [ -z "${PAINEL_GITHUB_ACTIONS_TOKEN:-}" ]; then
+            echo "::error::PAINEL_GITHUB_ACTIONS_TOKEN com permissão Actions: write é obrigatório para disparar as extrações."
+            exit 1
+          fi
+          printf '%s' "$PAINEL_ADMIN_KEY" | npx wrangler secret put PAINEL_ADMIN_KEY --config automation-worker/wrangler.jsonc
+          printf '%s' "$PAINEL_GITHUB_ACTIONS_TOKEN" | npx wrangler secret put GITHUB_ACTIONS_TOKEN --config automation-worker/wrangler.jsonc
+          echo "Processador Cloudflare configurado para verificar a fila a cada 5 minutos."
