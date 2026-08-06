@@ -1,0 +1,20 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "painel-equipe-norte-automacoes",
+  "main": "src/index.js",
+  "compatibility_date": "2026-08-06",
+  "workers_dev": true,
+  "triggers": {
+    "crons": [
+      "*/5 * * * *"
+    ]
+  },
+  "vars": {
+    "PAINEL_URL": "https://painel-equipe-norte.pages.dev",
+    "GITHUB_REPOSITORY": "mauriciobarrosaguiar/painel-comercial-equipe-norte",
+    "GITHUB_REF": "main"
+  },
+  "observability": {
+    "enabled": true
+  }
+}
