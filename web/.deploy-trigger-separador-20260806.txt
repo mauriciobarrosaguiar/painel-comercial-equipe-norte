@@ -1,0 +1,2 @@
+Reprocessamento do deploy do Separador Inteligente de Pedidos em 06/08/2026.
+Arquivo técnico sem efeito no painel.
