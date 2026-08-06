@@ -2,10 +2,12 @@ import { useEffect, useState } from 'react'
 import App from './App'
 import AutomationsModule from './AutomationsModule'
 import ClientsModule from './ClientsModule'
+import DashboardSeparatorShortcut from './DashboardSeparatorShortcut'
 import FocusModule from './FocusModule'
 import HistoryModule from './HistoryModule'
 import LoginPage, { SessionUser } from './LoginPage'
 import MarketFarmaModule from './MarketFarmaModule.new'
+import OrderSeparatorModule from './OrderSeparatorModule'
 import { AppPage, readPageFromUrl, savePageInHistory } from './navigation'
 import OpportunitiesModule from './OpportunitiesModule'
 import SipsModule from './SipsModule'
@@ -94,13 +96,16 @@ export default function AppShell() {
 
   if (corePages.has(page)) {
     return (
-      <App
-        user={user}
-        page={page as 'dashboard' | 'administracao' | 'consultores'}
-        onNavigate={go}
-        onLogout={() => void logout()}
-        onInstall={() => void installApp()}
-      />
+      <>
+        <App
+          user={user}
+          page={page as 'dashboard' | 'administracao' | 'consultores'}
+          onNavigate={go}
+          onLogout={() => void logout()}
+          onInstall={() => void installApp()}
+        />
+        {page === 'dashboard' && <DashboardSeparatorShortcut onOpen={() => go('separador')} />}
+      </>
     )
   }
 
@@ -109,6 +114,7 @@ export default function AppShell() {
   if (page === 'oportunidades') module = <OpportunitiesModule onBack={back} />
   if (page === 'sips') module = <SipsModule onBack={back} />
   if (page === 'mercado') module = <MarketFarmaModule onBack={back} onAutomations={() => go('automacoes')} />
+  if (page === 'separador') module = <OrderSeparatorModule onBack={back} />
   if (page === 'automacoes') module = <AutomationsModule onBack={back} />
   if (page === 'historico') module = <HistoryModule onBack={back} onAutomations={() => go('automacoes')} />
   if (page === 'foco') module = <FocusModule onBack={back} />
