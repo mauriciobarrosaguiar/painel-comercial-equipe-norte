@@ -2,24 +2,13 @@ name: Processar comandos do painel
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
-    paths:
-      - .github/workflows/processar-comandos-painel.yml
-      - web/functions/api/automacoes.js
-      - web/functions/api/configuracoes-automacao.js
-      - web/functions/api/internal/agendar-automacoes.js
-      - web/migrations/10020_configuracoes_automacao.sql
-  schedule:
-    - cron: "*/5 * * * *"
 
 permissions:
   contents: read
   actions: write
 
 concurrency:
-  group: comandos-painel
+  group: comandos-painel-fallback
   cancel-in-progress: false
 
 jobs:
@@ -31,6 +20,9 @@ jobs:
       PAINEL_ADMIN_KEY: ${{ secrets.PAINEL_ADMIN_KEY }}
       GH_TOKEN: ${{ github.token }}
     steps:
+      - name: Informar modo de contingência
+        run: echo "Execução manual de contingência. O processamento automático ocorre no Cloudflare Worker."
+
       - name: Criar comandos automáticos vencidos
         shell: bash
         run: |
@@ -43,7 +35,7 @@ jobs:
             --data '{}' > agendamentos.json; then
             cat agendamentos.json
           else
-            echo "::warning::Não foi possível consultar os intervalos agora. A fila existente continuará sendo processada e a próxima verificação ocorrerá em até 5 minutos."
+            echo "::warning::Não foi possível consultar os intervalos agora. A fila existente continuará sendo processada pelo Cloudflare Worker."
           fi
 
       - name: Processar fila do painel
