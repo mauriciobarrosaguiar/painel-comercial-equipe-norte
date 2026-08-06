@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import time
 from collections.abc import Callable
@@ -12,6 +13,7 @@ PAINEL_BASE_URL = os.environ.get(
     "PAINEL_BASE_URL",
     "https://painel-equipe-norte.pages.dev",
 ).rstrip("/")
+VISIBILIDADE_KEY = "bussola_visibilidade_contingencia"
 
 
 def texto(valor: Any) -> str:
@@ -97,38 +99,42 @@ def _consultores_configurados(configuracao: dict[str, Any]) -> list[dict[str, An
     ]
 
 
-def _consultores_para_contingencia(configuracao: dict[str, Any]) -> list[dict[str, Any]]:
+def _consultores_para_contingencia(
+    configuracao: dict[str, Any],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
     configurados = _consultores_configurados(configuracao)
-    esperados = configuracao.get("consultores_esperados") or []
-    if not esperados:
-        if not configurados:
-            raise RuntimeError(
-                "A GD não trouxe dados do mês atual e nenhum consultor cadastrou o acesso de contingência."
-            )
-        return configurados
+    esperados = [
+        dict(item)
+        for item in (configuracao.get("consultores_esperados") or [])
+        if isinstance(item, dict) and texto(item.get("id"))
+    ]
+    if not configurados:
+        raise RuntimeError(
+            "A GD não trouxe dados do mês atual e nenhum consultor cadastrou o acesso de contingência."
+        )
 
     por_id = {
         texto(item.get("consultor_id")): item
         for item in configurados
         if texto(item.get("consultor_id"))
     }
-    faltantes = [
-        texto(item.get("nome")) or texto(item.get("id"))
-        for item in esperados
-        if texto(item.get("id")) not in por_id
-    ]
-    if faltantes:
-        raise RuntimeError(
-            "A GD não trouxe dados do mês atual. A base anterior foi preservada porque "
-            "a contingência ainda está incompleta. Faltam os acessos de: "
-            + ", ".join(faltantes)
-        )
-
-    return [
+    ordenados = [
         por_id[texto(item.get("id"))]
         for item in esperados
         if texto(item.get("id")) in por_id
     ]
+    ids_ordenados = {texto(item.get("consultor_id")) for item in ordenados}
+    ordenados.extend(
+        item
+        for item in configurados
+        if texto(item.get("consultor_id")) not in ids_ordenados
+    )
+    faltantes = [
+        item
+        for item in esperados
+        if texto(item.get("id")) not in por_id
+    ]
+    return ordenados, esperados, faltantes
 
 
 def extrair_com_contingencia(
@@ -151,6 +157,11 @@ def extrair_com_contingencia(
                 return base_gd, "gd", {
                     "motivo": "GD com dados do mês atual",
                     "consultores_extraidos": 0,
+                    "consultores_ids": [],
+                    "faltantes": [],
+                    "falhas": [],
+                    "completa": True,
+                    "visibilidade": "equipe",
                 }
             motivo_contingencia = "A planilha da GD não contém dados do mês atual."
             print(f"Bússola: {motivo_contingencia} Iniciando contingência.")
@@ -158,12 +169,16 @@ def extrair_com_contingencia(
             motivo_contingencia = f"A extração da GD falhou: {exc}"
             print(f"Bússola: {motivo_contingencia} Iniciando contingência.")
 
-    consultores = _consultores_para_contingencia(configuracao)
+    consultores, esperados, faltantes_credencial = _consultores_para_contingencia(configuracao)
     bases: list[pd.DataFrame] = []
     nomes: list[str] = []
+    ids_extraidos: list[str] = []
+    falhas: list[str] = []
+    sem_dados_mes: list[str] = []
 
     for consultor in consultores:
-        nome = texto(consultor.get("nome")) or texto(consultor.get("consultor_id")) or "Consultor"
+        consultor_id = texto(consultor.get("consultor_id"))
+        nome = texto(consultor.get("nome")) or consultor_id or "Consultor"
         print(f"Bússola: extraindo contingência de {nome}.")
         try:
             base = extrair_fn(
@@ -171,18 +186,29 @@ def extrair_com_contingencia(
                 texto(consultor.get("segredo")),
             )
         except Exception as exc:
-            raise RuntimeError(
-                f"A contingência foi interrompida no acesso de {nome}: {exc}. "
-                "A base anterior foi preservada."
-            ) from exc
+            falhas.append(f"{nome}: {exc}")
+            print(f"Bússola: falha no acesso de {nome}; os demais continuarão. Erro: {exc}")
+            continue
+
+        if not tem_dados_mes_atual(base, agora=agora):
+            sem_dados_mes.append(nome)
+            print(f"Bússola: {nome} não trouxe dados do mês atual e não será publicado neste ciclo.")
+            continue
+
         base = base.copy()
         base["_credencial_origem"] = nome
+        base["_consultor_contingencia_id"] = consultor_id
         bases.append(base)
         nomes.append(nome)
+        if consultor_id:
+            ids_extraidos.append(consultor_id)
 
     if not bases:
+        detalhes = "; ".join(falhas + [f"{nome}: sem dados do mês atual" for nome in sem_dados_mes])
+        complemento = f" Detalhes: {detalhes}." if detalhes else ""
         raise RuntimeError(
-            "A contingência não encontrou nenhum acesso individual válido. A base anterior foi preservada."
+            "Nenhum acesso individual trouxe dados válidos do mês atual. A base anterior foi preservada."
+            + complemento
         )
 
     consolidada = pd.concat(bases, ignore_index=True, sort=False)
@@ -190,21 +216,106 @@ def extrair_com_contingencia(
         raise RuntimeError(
             "As extrações individuais terminaram sem registros. A base anterior foi preservada."
         )
-    if not tem_dados_mes_atual(consolidada, agora=agora):
-        raise RuntimeError(
-            "A GD e os acessos individuais não trouxeram dados do mês atual. "
-            "A base anterior foi preservada."
-        )
+
+    ids_esperados = {texto(item.get("id")) for item in esperados if texto(item.get("id"))}
+    ids_publicados = set(ids_extraidos)
+    completa = bool(ids_esperados) and not faltantes_credencial and not falhas and not sem_dados_mes
+    completa = completa and ids_esperados.issubset(ids_publicados)
+    modo = "consultores" if completa else "consultores_parcial"
+    visibilidade = "equipe" if completa else "individual"
+    faltantes = [texto(item.get("nome")) or texto(item.get("id")) for item in faltantes_credencial]
+    faltantes.extend(sem_dados_mes)
 
     print(
-        f"Bússola: contingência concluída com {len(nomes)} consultores e "
-        f"{len(consolidada)} linhas antes da deduplicação."
+        f"Bússola: contingência {'completa' if completa else 'parcial'} com {len(nomes)} "
+        f"consultores e {len(consolidada)} linhas antes da deduplicação."
     )
-    return consolidada, "consultores", {
+    return consolidada, modo, {
         "motivo": motivo_contingencia,
         "consultores_extraidos": len(nomes),
+        "consultores_ids": ids_extraidos,
         "nomes": nomes,
+        "faltantes": faltantes,
+        "falhas": falhas,
+        "completa": completa,
+        "visibilidade": visibilidade,
+        "consultores_esperados": len(ids_esperados),
     }
+
+
+def _atualizar_consultor_dos_pedidos(
+    legacy: Any,
+    database_id: str,
+    pedido_consultor: dict[str, str],
+) -> None:
+    por_consultor: dict[str, list[str]] = {}
+    for pedido_id, consultor_id in pedido_consultor.items():
+        if pedido_id and consultor_id:
+            por_consultor.setdefault(consultor_id, []).append(pedido_id)
+
+    for consultor_id, pedidos in por_consultor.items():
+        for inicio in range(0, len(pedidos), 90):
+            bloco = pedidos[inicio : inicio + 90]
+            placeholders = ",".join("?" for _ in bloco)
+            legacy.executar(
+                database_id,
+                f"UPDATE pedidos SET consultor_id=? WHERE ativo=1 AND origem='BUSSOLA' AND id IN ({placeholders})",
+                [consultor_id, *bloco],
+            )
+
+
+def _registrar_visibilidade(
+    legacy: Any,
+    database_id: str,
+    resultado: dict[str, Any],
+) -> None:
+    timestamp = pd.Timestamp.now(tz="America/Sao_Paulo").isoformat()
+    modo = texto(resultado.get("visibilidade")) or "equipe"
+    ids = sorted({texto(item) for item in (resultado.get("consultores_ids") or []) if texto(item)})
+    payload = {
+        "modo": modo,
+        "fonte": texto(resultado.get("modo")) or "gd",
+        "completa": bool(resultado.get("completa", modo == "equipe")),
+        "consultores_ids": ids,
+        "consultores_extraidos": int(resultado.get("consultores_extraidos") or 0),
+        "consultores_esperados": int(resultado.get("consultores_esperados") or 0),
+        "nomes": resultado.get("nomes") or [],
+        "faltantes": resultado.get("faltantes") or [],
+        "falhas": resultado.get("falhas") or [],
+        "motivo": texto(resultado.get("motivo")),
+        "atualizado_em": timestamp,
+    }
+    legacy.executar(
+        database_id,
+        """
+        INSERT INTO configuracoes (chave,valor_json,atualizado_em)
+        VALUES (?,?,?)
+        ON CONFLICT(chave) DO UPDATE SET
+          valor_json=excluded.valor_json,atualizado_em=excluded.atualizado_em
+        """,
+        [VISIBILIDADE_KEY, json.dumps(payload, ensure_ascii=False), timestamp],
+    )
+
+    if modo == "individual":
+        total = payload["consultores_esperados"]
+        publicados = payload["consultores_extraidos"]
+        mensagem = (
+            f"Contingência parcial: {publicados}/{total or '?'} consultores publicados. "
+            "Cada consultor visualiza somente os próprios dados até a cobertura ficar completa."
+        )
+        status = "contingencia_parcial"
+    elif payload["fonte"] == "consultores":
+        mensagem = "Contingência completa: todos os consultores foram consolidados na visão da equipe."
+        status = "conectada"
+    else:
+        mensagem = "Conexão validada pelo acesso principal da GD com dados do mês atual."
+        status = "conectada"
+
+    legacy.executar(
+        database_id,
+        "UPDATE integracao_credenciais SET status=?,mensagem_status=?,testado_em=? WHERE integracao='BUSSOLA'",
+        [status, mensagem, timestamp],
+    )
 
 
 def sincronizar() -> None:
@@ -214,6 +325,7 @@ def sincronizar() -> None:
     configuracao = obter_configuracao_credenciais()
     extrair_original = legacy.extrair_base
     resultado: dict[str, Any] = {}
+    pedido_consultor: dict[str, str] = {}
 
     def credenciais_principais() -> tuple[str, str]:
         gd = configuracao.get("gd") or {
@@ -228,22 +340,57 @@ def sincronizar() -> None:
         raise RuntimeError("Nenhuma credencial válida do Bússola está cadastrada.")
 
     def extrair_base_validada(_usuario: str, _segredo: str) -> pd.DataFrame:
-        base, modo, detalhes = extrair_com_contingencia(
-            configuracao,
-            extrair_original,
-        )
+        try:
+            base, modo, detalhes = extrair_com_contingencia(
+                configuracao,
+                extrair_original,
+            )
+        except Exception as exc:
+            resultado.update({
+                "modo": "consultores_parcial",
+                "visibilidade": "individual",
+                "completa": False,
+                "consultores_ids": [],
+                "consultores_extraidos": 0,
+                "consultores_esperados": len(configuracao.get("consultores_esperados") or []),
+                "faltantes": [],
+                "falhas": [str(exc)],
+                "motivo": str(exc),
+            })
+            raise
         resultado.update({"modo": modo, **detalhes})
+        if modo.startswith("consultores"):
+            for _, linha in base.iterrows():
+                consultor_id = texto(linha.get("_consultor_contingencia_id"))
+                pedido_origem = legacy.texto(linha.get("pedido_id"))
+                nota_fiscal = legacy.texto(linha.get("nota_fiscal"))
+                if consultor_id and pedido_origem:
+                    pedido_id = legacy.id_estavel("ped", pedido_origem, nota_fiscal)
+                    pedido_consultor[pedido_id] = consultor_id
         return base
 
     legacy.obter_credenciais = credenciais_principais
     legacy.extrair_base = extrair_base_validada
-    sincronizador.sincronizar()
+    try:
+        sincronizador.sincronizar()
+    except Exception:
+        if resultado.get("visibilidade"):
+            database_id = legacy.localizar_database_id()
+            _registrar_visibilidade(legacy, database_id, resultado)
+        raise
 
-    if resultado.get("modo") == "consultores":
+    database_id = legacy.localizar_database_id()
+    if pedido_consultor:
+        _atualizar_consultor_dos_pedidos(legacy, database_id, pedido_consultor)
+    _registrar_visibilidade(legacy, database_id, resultado)
+
+    if resultado.get("modo") == "consultores_parcial":
         print(
-            "Bússola sincronizado pelo modo de contingência. "
-            f"Motivo: {resultado.get('motivo', '')}"
+            "Bússola sincronizado em contingência parcial. Cada consultor publicado "
+            "visualiza somente a própria carteira até todos concluírem o cadastro."
         )
+    elif resultado.get("modo") == "consultores":
+        print("Bússola sincronizado pela contingência completa dos consultores.")
     else:
         print("Bússola sincronizado pelo acesso principal da GD.")
 
