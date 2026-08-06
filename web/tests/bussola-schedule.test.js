@@ -7,6 +7,8 @@ import { onRequestPost as agendarAutomacoes } from '../functions/api/internal/ag
 
 const workflow = readFileSync(new URL('../../.github/workflows/bussola-d1.yml', import.meta.url), 'utf8')
 const processor = readFileSync(new URL('../../.github/workflows/processar-comandos-painel.yml', import.meta.url), 'utf8')
+const workerConfig = readFileSync(new URL('../automation-worker/wrangler.jsonc', import.meta.url), 'utf8')
+const worker = readFileSync(new URL('../automation-worker/src/index.js', import.meta.url), 'utf8')
 const contingencyScript = readFileSync(new URL('../../scripts/extrair_bussola_contingencia.py', import.meta.url), 'utf8')
 const ADMIN_KEY = 'chave-teste-segura-123'
 
@@ -62,11 +64,15 @@ function database() {
   }
 }
 
-test('Bússola usa o agendador central configurável a cada 5 minutos', () => {
+test('Bússola usa o agendador central do Cloudflare Worker a cada 5 minutos', () => {
   assert.doesNotMatch(workflow, /schedule:/)
   assert.match(workflow, /workflow_dispatch:/)
-  assert.match(processor, /schedule:\s*\n\s*- cron: ["']\*\/5 \* \* \* \*["']/)
-  assert.match(processor, /api\/internal\/agendar-automacoes/)
+  assert.doesNotMatch(processor, /schedule:/)
+  assert.match(processor, /workflow_dispatch:/)
+  assert.match(processor, /contingência/)
+  assert.match(workerConfig, /"crons"\s*:\s*\[\s*"\*\/5 \* \* \* \*"/)
+  assert.match(worker, /async scheduled\s*\(/)
+  assert.match(worker, /api\/internal\/agendar-automacoes/)
   assert.match(workflow, /concurrency:\s*\n\s*group: bussola-d1\s*\n\s*cancel-in-progress: false/)
 })
 
