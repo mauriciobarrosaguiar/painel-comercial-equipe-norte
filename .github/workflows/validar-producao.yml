@@ -1,9 +1,11 @@
 name: Validar painel em produção
 
 on:
-  push:
-    branches:
-      - main
+  workflow_run:
+    workflows:
+      - Deploy Painel no Cloudflare Pages
+    types:
+      - completed
   workflow_dispatch:
 
 permissions:
@@ -12,27 +14,29 @@ permissions:
 
 concurrency:
   group: validar-painel-producao
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   smoke:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 15
     env:
       PAINEL_URL: https://painel-equipe-norte.pages.dev
+      TARGET_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
     steps:
       - name: Aguardar publicação do Cloudflare
         shell: bash
         run: |
           set -euo pipefail
           pronto=0
-          for tentativa in $(seq 1 48); do
+          for tentativa in $(seq 1 30); do
             codigo=$(curl --silent --show-error --output session.json --write-out '%{http_code}' "${PAINEL_URL}/api/auth/session" || true)
             if [ "$codigo" = "401" ] && grep -q 'autenticado' session.json; then
               pronto=1
               break
             fi
-            echo "Publicação ainda não disponível (${tentativa}/48, HTTP ${codigo})."
+            echo "Publicação ainda não disponível (${tentativa}/30, HTTP ${codigo})."
             sleep 10
           done
           if [ "$pronto" != "1" ]; then
@@ -64,7 +68,7 @@ jobs:
           )
 
           todos_ok=0
-          for tentativa in $(seq 1 36); do
+          for tentativa in $(seq 1 24); do
             todos_ok=1
             for indice in "${!logins[@]}"; do
               login="${logins[$indice]}"
@@ -84,7 +88,7 @@ jobs:
             if [ "$todos_ok" = "1" ]; then
               break
             fi
-            echo "Aguardando publicação dos acessos (${tentativa}/36)."
+            echo "Aguardando publicação dos acessos (${tentativa}/24)."
             sleep 10
           done
 
@@ -93,22 +97,37 @@ jobs:
             exit 1
           fi
 
-      - name: Confirmar dashboard e banco D1
+      - name: Confirmar dashboard, contingência e banco D1
         shell: bash
         run: |
           set -euo pipefail
           codigo=$(curl --silent --show-error --cookie cookies-m0043497.txt --output dashboard.json --write-out '%{http_code}' \
             "${PAINEL_URL}/api/dashboard?periodo=mes-atual")
-          test "$codigo" = "200"
-          python - <<'PY'
+
+          python - "$codigo" <<'PY'
           import json
+          import sys
+
+          codigo = int(sys.argv[1])
           with open('dashboard.json', encoding='utf-8') as arquivo:
               dados = json.load(arquivo)
-          obrigatorios = ['ol_total_faturado', 'ol_sem_combate', 'clientes_ativos', 'filtros']
-          ausentes = [campo for campo in obrigatorios if campo not in dados]
-          if ausentes:
-              raise SystemExit(f'Campos ausentes no dashboard: {ausentes}')
-          print('Produção validada com seis acessos, D1 e dashboard ativos.')
+
+          if codigo == 200:
+              obrigatorios = ['ol_total_faturado', 'ol_sem_combate', 'clientes_ativos', 'filtros']
+              ausentes = [campo for campo in obrigatorios if campo not in dados]
+              if ausentes:
+                  raise SystemExit(f'Campos ausentes no dashboard: {ausentes}')
+              contingencia = dados.get('contingencia') or {}
+              if contingencia and contingencia.get('modo') not in (None, 'individual'):
+                  raise SystemExit(f'Modo de contingência inesperado: {contingencia}')
+              print('Dashboard disponível e isolado conforme a contingência atual.')
+          elif codigo == 403:
+              codigo_esperado = dados.get('codigo')
+              if codigo_esperado != 'CONTINGENCIA_AGUARDANDO_ACESSO':
+                  raise SystemExit(f'Bloqueio inesperado no dashboard: {dados}')
+              print('Painel de espera validado para consultor ainda não publicado.')
+          else:
+              raise SystemExit(f'Dashboard retornou HTTP {codigo}: {dados}')
           PY
 
       - name: Publicar resultado da produção
@@ -122,9 +141,9 @@ jobs:
           descricao="Validação da produção falhou"
           if [ "$RESULTADO_JOB" = "success" ]; then
             estado=success
-            descricao="Seis acessos, D1, dashboard e instalação validados"
+            descricao="Acessos, D1, dashboard e contingência validados"
           fi
-          gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" \
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${TARGET_SHA}" \
             -f state="$estado" \
             -f context="production/smoke" \
             -f description="$descricao"
