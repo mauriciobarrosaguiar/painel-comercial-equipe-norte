@@ -7,6 +7,7 @@ import { onRequestPost as agendarAutomacoes } from '../functions/api/internal/ag
 
 const workflow = readFileSync(new URL('../../.github/workflows/bussola-d1.yml', import.meta.url), 'utf8')
 const processor = readFileSync(new URL('../../.github/workflows/processar-comandos-painel.yml', import.meta.url), 'utf8')
+const contingencyScript = readFileSync(new URL('../../scripts/extrair_bussola_contingencia.py', import.meta.url), 'utf8')
 const ADMIN_KEY = 'chave-teste-segura-123'
 
 function statement(db, sql, params = []) {
@@ -69,9 +70,11 @@ test('Bússola usa o agendador central configurável a cada 5 minutos', () => {
   assert.match(workflow, /concurrency:\s*\n\s*group: bussola-d1\s*\n\s*cancel-in-progress: false/)
 })
 
-test('extração permite concluir processamento longo sem perder a sincronização', () => {
+test('extração permite concluir processamento longo com contingência e sincronização corrigida', () => {
   assert.match(workflow, /timeout-minutes: 60/)
-  assert.match(workflow, /python scripts\/extrair_bussola_d1_corrigido\.py/)
+  assert.match(workflow, /python scripts\/extrair_bussola_contingencia\.py/)
+  assert.match(contingencyScript, /from scripts import extrair_bussola_d1_corrigido as sincronizador/)
+  assert.match(contingencyScript, /sincronizador\.sincronizar\(\)/)
 })
 
 test('cada extração recalcula o mês anterior fechado', () => {
