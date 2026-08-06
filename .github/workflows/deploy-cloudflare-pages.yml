@@ -20,6 +20,7 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
 
     defaults:
       run:
@@ -33,9 +34,11 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
 
       - name: Instalar dependências
-        run: npm ci --ignore-scripts
+        run: npm ci --ignore-scripts --no-audit
 
       - name: Compilar painel
         run: npm run build
@@ -48,7 +51,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          npx wrangler@4.112.0 d1 list --json > d1-list.json
+          npx wrangler d1 list --json > d1-list.json
 
           if ! node <<'NODE'
           const fs = require('fs')
@@ -57,8 +60,8 @@ jobs:
           process.exit(databases.some((item) => item && item.name === 'painel-equipe-norte-db') ? 0 : 1)
           NODE
           then
-            npx wrangler@4.112.0 d1 create painel-equipe-norte-db
-            npx wrangler@4.112.0 d1 list --json > d1-list.json
+            npx wrangler d1 create painel-equipe-norte-db
+            npx wrangler d1 list --json > d1-list.json
           fi
 
           node <<'NODE'
@@ -82,7 +85,7 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: npx wrangler@4.112.0 d1 migrations apply DB --remote --config wrangler.jsonc
+        run: npx wrangler d1 migrations apply DB --remote --config wrangler.jsonc
 
       - name: Definir main como branch de produção
         env:
@@ -121,7 +124,7 @@ jobs:
           if [ -z "${PAINEL_ADMIN_KEY:-}" ]; then
             echo "::warning::PAINEL_ADMIN_KEY ainda não foi adicionado aos Secrets do GitHub."
           else
-            printf '%s' "$PAINEL_ADMIN_KEY" | npx wrangler@4.112.0 pages secret put PAINEL_ADMIN_KEY --project-name painel-equipe-norte
+            printf '%s' "$PAINEL_ADMIN_KEY" | npx wrangler pages secret put PAINEL_ADMIN_KEY --project-name painel-equipe-norte
             echo "Chave administrativa configurada no Cloudflare Pages."
           fi
 
@@ -135,7 +138,7 @@ jobs:
           if [ -z "${PAINEL_GITHUB_ACTIONS_TOKEN:-}" ]; then
             echo "::warning::Adicione o secret PAINEL_GITHUB_ACTIONS_TOKEN com permissão Actions: write para ativar o disparo imediato. A fila de contingência continuará funcionando."
           else
-            printf '%s' "$PAINEL_GITHUB_ACTIONS_TOKEN" | npx wrangler@4.112.0 pages secret put GITHUB_ACTIONS_TOKEN --project-name painel-equipe-norte
+            printf '%s' "$PAINEL_GITHUB_ACTIONS_TOKEN" | npx wrangler pages secret put GITHUB_ACTIONS_TOKEN --project-name painel-equipe-norte
             echo "Token de disparo imediato configurado no Cloudflare Pages."
           fi
 
@@ -143,4 +146,4 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: npx wrangler@4.112.0 pages deploy dist --project-name painel-equipe-norte --branch main --commit-hash "$GITHUB_SHA" --commit-dirty=true --skip-caching
+        run: npx wrangler pages deploy dist --project-name painel-equipe-norte --branch main --commit-hash "$GITHUB_SHA" --commit-dirty=true --skip-caching
