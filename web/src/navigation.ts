@@ -6,6 +6,7 @@ export type AppPage =
   | 'oportunidades'
   | 'sips'
   | 'mercado'
+  | 'separador'
   | 'automacoes'
   | 'historico'
   | 'foco'
@@ -18,6 +19,7 @@ const PAGE_SLUG: Record<AppPage, string> = {
   oportunidades: 'oportunidades',
   sips: 'sips',
   mercado: 'mercado-farma',
+  separador: 'separador-pedidos',
   automacoes: 'automacoes',
   historico: 'historico',
   foco: 'foco-semanal',
@@ -33,6 +35,8 @@ SLUG_PAGE.set('home', 'dashboard')
 SLUG_PAGE.set('painel', 'dashboard')
 SLUG_PAGE.set('mercado', 'mercado')
 SLUG_PAGE.set('foco', 'foco')
+SLUG_PAGE.set('separador', 'separador')
+SLUG_PAGE.set('pedidos', 'separador')
 
 export function readPageFromUrl(search = window.location.search): AppPage {
   const slug = new URLSearchParams(search).get('pagina')?.trim().toLowerCase() || ''
