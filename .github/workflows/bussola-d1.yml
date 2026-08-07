@@ -47,7 +47,7 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_API_TOKEN }}
           CLOUDFLARE_D1_DATABASE: painel-equipe-norte-db
-        run: python scripts/extrair_bussola_contingencia.py
+        run: python scripts/extrair_bussola_d1_corrigido.py
 
       - name: Aplicar classificação MIX por código SAP
         env:
@@ -97,7 +97,7 @@ jobs:
           set -euo pipefail
           if [ "$RESULTADO" = "success" ]; then
             STATUS="concluido"
-            MENSAGEM="Extração do Bússola concluída com validação do mês atual, contingência por consultores, classificação MIX e reconciliação dos meses fechados."
+            MENSAGEM="Extração do Bússola concluída pela credencial da GD, sincronizada, classificada pelo MIX e os meses fechados foram reconciliados."
             ERRO=""
           else
             STATUS="erro"

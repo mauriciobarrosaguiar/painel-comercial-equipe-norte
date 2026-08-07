@@ -3,69 +3,32 @@ import BaseManagement from './BaseManagement'
 import CalculationAudit from './CalculationAudit'
 import TemplatesSection from './TemplatesSection'
 
-type ContingencyStatus = {
-  disponivel: boolean
-  configurada: boolean
-  usuario_mascarado: string
-  consultor_id: string
-  nome: string
-  atualizado_em: string | null
-}
-
-type CoverageStatus = {
-  esperados: number
-  configurados: number
-  faltantes: string[]
-  pronta: boolean
-}
-
 type IntegrationStatus = {
   configurada: boolean
   usuario_mascarado: string
   status: string
   mensagem: string
   atualizado_em: string | null
-  contingencia: ContingencyStatus
-  cobertura_contingencia: CoverageStatus
-  mensagem_operacao?: string
 }
 
 type Props = { onBack: () => void }
 
-const formatDate = (value: string | null | undefined) => {
+const formatDate = (value: string | null) => {
   if (!value) return 'Ainda não registrado'
   const date = new Date(value)
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString('pt-BR')
 }
 
-const emptyContingency: ContingencyStatus = {
-  disponivel: false,
-  configurada: false,
-  usuario_mascarado: '',
-  consultor_id: '',
-  nome: '',
-  atualizado_em: null,
-}
-
-const emptyCoverage: CoverageStatus = {
-  esperados: 0,
-  configurados: 0,
-  faltantes: [],
-  pronta: false,
-}
-
 export default function IntegrationSettings({ onBack }: Props) {
-  const [gdUser, setGdUser] = useState('')
-  const [gdSecret, setGdSecret] = useState('')
-  const [consultantUser, setConsultantUser] = useState('')
-  const [consultantSecret, setConsultantSecret] = useState('')
+  const [userId, setUserId] = useState('')
+  const [accessSecret, setAccessSecret] = useState('')
   const [status, setStatus] = useState<IntegrationStatus | null>(null)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
-  async function request(method: 'GET' | 'POST' | 'DELETE', body?: object, query = '') {
-    const response = await fetch(`/api/admin/bussola${query}`, {
+  async function request(method: 'GET' | 'POST' | 'DELETE', body?: object) {
+    const response = await fetch('/api/admin/bussola', {
       method,
       cache: 'no-store',
       headers: { 'content-type': 'application/json' },
@@ -90,17 +53,16 @@ export default function IntegrationSettings({ onBack }: Props) {
 
   useEffect(() => { void load() }, [])
 
-  async function saveGd(event: FormEvent) {
+  async function save(event: FormEvent) {
     event.preventDefault()
     setLoading(true)
     setError('')
     setMessage('')
     try {
-      const result = await request('POST', { escopo: 'gd', usuario: gdUser, segredo: gdSecret })
-      setStatus(result)
-      setGdUser('')
-      setGdSecret('')
-      setMessage(result.mensagem_operacao || 'Acesso principal da GD salvo com segurança.')
+      setStatus(await request('POST', { usuario: userId, segredo: accessSecret }))
+      setUserId('')
+      setAccessSecret('')
+      setMessage('Acesso da GD salvo e protegido com sucesso.')
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason))
     } finally {
@@ -108,50 +70,27 @@ export default function IntegrationSettings({ onBack }: Props) {
     }
   }
 
-  async function saveConsultant(event: FormEvent) {
-    event.preventDefault()
+  async function remove() {
+    if (!window.confirm('Remover o acesso da GD salvo?')) return
     setLoading(true)
     setError('')
     setMessage('')
     try {
-      const result = await request('POST', {
-        escopo: 'consultor',
-        usuario: consultantUser,
-        segredo: consultantSecret,
+      await request('DELETE')
+      setStatus({
+        configurada: false,
+        usuario_mascarado: '',
+        status: 'nao_configurada',
+        mensagem: 'Credencial da GD removida.',
+        atualizado_em: null,
       })
-      setStatus(result)
-      setConsultantUser('')
-      setConsultantSecret('')
-      setMessage(result.mensagem_operacao || 'Seu acesso de contingência foi salvo com segurança.')
+      setMessage('Acesso da GD removido.')
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason))
     } finally {
       setLoading(false)
     }
   }
-
-  async function remove(scope: 'gd' | 'consultor') {
-    const label = scope === 'gd' ? 'o acesso principal da GD' : 'seu acesso de contingência'
-    if (!window.confirm(`Remover ${label}?`)) return
-    setLoading(true)
-    setError('')
-    setMessage('')
-    try {
-      const result = await request('DELETE', undefined, `?escopo=${scope}`)
-      setStatus(result)
-      setMessage(result.mensagem_operacao || 'Acesso removido.')
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : String(reason))
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const contingency = status?.contingencia || emptyContingency
-  const coverage = status?.cobertura_contingencia || emptyCoverage
-  const missingText = coverage.faltantes.length
-    ? `Ainda faltam: ${coverage.faltantes.join(', ')}.`
-    : 'Todos os consultores com carteira já cadastraram o acesso de contingência.'
 
   return <main className="content admin-content">
     <button className="back-button" onClick={onBack}>← Voltar ao painel</button>
@@ -170,104 +109,50 @@ export default function IntegrationSettings({ onBack }: Props) {
           <div className="integration-icon">B</div>
           <div>
             <h2>Bússola</h2>
-            <p>Credenciais usadas somente pela extração automatizada.</p>
+            <p>Credencial da GD usada somente pela extração automatizada.</p>
           </div>
           <span className="status-pill">
-            {status?.configurada ? 'GD configurada' : loading ? 'Carregando' : 'Aguardando GD'}
+            {status?.configurada ? 'GD configurada' : loading ? 'Carregando' : 'Aguardando acesso da GD'}
           </span>
         </div>
 
         {status && <>
           <div className="integration-status-grid">
-            <div><span>Usuário principal salvo</span><strong>{status.usuario_mascarado || 'Nenhum'}</strong></div>
+            <div><span>Usuário da GD salvo</span><strong>{status.usuario_mascarado || 'Nenhum'}</strong></div>
             <div><span>Última alteração</span><strong>{formatDate(status.atualizado_em)}</strong></div>
             <div className="wide"><span>Situação</span><strong>{status.mensagem}</strong></div>
           </div>
 
-          <form className="credentials-form" onSubmit={(event) => void saveGd(event)}>
+          <form className="credentials-form" onSubmit={(event) => void save(event)}>
             <div className="form-heading">
               <h3>{status.configurada ? 'Substituir acesso da GD' : 'Cadastrar acesso da GD'}</h3>
-              <p>Este é o acesso principal. A automação tenta a GD primeiro.</p>
+              <p>O Bússola será extraído exclusivamente com este acesso. Não são usados logins dos consultores.</p>
             </div>
             <label>
               <span>Usuário do Bússola da GD</span>
-              <input value={gdUser} onChange={(event) => setGdUser(event.target.value)} required />
+              <input value={userId} onChange={(event) => setUserId(event.target.value)} required />
             </label>
             <label>
               <span>Código de acesso do Bússola da GD</span>
-              <input type="password" value={gdSecret} onChange={(event) => setGdSecret(event.target.value)} required />
+              <input type="password" value={accessSecret} onChange={(event) => setAccessSecret(event.target.value)} required />
             </label>
             <div className="form-actions">
               <button className="primary-action" disabled={loading}>Salvar acesso da GD</button>
               {status.configurada && <button
                 className="danger-button"
                 type="button"
-                onClick={() => void remove('gd')}
+                onClick={() => void remove()}
                 disabled={loading}
               >Remover acesso da GD</button>}
             </div>
           </form>
-
-          <div className="integration-status-grid">
-            <div>
-              <span>Contingência cadastrada</span>
-              <strong>{coverage.configurados}/{coverage.esperados || '—'} consultores</strong>
-            </div>
-            <div>
-              <span>Pronta para uso</span>
-              <strong>{coverage.pronta ? 'Sim' : 'Ainda não'}</strong>
-            </div>
-            <div className="wide">
-              <span>Regra automática</span>
-              <strong>Se a GD falhar ou não trouxer dados do mês atual, o painel extrai cada vendedor.</strong>
-            </div>
-            <div className="wide">
-              <span>Cobertura</span>
-              <strong>{missingText}</strong>
-            </div>
-          </div>
-
-          {contingency.disponivel && <form className="credentials-form" onSubmit={(event) => void saveConsultant(event)}>
-            <div className="form-heading">
-              <h3>Acesso de contingência — {contingency.nome || 'Consultor'}</h3>
-              <p>Cadastre o seu próprio Bússola. Ele só será usado quando a extração da GD não trouxer dados do mês atual.</p>
-            </div>
-            {contingency.configurada && <div className="integration-status-grid">
-              <div><span>Seu usuário salvo</span><strong>{contingency.usuario_mascarado}</strong></div>
-              <div><span>Última alteração</span><strong>{formatDate(contingency.atualizado_em)}</strong></div>
-            </div>}
-            <label>
-              <span>Seu usuário do Bússola</span>
-              <input value={consultantUser} onChange={(event) => setConsultantUser(event.target.value)} required />
-            </label>
-            <label>
-              <span>Seu código de acesso do Bússola</span>
-              <input
-                type="password"
-                value={consultantSecret}
-                onChange={(event) => setConsultantSecret(event.target.value)}
-                required
-              />
-            </label>
-            <div className="form-actions">
-              <button className="primary-action" disabled={loading}>
-                {contingency.configurada ? 'Atualizar meu acesso' : 'Salvar meu acesso'}
-              </button>
-              {contingency.configurada && <button
-                className="danger-button"
-                type="button"
-                onClick={() => void remove('consultor')}
-                disabled={loading}
-              >Remover meu acesso</button>}
-            </div>
-          </form>}
         </>}
       </article>
 
       <aside className="security-card">
         <span className="security-icon">✓</span>
-        <h2>Contingência protegida</h2>
-        <p>Os acessos individuais ficam criptografados e só são usados pela automação quando o arquivo da GD falhar ou vier sem dados do mês atual.</p>
+        <h2>Acesso confirmado</h2>
+        <p>As extrações do Bússola usam somente a credencial da GD cadastrada e protegida no painel.</p>
       </aside>
     </section>
 
