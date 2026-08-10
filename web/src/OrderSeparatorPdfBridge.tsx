@@ -108,7 +108,7 @@ function extractCnpjCandidates(items: PositionedItem[]) {
 
   for (const line of groupLines(items)) {
     const text = lineText(line.items)
-    for (const match of text.matchAll(/(?:\d[\s.\/-]*){14}/g)) add(match[0])
+    for (const match of text.matchAll(/\b\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2}\b/g)) add(match[0])
   }
   return candidates
 }
