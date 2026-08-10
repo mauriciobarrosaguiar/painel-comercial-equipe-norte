@@ -3,10 +3,12 @@ import test from 'node:test'
 import { readFileSync } from 'node:fs'
 
 const bridge = readFileSync(new URL('../src/OrderSeparatorPdfBridgeV3.tsx', import.meta.url), 'utf8')
+const bridgeV4 = readFileSync(new URL('../src/OrderSeparatorPdfBridgeV4.tsx', import.meta.url), 'utf8')
 const shell = readFileSync(new URL('../src/AppShell.tsx', import.meta.url), 'utf8')
 
 test('Separador usa a UF selecionada no painel quando a planilha não informa UF', () => {
-  assert.match(shell, /OrderSeparatorPdfBridgeV3/)
+  assert.match(shell, /OrderSeparatorPdfBridgeV4/)
+  assert.match(bridgeV4, /OrderSeparatorPdfBridgeV3/)
   assert.match(bridge, /separator-state-list button\.active span/)
   assert.match(bridge, /UF \/ Estado/)
   assert.match(bridge, /headers\.push\('UF \/ Estado'\)/)
