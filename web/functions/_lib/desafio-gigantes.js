@@ -1,6 +1,6 @@
 const texto = (value) => String(value ?? '').trim()
 const digitos = (value) => texto(value).replace(/\D/g, '')
-const alto = (value) => texto(value).normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^A-Z0-9]+/g, ' ').trim().toUpperCase()
+const alto = (value) => texto(value).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/[^A-Z0-9]+/g, ' ').trim()
 const numero = (value) => {
   if (typeof value === 'number') return Number.isFinite(value) ? value : 0
   let normalized = texto(value).replace(/%/g, '').replace(/\s/g, '')
