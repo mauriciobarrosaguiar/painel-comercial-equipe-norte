@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useState } from 'react'
 import BaseManagement from './BaseManagement'
 import CalculationAudit from './CalculationAudit'
+import DesafioGigantesImport from './DesafioGigantesImport'
 import TemplatesSection from './TemplatesSection'
 
 type IntegrationStatus = {
@@ -157,6 +158,7 @@ export default function IntegrationSettings({ onBack }: Props) {
     </section>
 
     <BaseManagement adminKey="" enabled />
+    <DesafioGigantesImport />
     <TemplatesSection />
     <CalculationAudit adminKey="" enabled />
   </main>
