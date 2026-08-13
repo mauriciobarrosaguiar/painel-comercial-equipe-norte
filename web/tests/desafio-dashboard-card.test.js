@@ -5,11 +5,21 @@ import { testDatabase } from './d1-fixture.js'
 import { onRequestGet } from '../functions/api/desafio-gigantes.js'
 
 const app = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8')
+const shell = readFileSync(new URL('../src/AppShell.tsx', import.meta.url), 'utf8')
+const page = readFileSync(new URL('../src/DesafioGigantesPage.tsx', import.meta.url), 'utf8')
+const management = readFileSync(new URL('../functions/api/desafio-gigantes-gestao.js', import.meta.url), 'utf8')
 const bases = readFileSync(new URL('../functions/api/admin/bases.js', import.meta.url), 'utf8')
 
-test('Visão Geral exibe card Desafio de Gigantes e importação aciona SAP', () => {
-  assert.match(app, /DesafioGigantesCard/)
-  assert.match(app, /<DesafioGigantesCard/)
+test('Desafio de Gigantes fica em menu próprio, mostra consultores e importação aciona SAP', () => {
+  assert.match(app, /Desafio de Gigantes/)
+  assert.match(app, /'Desafio de Gigantes': 'desafio'/)
+  assert.doesNotMatch(app, /<DesafioGigantesCard/)
+  assert.match(shell, /DesafioGigantesPage/)
+  assert.match(page, /Equipe Norte/)
+  assert.match(page, /Consultores/)
+  assert.match(page, /SapCorrectionPanel/)
+  assert.match(management, /saps_problema/)
+  assert.match(management, /corrigir_sap/)
   assert.match(bases, /acionarSapAposImportacao/)
   assert.match(bases, /desafio_gigantes/)
 })

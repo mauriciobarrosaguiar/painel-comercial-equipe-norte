@@ -3,6 +3,7 @@ import App from './App'
 import AutomationsModule from './AutomationsModule'
 import ClientsModule from './ClientsModule'
 import DashboardSeparatorShortcut from './DashboardSeparatorShortcut'
+import DesafioGigantesPage from './DesafioGigantesPage'
 import FocusModule from './FocusModule'
 import HistoryModule from './HistoryModule'
 import LoginPage, { SessionUser } from './LoginPage'
@@ -118,6 +119,7 @@ export default function AppShell() {
   if (page === 'automacoes') module = <AutomationsModule onBack={back} />
   if (page === 'historico') module = <HistoryModule onBack={back} onAutomations={() => go('automacoes')} />
   if (page === 'foco') module = <FocusModule onBack={back} />
+  if (page === 'desafio') module = <DesafioGigantesPage onBack={back} />
   const exportType = page === 'clientes' ? 'clientes' : page === 'oportunidades' ? 'oportunidades' : ''
 
   return (

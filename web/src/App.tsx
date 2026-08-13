@@ -3,7 +3,6 @@ import IntegrationSettings from './IntegrationSettings'
 import ConsultantsModule from './ConsultantsModule'
 import PendingOrdersOverview from './PendingOrdersOverview'
 import DownloadImagesButton from './DownloadImagesButton'
-import DesafioGigantesCard from './DesafioGigantesCard'
 import type { SessionUser } from './LoginPage'
 import type { AppPage } from './navigation'
 import './dashboard.css'
@@ -24,6 +23,7 @@ const modules = [
   ['Consultores', 'Ranking, resultados individuais e acompanhamento das metas.', '◉'],
   ['Clientes', 'Positivação, cobertura, histórico e oportunidades por cliente.', '◇'],
   ['Foco Semanal', 'Produtos foco, metas por consultor e acompanhamento da semana.', '◎'],
+  ['Desafio de Gigantes', 'Campanha, metas, consultores e conferência SAP → EAN.', '🏆'],
   ['Oportunidades', 'Clientes sem compra, mix ausente e potenciais de crescimento.', '↗'],
   ['Mercado Farma', 'Preços, estoques e distribuidores organizados por UF.', '⌁'],
   ['SIP / Redes', 'Grupos, redes, acessos e resultados consolidados.', '⬡'],
@@ -143,7 +143,7 @@ export default function App({ user, page, onNavigate, onLogout, onInstall }: Pro
   const open = (title: string) => {
     const route: Record<string, AppPage> = {
       'Visão Geral': 'dashboard', Consultores: 'consultores', Clientes: 'clientes', 'Foco Semanal': 'foco',
-      Oportunidades: 'oportunidades', 'Mercado Farma': 'mercado', 'SIP / Redes': 'sips', Histórico: 'historico',
+      'Desafio de Gigantes': 'desafio', Oportunidades: 'oportunidades', 'Mercado Farma': 'mercado', 'SIP / Redes': 'sips', Histórico: 'historico',
       Automações: 'automacoes', Administração: 'administracao',
     }
     const nextPage = route[title]
@@ -219,8 +219,6 @@ export default function App({ user, page, onNavigate, onLogout, onInstall }: Pro
               <div className="goal-details"><span>Sem venda</span><b>{num.format(dashboard.clientes_sem_venda || 0)}</b></div><small>{filter}</small>
             </article>
           </section>
-
-          <DesafioGigantesCard inicio={selected.inicio || current.inicio} consultor={consultant} uf={uf} />
 
           <section className="section-heading"><div><span className="eyebrow">Acesso rápido</span><h2>Módulos do painel</h2></div><span className="development-note">{status}</span></section>
           <section className="modules-grid">
