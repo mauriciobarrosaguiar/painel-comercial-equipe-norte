@@ -1,7 +1,8 @@
 import { authorized, json } from '../../_lib/credentials.js'
 import { classificarMix } from '../../_lib/commercial.js'
+import { importarDesafioGigantes, obterStatusDesafioGigantes } from '../../_lib/desafio-gigantes.js'
 
-const TIPOS = new Set(['painel', 'metas', 'produtos_mix', 'produtos_mercado_farma', 'metas_mix'])
+const TIPOS = new Set(['painel', 'metas', 'produtos_mix', 'produtos_mercado_farma', 'metas_mix', 'desafio_gigantes'])
 const texto = (value) => String(value ?? '').trim()
 const digitos = (value) => texto(value).replace(/\D/g, '')
 const alto = (value) => texto(value).normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').toUpperCase()
@@ -49,11 +50,13 @@ async function obterStatus(env) {
     env.DB.prepare('SELECT COUNT(*) total FROM metas'),
     env.DB.prepare('SELECT tipo,nome_arquivo,total_registros,status,criado_em FROM importacoes ORDER BY criado_em DESC LIMIT 8'),
   ])
+  const desafio = await obterStatusDesafioGigantes(env)
   return {
     painel: Number(results[0]?.results?.[0]?.total || 0),
     produtos_mix: Number(results[1]?.results?.[0]?.total || 0),
     produtos_mercado_farma: Number(results[2]?.results?.[0]?.total || 0),
     metas: Number(results[3]?.results?.[0]?.total || 0),
+    desafio_gigantes: desafio,
     historico: results[4]?.results || [],
   }
 }
@@ -316,6 +319,12 @@ export async function onRequestPost({ request, env }) {
         produtos_mix: produtosMix,
         bases: await obterStatus(env),
       })
+    }
+
+    if (tipo === 'desafio_gigantes') {
+      validarTamanho(rows, 'A planilha do Desafio de Gigantes')
+      const resultado = await importarDesafioGigantes(env, rows, nome, texto(body.ano_mes))
+      return json({ sucesso: true, tipo, ...resultado, bases: await obterStatus(env) })
     }
 
     validarTamanho(rows, 'A base')

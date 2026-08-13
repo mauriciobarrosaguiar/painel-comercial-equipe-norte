@@ -39,6 +39,8 @@ export function testDatabase() {
     CREATE TABLE foco_consultores(foco_id TEXT,consultor_id TEXT,ativo INTEGER,meta_quantidade REAL DEFAULT 0,meta_valor REAL DEFAULT 0,UNIQUE(foco_id,consultor_id));
     CREATE TABLE colaboradores_acesso(id TEXT PRIMARY KEY,login TEXT UNIQUE,email TEXT,nome TEXT,consultor_id TEXT,ativo INTEGER,ultimo_acesso_em TEXT,criado_em TEXT DEFAULT CURRENT_TIMESTAMP,atualizado_em TEXT DEFAULT CURRENT_TIMESTAMP);
     CREATE TABLE historico_clientes_importado(id TEXT PRIMARY KEY,ano_mes TEXT,cnpj TEXT,cliente_id TEXT,faturamento REAL,pedidos INTEGER,produtos INTEGER,quantidade REAL,origem_arquivo TEXT,importado_por TEXT,importado_em TEXT,UNIQUE(ano_mes,cnpj));
+    CREATE TABLE desafio_gigantes_produtos(sku TEXT PRIMARY KEY,ean TEXT,produto TEXT,status TEXT NOT NULL DEFAULT 'PENDENTE',tentativas INTEGER NOT NULL DEFAULT 0,ultima_consulta_em TEXT,mensagem TEXT,atualizado_em TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+    CREATE TABLE desafio_gigantes_metas(id TEXT PRIMARY KEY,ano_mes TEXT NOT NULL,escopo TEXT NOT NULL,consultor_id TEXT,nome_colaborador TEXT NOT NULL,setor TEXT NOT NULL,sku TEXT NOT NULL,produto_planilha TEXT,meta_positivacao REAL NOT NULL DEFAULT 0,meta_giro REAL NOT NULL DEFAULT 0,ean TEXT,produto_identificado TEXT,status_identificacao TEXT NOT NULL DEFAULT 'PENDENTE',importacao_id TEXT,atualizado_em TEXT NOT NULL,UNIQUE(ano_mes,escopo,setor,sku));
 
     INSERT INTO consultores VALUES('co1','Ana','PA',1,'PAINEL_EQUIPE','2026-07-01');
     INSERT INTO clientes(id,cnpj,nome_fantasia,cidade,uf,consultor_id,nome_gd,ativo,carteira_importada,setor_rep) VALUES
