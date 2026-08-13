@@ -7,7 +7,6 @@ export type AppPage =
   | 'sips'
   | 'mercado'
   | 'separador'
-  | 'cruzamento'
   | 'automacoes'
   | 'historico'
   | 'foco'
@@ -22,7 +21,6 @@ const PAGE_SLUG: Record<AppPage, string> = {
   sips: 'sips',
   mercado: 'mercado-farma',
   separador: 'separador-pedidos',
-  cruzamento: 'cruzamento-pedidos',
   automacoes: 'automacoes',
   historico: 'historico',
   foco: 'foco-semanal',
@@ -41,8 +39,9 @@ SLUG_PAGE.set('mercado', 'mercado')
 SLUG_PAGE.set('foco', 'foco')
 SLUG_PAGE.set('separador', 'separador')
 SLUG_PAGE.set('pedidos', 'separador')
-SLUG_PAGE.set('cotacao', 'cruzamento')
-SLUG_PAGE.set('cruzamento', 'cruzamento')
+SLUG_PAGE.set('cruzamento-pedidos', 'separador')
+SLUG_PAGE.set('cotacao', 'separador')
+SLUG_PAGE.set('cruzamento', 'separador')
 SLUG_PAGE.set('desafio', 'desafio')
 SLUG_PAGE.set('gigantes', 'desafio')
 
