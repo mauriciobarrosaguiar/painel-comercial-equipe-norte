@@ -10,15 +10,14 @@ import requests
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 
-from src.mercado_farma import criar_driver
+from src.configuracoes import carregar_login_bussola
+from src.mercado_farma import carregar_credenciais_mercadofarma, criar_driver
 from src.mercadofarma_inventory import extrair_nome_produto, limpar_busca_catalogo, login_mercadofarma, selecionar_cnpj_catalogo
 
 API_BASE = "https://api.cloudflare.com/client/v4"
 DB_NAME = os.environ.get("CLOUDFLARE_D1_DATABASE", "painel-equipe-norte-db")
 ACCOUNT_ID = os.environ.get("CLOUDFLARE_ACCOUNT_ID", "").strip()
 API_TOKEN = os.environ.get("CLOUDFLARE_API_TOKEN", "").strip()
-USUARIO = os.environ.get("MERCADOFARMA_USUARIO", "").strip()
-SENHA = os.environ.get("MERCADOFARMA_SENHA", "").strip()
 HEADERS = {"authorization": f"Bearer {API_TOKEN}", "content-type": "application/json"}
 FUSO = ZoneInfo("America/Sao_Paulo")
 
@@ -130,9 +129,20 @@ def resolver_cache_local(db: str) -> int:
     return total
 
 
+def carregar_acesso_mercado_farma() -> tuple[str, str, str]:
+    login = carregar_login_bussola()
+    credencial = carregar_credenciais_mercadofarma(login, exigir=True)
+    usuario = str(credencial.get("usuario", "") or "").strip()
+    senha = str(credencial.get("senha", "") or "").strip()
+    fonte = str(credencial.get("fonte", "") or "").strip() or "configuração persistida"
+    if not usuario or not senha:
+        raise RuntimeError("O acesso GD do Mercado Farma não foi localizado na configuração persistida.")
+    return usuario, senha, fonte
+
+
 def main() -> int:
-    if not USUARIO or not SENHA:
-        raise RuntimeError("MERCADOFARMA_USUARIO e MERCADOFARMA_SENHA não configurados.")
+    usuario, senha, fonte = carregar_acesso_mercado_farma()
+    print(f"Acesso Mercado Farma carregado de: {fonte}.")
     db = database_id()
     cache = resolver_cache_local(db)
     pendentes = query(db, "SELECT sku FROM desafio_gigantes_produtos WHERE status<>'IDENTIFICADO' AND (ultima_consulta_em IS NULL OR substr(ultima_consulta_em,1,10)<>date('now','-3 hours')) ORDER BY CASE status WHEN 'PENDENTE' THEN 0 ELSE 1 END,sku LIMIT 500")
@@ -147,7 +157,7 @@ def main() -> int:
     driver = criar_driver(headless=True)
     identificados = ambiguos = nao_encontrados = erros = 0
     try:
-        login_mercadofarma(driver, USUARIO, SENHA, print)
+        login_mercadofarma(driver, usuario, senha, print)
         selecionar_cnpj_catalogo(driver, cnpj, print)
         for indice, item in enumerate(pendentes, 1):
             sap = str(item.get("sku", "")).strip()

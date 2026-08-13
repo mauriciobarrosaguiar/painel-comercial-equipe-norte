@@ -9,6 +9,8 @@ on:
       - web/functions/api/desafio-gigantes.js
       - web/functions/api/desafio-gigantes-disparar.js
       - web/src/DesafioGigantesCard.tsx
+      - scripts/identificar_desafio_gigantes_sap.py
+      - .github/workflows/desafio-gigantes-sap.yml
       - .github/workflows/desafio-gigantes-sap-import.yml
   workflow_dispatch:
 
@@ -25,6 +27,11 @@ jobs:
     timeout-minutes: 45
     env:
       PYTHONPATH: ${{ github.workspace }}
+      GITHUB_TOKEN: ${{ github.token }}
+      GITHUB_REPO: ${{ github.repository }}
+      GITHUB_BRANCH: main
+      GITHUB_STORAGE_BRANCH: app-storage
+      PERSISTENCE_KEY: ${{ secrets.PERSISTENCE_KEY }}
       MERCADOFARMA_USUARIO: ${{ secrets.MERCADOFARMA_USUARIO }}
       MERCADOFARMA_SENHA: ${{ secrets.MERCADOFARMA_SENHA }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_API_TOKEN }}
