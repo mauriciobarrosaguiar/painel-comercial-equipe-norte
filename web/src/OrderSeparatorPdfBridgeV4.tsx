@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import OrderCrossingModule from './OrderCrossingModule'
+import OrderCrossingHistoryBridge from './OrderCrossingHistoryBridge'
 import OrderSeparatorPdfBridgeV3 from './OrderSeparatorPdfBridgeV3'
 
 function findMappingRow(label: string) {
@@ -76,7 +76,7 @@ function OptionalCnpjInterceptor() {
 
 export default function OrderSeparatorPdfBridgeV4({ onBack }: { onBack: () => void }) {
   const requestedPage = new URLSearchParams(window.location.search).get('pagina')?.toLowerCase() || ''
-  if (requestedPage === 'cruzamento-pedidos' || requestedPage === 'cruzamento' || requestedPage === 'cotacao') return <OrderCrossingModule onBack={onBack} />
+  if (requestedPage === 'cruzamento-pedidos' || requestedPage === 'cruzamento' || requestedPage === 'cotacao') return <OrderCrossingHistoryBridge onBack={onBack} />
   return (
     <>
       <div style={{ maxWidth: 1180, margin: '16px auto 0', padding: '0 18px' }}>
