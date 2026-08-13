@@ -7,6 +7,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 import requests
+from selenium.webdriver import ActionChains
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 
@@ -85,10 +86,47 @@ def ean_do_card(card, sap: str) -> str:
     return next(iter(candidatos)) if len(candidatos) == 1 else ""
 
 
+def preencher_busca_catalogo(driver, campo, valor: str) -> None:
+    try:
+        driver.execute_script("arguments[0].scrollIntoView({block:'center'}); arguments[0].focus();", campo)
+        campo.send_keys(valor)
+        campo.send_keys(Keys.ENTER)
+        return
+    except Exception as erro_teclado:
+        print(f"Busca SAP por teclado indisponível; usando preenchimento compatível com o campo React: {type(erro_teclado).__name__}")
+
+    driver.execute_script(
+        """
+        const el = arguments[0];
+        const value = arguments[1];
+        el.scrollIntoView({block:'center'});
+        el.focus();
+        const descriptor = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value');
+        if (descriptor && descriptor.set) descriptor.set.call(el, value); else el.value = value;
+        el.dispatchEvent(new Event('input', {bubbles:true}));
+        el.dispatchEvent(new Event('change', {bubbles:true}));
+        """,
+        campo,
+        valor,
+    )
+    time.sleep(0.3)
+    try:
+        ActionChains(driver).send_keys(Keys.ENTER).perform()
+    except Exception:
+        driver.execute_script(
+            """
+            const el=arguments[0];
+            for (const tipo of ['keydown','keypress','keyup']) {
+              el.dispatchEvent(new KeyboardEvent(tipo,{key:'Enter',code:'Enter',keyCode:13,which:13,bubbles:true}));
+            }
+            """,
+            campo,
+        )
+
+
 def pesquisar_sap(driver, sap: str) -> tuple[str, str, str, str]:
     campo = limpar_busca_catalogo(driver)
-    campo.send_keys(sap)
-    campo.send_keys(Keys.ENTER)
+    preencher_busca_catalogo(driver, campo, sap)
     time.sleep(1.8)
     cards = [card for card in driver.find_elements(By.CSS_SELECTOR, "div[data-testid^='produtoCard-']") if card.is_displayed()]
     if not cards:
@@ -145,7 +183,7 @@ def main() -> int:
     print(f"Acesso Mercado Farma carregado de: {fonte}.")
     db = database_id()
     cache = resolver_cache_local(db)
-    pendentes = query(db, "SELECT sku FROM desafio_gigantes_produtos WHERE status<>'IDENTIFICADO' AND (ultima_consulta_em IS NULL OR substr(ultima_consulta_em,1,10)<>date('now','-3 hours')) ORDER BY CASE status WHEN 'PENDENTE' THEN 0 ELSE 1 END,sku LIMIT 500")
+    pendentes = query(db, "SELECT sku FROM desafio_gigantes_produtos WHERE status<>'IDENTIFICADO' AND (status='ERRO' OR ultima_consulta_em IS NULL OR substr(ultima_consulta_em,1,10)<>date('now','-3 hours')) ORDER BY CASE status WHEN 'PENDENTE' THEN 0 WHEN 'ERRO' THEN 1 ELSE 2 END,sku LIMIT 500")
     if not pendentes:
         print(f"Nenhum SAP pendente para hoje. {cache} identificado(s) pelo cache local.")
         return 0
