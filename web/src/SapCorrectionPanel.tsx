@@ -1,1 +1,6 @@
-export default function SapCorrectionPanel(){return <div />}
+type Sap={sku:string;status:string;ean:string;produto:string;produto_planilha:string;mensagem:string;tentativas:number;ultima_consulta_em:string}
+const label=(v:string)=>({PENDENTE:'Pendente',AMBIGUO:'Ambíguo',NAO_ENCONTRADO:'Não encontrado',ERRO:'Erro'} as Record<string,string>)[v]||v
+export default function SapCorrectionPanel({items}:{items:Sap[];onSaved?:()=>void}){
+ if(!items.length)return <div className="dg-all-ok"><strong>✓ Todos os SAPs estão identificados</strong><span>Nenhuma correção pendente.</span></div>
+ return <div className="dg-correction-list">{items.map(s=><article className="dg-correction-card" key={s.sku}><div className="dg-correction-info"><div><span className={`dg-status dg-status-${s.status.toLowerCase()}`}>{label(s.status)}</span><strong>SAP {s.sku}</strong></div><b>{s.produto_planilha||s.produto||'Produto não identificado'}</b><p>{s.mensagem||'Sem detalhe da consulta.'}</p><small>{s.tentativas||0} tentativa(s)</small></div></article>)}</div>
+}
