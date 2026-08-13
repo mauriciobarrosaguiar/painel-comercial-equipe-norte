@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import OrderCrossingModule from './OrderCrossingModule'
 import OrderSeparatorPdfBridgeV3 from './OrderSeparatorPdfBridgeV3'
 
 function findMappingRow(label: string) {
@@ -86,11 +87,6 @@ function OptionalCnpjInterceptor() {
         return
       }
 
-      // O componente original ainda valida se CNPJ possui um índice de coluna.
-      // Para permitir planilha sem CNPJ sem alterar os dados, usamos temporariamente
-      // o índice da Quantidade apenas para ultrapassar a validação da tela. Antes da
-      // requisição o interceptor restaura mapping.cnpj = -1, e a API V2 trata o pedido
-      // corretamente como SEM CNPJ.
       const quantitySelect = findMappingRow('QUANTIDADE')?.querySelector<HTMLSelectElement>('select')
       const temporaryIndex = quantitySelect?.value || ''
       if (!temporaryIndex || temporaryIndex === '-1') return
@@ -120,6 +116,10 @@ function OptionalCnpjInterceptor() {
 }
 
 export default function OrderSeparatorPdfBridgeV4({ onBack }: { onBack: () => void }) {
+  const requestedPage = new URLSearchParams(window.location.search).get('pagina')?.toLowerCase() || ''
+  if (requestedPage === 'cruzamento-pedidos' || requestedPage === 'cruzamento' || requestedPage === 'cotacao') {
+    return <OrderCrossingModule onBack={onBack} />
+  }
   return (
     <>
       <OrderSeparatorPdfBridgeV3 onBack={onBack} />
