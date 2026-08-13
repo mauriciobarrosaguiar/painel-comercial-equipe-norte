@@ -12,11 +12,11 @@ function decorateOptionalCnpj() {
   if (!row) return
 
   const marker = row.querySelector<HTMLElement>('em')
-  if (marker && marker.textContent !== 'Opcional') marker.textContent = 'Opcional'
+  if (marker && marker.textContent !== 'Opcional · Sem CNPJ (pedido único)') marker.textContent = 'Opcional · Sem CNPJ (pedido único)'
 
   const tip = document.querySelector<HTMLElement>('.separator-tip')
   if (tip?.textContent?.includes('a planilha precisa conter CNPJ')) {
-    tip.innerHTML = '<b>Importante:</b> EAN e quantidade são obrigatórios. CNPJ, produto, unidade e UF podem ser informados quando existirem.'
+    tip.innerHTML = '<b>Importante:</b> EAN e quantidade são obrigatórios. CNPJ é opcional; sem CNPJ, o arquivo será tratado como pedido único. Produto, unidade e UF também podem ser informados quando existirem.'
   }
 }
 
