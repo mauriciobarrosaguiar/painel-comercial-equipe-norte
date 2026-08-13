@@ -1,0 +1,30 @@
+import assert from 'node:assert/strict'
+import test from 'node:test'
+import { readFileSync } from 'node:fs'
+import { testDatabase } from './d1-fixture.js'
+import { onRequestGet } from '../functions/api/desafio-gigantes.js'
+
+const app = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8')
+const bases = readFileSync(new URL('../functions/api/admin/bases.js', import.meta.url), 'utf8')
+
+test('Visão Geral exibe card Desafio de Gigantes e importação aciona SAP', () => {
+  assert.match(app, /DesafioGigantesCard/)
+  assert.match(app, /<DesafioGigantesCard/)
+  assert.match(bases, /acionarSapAposImportacao/)
+  assert.match(bases, /desafio_gigantes/)
+})
+
+test('API calcula parcial gerencial por SKU identificado', async () => {
+  const DB = testDatabase()
+  await DB.prepare("INSERT INTO desafio_gigantes_produtos(sku,ean,produto,status,atualizado_em) VALUES('10018','111','Linha','IDENTIFICADO','2026-07-01')").run()
+  await DB.prepare("INSERT INTO desafio_gigantes_metas(id,ano_mes,escopo,consultor_id,nome_colaborador,setor,sku,produto_planilha,meta_positivacao,meta_giro,ean,produto_identificado,status_identificacao,atualizado_em) VALUES('dg1','2026-07','consultor','co1','Ana','m0043497','10018','Linha',1,1,'111','Linha','IDENTIFICADO','2026-07-01')").run()
+  const response = await onRequestGet({ request: new Request('https://painel.test/api/desafio-gigantes?ano_mes=2026-07&consultor=co1'), env: { DB } })
+  assert.equal(response.status, 200)
+  const body = await response.json()
+  assert.equal(body.skus, 1)
+  assert.equal(body.identificados, 1)
+  assert.equal(body.pos_80, 1)
+  assert.equal(body.giro_80, 1)
+  assert.equal(body.pontuacao_estimada, 140)
+  assert.match(body.aviso, /CDD\/Close-Up/)
+})

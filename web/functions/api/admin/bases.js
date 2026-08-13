@@ -1,5 +1,6 @@
 import { onRequestGet as obterBases, onRequestPost as importarBases } from './bases-v2.js'
 import { onRequestPost as fecharMes } from '../internal/fechamento-mensal.js'
+import { onRequestPost as dispararDesafioSap } from '../desafio-gigantes-disparar.js'
 
 const texto = (value) => String(value ?? '').trim()
 
@@ -48,6 +49,20 @@ async function fecharAnteriorAntesDaImportacao({ request, env }, body) {
   return response.ok ? null : response
 }
 
+async function acionarSapAposImportacao(context) {
+  const headers = new Headers({ 'content-type': 'application/json' })
+  const cookie = context.request.headers.get('cookie') || ''
+  const chave = context.request.headers.get('x-admin-key') || ''
+  if (cookie) headers.set('cookie', cookie)
+  if (chave) headers.set('x-admin-key', chave)
+  const request = new Request(new URL('/api/desafio-gigantes-disparar', context.request.url), {
+    method: 'POST',
+    headers,
+    body: '{}',
+  })
+  return dispararDesafioSap({ request, env: context.env })
+}
+
 export const onRequestGet = obterBases
 
 export async function onRequestPost(context) {
@@ -58,5 +73,26 @@ export async function onRequestPost(context) {
 
   const falhaFechamento = await fecharAnteriorAntesDaImportacao(context, body)
   if (falhaFechamento) return falhaFechamento
-  return importarBases(context)
+
+  const response = await importarBases(context)
+  if (!response.ok || texto(body?.tipo) !== 'desafio_gigantes') return response
+
+  let resultado = {}
+  try { resultado = await response.json() } catch {}
+  let automacaoSap = { acionada: false, status: 'erro', mensagem: 'A planilha foi importada, mas a verificação SAP não pôde ser acionada.' }
+  try {
+    const disparo = await acionarSapAposImportacao(context)
+    const dados = await disparo.json().catch(() => ({}))
+    automacaoSap = {
+      acionada: disparo.ok,
+      status: dados.status || (disparo.ok ? 'acionada' : 'erro'),
+      mensagem: dados.mensagem || dados.erro || automacaoSap.mensagem,
+    }
+  } catch (error) {
+    automacaoSap.mensagem = `A planilha foi importada, mas o disparo SAP falhou: ${error instanceof Error ? error.message : String(error)}`
+  }
+  return new Response(JSON.stringify({ ...resultado, automacao_sap: automacaoSap }), {
+    status: response.status,
+    headers: response.headers,
+  })
 }
