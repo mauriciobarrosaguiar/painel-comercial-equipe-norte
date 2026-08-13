@@ -11,10 +11,8 @@ function findMappingRow(label: string) {
 function decorateOptionalCnpj() {
   const row = findMappingRow('CNPJ')
   if (!row) return
-
   const marker = row.querySelector<HTMLElement>('em')
   if (marker && marker.textContent !== 'Opcional · Sem CNPJ (pedido único)') marker.textContent = 'Opcional · Sem CNPJ (pedido único)'
-
   const tip = document.querySelector<HTMLElement>('.separator-tip')
   if (tip?.textContent?.includes('a planilha precisa conter CNPJ')) {
     tip.innerHTML = '<b>Importante:</b> EAN e quantidade são obrigatórios. CNPJ é opcional; sem CNPJ, o arquivo será tratado como pedido único. Produto, unidade e UF também podem ser informados quando existirem.'
@@ -23,25 +21,18 @@ function decorateOptionalCnpj() {
 
 function rewriteAnalysisRequest(input: RequestInfo | URL, init: RequestInit | undefined, cnpjOmitted: boolean) {
   const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
-  if (!url.includes('/api/separador-pedidos-analisar') || url.includes('/api/separador-pedidos-analisar-v2')) {
-    return { input, init }
-  }
-
+  if (!url.includes('/api/separador-pedidos-analisar') || url.includes('/api/separador-pedidos-analisar-v2')) return { input, init }
   const nextUrl = url.replace('/api/separador-pedidos-analisar', '/api/separador-pedidos-analisar-v2')
   let nextInput: RequestInfo | URL = input
   if (typeof input === 'string') nextInput = nextUrl
   else if (input instanceof URL) nextInput = new URL(nextUrl)
   else nextInput = new Request(nextUrl, input)
-
   if (!cnpjOmitted || !init?.body || typeof init.body !== 'string') return { input: nextInput, init }
-
   try {
     const body = JSON.parse(init.body)
     if (body?.mapping) body.mapping = { ...body.mapping, cnpj: -1 }
     return { input: nextInput, init: { ...init, body: JSON.stringify(body) } }
-  } catch {
-    return { input: nextInput, init }
-  }
+  } catch { return { input: nextInput, init } }
 }
 
 function OptionalCnpjInterceptor() {
@@ -49,79 +40,48 @@ function OptionalCnpjInterceptor() {
     let cnpjOmitted = false
     let retryingConfirm = false
     const originalFetch = window.fetch.bind(window)
-
     window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
       const rewritten = rewriteAnalysisRequest(input, init, cnpjOmitted)
       return originalFetch(rewritten.input, rewritten.init)
     }) as typeof window.fetch
-
     let scheduled = false
     const scheduleDecoration = () => {
       if (scheduled) return
       scheduled = true
-      window.requestAnimationFrame(() => {
-        scheduled = false
-        decorateOptionalCnpj()
-      })
+      window.requestAnimationFrame(() => { scheduled = false; decorateOptionalCnpj() })
     }
-
     const observer = new MutationObserver(scheduleDecoration)
     observer.observe(document.body, { childList: true, subtree: true })
     decorateOptionalCnpj()
-
     const beforeClick = (event: Event) => {
       const button = event.target instanceof Element ? event.target.closest<HTMLButtonElement>('button') : null
       if (!button) return
-
-      if (button.textContent?.includes('Nova análise')) {
-        cnpjOmitted = false
-        retryingConfirm = false
-        return
-      }
-
+      if (button.textContent?.includes('Nova análise')) { cnpjOmitted = false; retryingConfirm = false; return }
       if (!button.textContent?.includes('Confirmar e continuar') || retryingConfirm) return
-
       const cnpjSelect = findMappingRow('CNPJ')?.querySelector<HTMLSelectElement>('select')
-      if (!cnpjSelect || (cnpjSelect.value !== '-1' && cnpjSelect.value !== '')) {
-        cnpjOmitted = false
-        return
-      }
-
+      if (!cnpjSelect || (cnpjSelect.value !== '-1' && cnpjSelect.value !== '')) { cnpjOmitted = false; return }
       const quantitySelect = findMappingRow('QUANTIDADE')?.querySelector<HTMLSelectElement>('select')
       const temporaryIndex = quantitySelect?.value || ''
       if (!temporaryIndex || temporaryIndex === '-1') return
-
-      event.preventDefault()
-      event.stopPropagation()
-      cnpjOmitted = true
-      retryingConfirm = true
+      event.preventDefault(); event.stopPropagation(); cnpjOmitted = true; retryingConfirm = true
       cnpjSelect.value = temporaryIndex
       cnpjSelect.dispatchEvent(new Event('change', { bubbles: true }))
-
-      window.setTimeout(() => {
-        retryingConfirm = false
-        button.click()
-      }, 0)
+      window.setTimeout(() => { retryingConfirm = false; button.click() }, 0)
     }
     document.addEventListener('click', beforeClick, true)
-
-    return () => {
-      window.fetch = originalFetch
-      observer.disconnect()
-      document.removeEventListener('click', beforeClick, true)
-    }
+    return () => { window.fetch = originalFetch; observer.disconnect(); document.removeEventListener('click', beforeClick, true) }
   }, [])
-
   return null
 }
 
 export default function OrderSeparatorPdfBridgeV4({ onBack }: { onBack: () => void }) {
   const requestedPage = new URLSearchParams(window.location.search).get('pagina')?.toLowerCase() || ''
-  if (requestedPage === 'cruzamento-pedidos' || requestedPage === 'cruzamento' || requestedPage === 'cotacao') {
-    return <OrderCrossingModule onBack={onBack} />
-  }
+  if (requestedPage === 'cruzamento-pedidos' || requestedPage === 'cruzamento' || requestedPage === 'cotacao') return <OrderCrossingModule onBack={onBack} />
   return (
     <>
+      <div style={{ maxWidth: 1180, margin: '16px auto 0', padding: '0 18px' }}>
+        <a className="primary-button" href="?pagina=cruzamento-pedidos" style={{ display: 'inline-block', textDecoration: 'none' }}>⇄ Cotação · Cruzamento de Pedidos</a>
+      </div>
       <OrderSeparatorPdfBridgeV3 onBack={onBack} />
       <OptionalCnpjInterceptor />
     </>
