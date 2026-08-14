@@ -34,6 +34,7 @@ function parametros(request) {
     anoMes,
     consultor: texto(search.get('consultor')).slice(0, 180),
     uf: texto(search.get('uf')).toUpperCase().slice(0, 2),
+    detalhes: search.get('detalhes') === '1',
     ...faixaMes(anoMes),
   }
 }
@@ -187,6 +188,7 @@ export async function onRequestGet({ request, env }) {
         ultima_consulta_em: texto(identificacao?.ultima_consulta_em),
       },
       oportunidades,
+      ...(filtro.detalhes ? { produtos: linhas } : {}),
       atualizado_em: new Date().toISOString(),
       aviso: 'Parcial gerencial com vendas faturadas da carteira do painel. A apuração oficial da campanha continua sendo CDD/Close-Up.',
     })
