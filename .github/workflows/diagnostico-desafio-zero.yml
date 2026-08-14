@@ -1,0 +1,31 @@
+name: Diagnostico Desafio Zero
+on:
+  push:
+    branches: [diag/desafio-zero]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  diagnosticar:
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Consultar D1
+        run: |
+          set -e
+          echo '=== CAMPANHA AGOSTO ==='
+          npx --yes wrangler@4 d1 execute painel-equipe-norte-db --remote --json --command "SELECT COUNT(*) metas, COUNT(DISTINCT sku) skus, COUNT(DISTINCT ean) eans FROM desafio_gigantes_metas WHERE ano_mes='2026-08';"
+          echo '=== ITENS FATURADOS AGOSTO ==='
+          npx --yes wrangler@4 d1 execute painel-equipe-norte-db --remote --json --command "SELECT COUNT(*) itens_ativos, SUM(CASE WHEN COALESCE(ip.quantidade_faturada,0)>0 THEN 1 ELSE 0 END) qtd_faturada_pos, SUM(CASE WHEN COALESCE(ip.quantidade_atendida,0)>0 THEN 1 ELSE 0 END) qtd_atendida_pos, SUM(CASE WHEN COALESCE(ip.valor_faturado,0)>0 THEN 1 ELSE 0 END) valor_faturado_pos FROM itens_pedido ip JOIN pedidos pe ON pe.id=ip.pedido_id WHERE pe.ativo=1 AND ip.ativo=1 AND UPPER(TRIM(COALESCE(pe.status,''))) IN ('FATURADO','FATURADO PARCIAL','FATURADO RECUPERADO') AND DATE(COALESCE(pe.data_faturamento,pe.data_pedido)) BETWEEN DATE('2026-08-01') AND DATE('2026-08-31');"
+          echo '=== MATCH EAN CAMPANHA ==='
+          npx --yes wrangler@4 d1 execute painel-equipe-norte-db --remote --json --command "SELECT COUNT(*) linhas_match, COUNT(DISTINCT ip.ean) eans_match, SUM(COALESCE(ip.quantidade_faturada,0)) qtd_faturada, SUM(COALESCE(ip.quantidade_atendida,0)) qtd_atendida, SUM(COALESCE(ip.valor_faturado,0)) valor_faturado FROM itens_pedido ip JOIN pedidos pe ON pe.id=ip.pedido_id JOIN desafio_gigantes_metas m ON TRIM(COALESCE(m.ean,''))=TRIM(COALESCE(ip.ean,'')) AND m.ano_mes='2026-08' WHERE pe.ativo=1 AND ip.ativo=1 AND UPPER(TRIM(COALESCE(pe.status,''))) IN ('FATURADO','FATURADO PARCIAL','FATURADO RECUPERADO') AND DATE(COALESCE(pe.data_faturamento,pe.data_pedido)) BETWEEN DATE('2026-08-01') AND DATE('2026-08-31');"
+          echo '=== CLIENTES/CARTEIRA MATCH ==='
+          npx --yes wrangler@4 d1 execute painel-equipe-norte-db --remote --json --command "SELECT COUNT(DISTINCT pe.cliente_id) clientes_pedidos, COUNT(DISTINCT CASE WHEN cl.carteira_importada=1 AND cl.ativo=1 THEN pe.cliente_id END) clientes_na_carteira, COUNT(DISTINCT CASE WHEN cl.consultor_id IS NOT NULL AND TRIM(cl.consultor_id)<>'' THEN cl.consultor_id END) consultores_vinculados FROM pedidos pe JOIN clientes cl ON cl.id=pe.cliente_id WHERE pe.ativo=1 AND UPPER(TRIM(COALESCE(pe.status,''))) IN ('FATURADO','FATURADO PARCIAL','FATURADO RECUPERADO') AND DATE(COALESCE(pe.data_faturamento,pe.data_pedido)) BETWEEN DATE('2026-08-01') AND DATE('2026-08-31');"
+          echo '=== STATUS REAIS ==='
+          npx --yes wrangler@4 d1 execute painel-equipe-norte-db --remote --json --command "SELECT UPPER(TRIM(COALESCE(status,''))) status, COUNT(*) qtd FROM pedidos WHERE ativo=1 AND DATE(COALESCE(data_faturamento,data_pedido)) BETWEEN DATE('2026-08-01') AND DATE('2026-08-31') GROUP BY 1 ORDER BY 2 DESC;"
