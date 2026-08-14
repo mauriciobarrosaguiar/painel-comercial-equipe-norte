@@ -8,7 +8,11 @@ const json = (data, status = 200) => new Response(JSON.stringify(data), { status
 const texto = (value) => String(value ?? '').trim()
 const numero = (value) => Number.isFinite(Number(value)) ? Number(value) : 0
 const percentual = (real, meta) => numero(meta) > 0 ? (numero(real) / numero(meta)) * 100 : 0
-const pontos = (atingimento, peso = 1, gatilho = 80) => atingimento >= gatilho ? Math.min(120, atingimento) * peso : 0
+const TETO_PERCENTUAL = 120
+const GATILHO_POSITIVACAO = 80
+const GATILHO_GIRO = 100
+const PONTOS_MAXIMOS_POR_SKU = 240
+const pontos = (atingimento, gatilho) => atingimento >= gatilho ? Math.min(TETO_PERCENTUAL, atingimento) : 0
 
 function mesAtual() {
   const partes = Object.fromEntries(new Intl.DateTimeFormat('en-CA', {
@@ -54,31 +58,44 @@ export async function onRequestGet({ request, env }) {
   try {
     const filtro = parametros(request)
     const metasFiltro = filtroMetas(filtro)
-    const ufJoin = filtro.uf ? "AND UPPER(TRIM(COALESCE(cl.uf,'')))=?" : ''
+    const ufVendas = filtro.uf ? "AND UPPER(TRIM(COALESCE(cl.uf,'')))=?" : ''
 
     const resultado = await env.DB.prepare(`
+      WITH vendas_pdv AS (
+        SELECT
+          TRIM(COALESCE(ip.ean,'')) ean,
+          cl.id cliente_id,
+          cl.consultor_id,
+          UPPER(TRIM(COALESCE(cl.nome_gd,''))) nome_gd,
+          SUM(COALESCE(ip.quantidade_faturada,0)) unidades_liquidas
+        FROM itens_pedido ip
+        JOIN pedidos pe ON pe.id=ip.pedido_id
+        JOIN clientes cl ON cl.id=pe.cliente_id
+        WHERE ${ITEM_FATURADO}
+          AND DATE(COALESCE(pe.data_faturamento,pe.data_pedido)) BETWEEN DATE(?) AND DATE(?)
+          AND cl.carteira_importada=1
+          AND cl.ativo=1
+          ${ufVendas}
+          AND TRIM(COALESCE(ip.ean,''))<>''
+          AND COALESCE(ip.quantidade_faturada,0)<>0
+        GROUP BY TRIM(COALESCE(ip.ean,'')),cl.id,cl.consultor_id,UPPER(TRIM(COALESCE(cl.nome_gd,'')))
+      )
       SELECT
         m.id,m.ano_mes,m.escopo,m.consultor_id,m.nome_colaborador,m.setor,m.sku,
         COALESCE(NULLIF(TRIM(m.produto_identificado),''),NULLIF(TRIM(m.produto_planilha),''),('SAP '||m.sku)) produto,
         COALESCE(m.ean,'') ean,COALESCE(m.status_identificacao,'PENDENTE') status_identificacao,
         COALESCE(m.meta_positivacao,0) meta_positivacao,COALESCE(m.meta_giro,0) meta_giro,
-        COUNT(DISTINCT CASE WHEN cl.id IS NOT NULL THEN cl.id END) positivacao_real,
-        COALESCE(SUM(CASE WHEN cl.id IS NOT NULL THEN COALESCE(NULLIF(ip.quantidade_faturada,0),NULLIF(ip.quantidade_atendida,0),0) ELSE 0 END),0) unidades
+        COUNT(DISTINCT CASE WHEN v.unidades_liquidas>0 THEN v.cliente_id END) positivacao_real,
+        COALESCE(SUM(CASE WHEN v.unidades_liquidas>0 THEN v.unidades_liquidas ELSE 0 END),0) unidades
       FROM desafio_gigantes_metas m
-      LEFT JOIN itens_pedido ip
-        ON TRIM(COALESCE(ip.ean,''))=TRIM(COALESCE(m.ean,''))
-       AND ip.ativo=1
+      LEFT JOIN vendas_pdv v
+        ON v.ean=TRIM(COALESCE(m.ean,''))
        AND TRIM(COALESCE(m.ean,''))<>''
-      LEFT JOIN pedidos pe
-        ON pe.id=ip.pedido_id
-       AND ${ITEM_FATURADO}
-       AND DATE(COALESCE(pe.data_faturamento,pe.data_pedido)) BETWEEN DATE(?) AND DATE(?)
-      LEFT JOIN clientes cl
-        ON cl.id=pe.cliente_id
-       AND cl.carteira_importada=1
-       AND cl.ativo=1
-       AND (m.escopo='gerente' OR cl.consultor_id=m.consultor_id)
-       ${ufJoin}
+       AND (
+         (m.escopo='consultor' AND v.consultor_id=m.consultor_id)
+         OR
+         (m.escopo='gerente' AND v.nome_gd=UPPER(TRIM(COALESCE(m.nome_colaborador,''))))
+       )
       WHERE ${metasFiltro.where}
       GROUP BY m.id,m.ano_mes,m.escopo,m.consultor_id,m.nome_colaborador,m.setor,m.sku,m.produto_identificado,m.produto_planilha,m.ean,m.status_identificacao,m.meta_positivacao,m.meta_giro
       ORDER BY m.sku
@@ -90,10 +107,10 @@ export async function onRequestGet({ request, env }) {
       const giro = positivacao > 0 ? unidades / positivacao : 0
       const atingPos = percentual(positivacao, item.meta_positivacao)
       const atingGiro = percentual(giro, item.meta_giro)
-      const skuDestravado = atingPos >= 80
-      const pontosPos = pontos(atingPos, 1, 80)
-      const pontosGiro = skuDestravado ? pontos(atingGiro, 0.4, 100) : 0
-      const alvo80 = Math.ceil(numero(item.meta_positivacao) * 0.8)
+      const skuDestravado = atingPos >= GATILHO_POSITIVACAO
+      const pontosPos = pontos(atingPos, GATILHO_POSITIVACAO)
+      const pontosGiro = skuDestravado ? pontos(atingGiro, GATILHO_GIRO) : 0
+      const alvo80 = Math.ceil(numero(item.meta_positivacao) * (GATILHO_POSITIVACAO / 100))
       return {
         ...item,
         positivacao_real: positivacao,
@@ -101,8 +118,12 @@ export async function onRequestGet({ request, env }) {
         unidades,
         atingimento_positivacao: atingPos,
         atingimento_giro: atingGiro,
+        atingimento_positivacao_considerado: pontosPos,
+        atingimento_giro_considerado: pontosGiro,
+        pontos_positivacao: pontosPos,
+        pontos_giro: pontosGiro,
         sku_destravado: skuDestravado,
-        giro_pontuando: skuDestravado && atingGiro >= 100,
+        giro_pontuando: skuDestravado && atingGiro >= GATILHO_GIRO,
         pontos_estimados: pontosPos + pontosGiro,
         alvo_positivacao_80: alvo80,
         falta_pdv_80: Math.max(0, alvo80 - positivacao),
@@ -111,11 +132,11 @@ export async function onRequestGet({ request, env }) {
 
     const skus = new Set(linhas.map((item) => texto(item.sku)).filter(Boolean))
     const identificados = linhas.filter((item) => item.status_identificacao === 'IDENTIFICADO' && texto(item.ean)).length
-    const pos80 = linhas.filter((item) => item.atingimento_positivacao >= 80).length
+    const pos80 = linhas.filter((item) => item.atingimento_positivacao >= GATILHO_POSITIVACAO).length
     const giro100 = linhas.filter((item) => item.giro_pontuando).length
     const pontuacao = linhas.reduce((total, item) => total + numero(item.pontos_estimados), 0)
     const oportunidades = linhas
-      .filter((item) => item.status_identificacao === 'IDENTIFICADO' && item.atingimento_positivacao < 80 && item.falta_pdv_80 > 0)
+      .filter((item) => item.status_identificacao === 'IDENTIFICADO' && item.atingimento_positivacao < GATILHO_POSITIVACAO && item.falta_pdv_80 > 0)
       .sort((a, b) => a.falta_pdv_80 - b.falta_pdv_80 || b.atingimento_positivacao - a.atingimento_positivacao || texto(a.sku).localeCompare(texto(b.sku)))
       .slice(0, 10)
 
@@ -143,7 +164,13 @@ export async function onRequestGet({ request, env }) {
       giro_100: giro100,
       giro_80: giro100,
       pontuacao_estimada: pontuacao,
-      maximo_estimado: linhas.length * 168,
+      maximo_estimado: linhas.length * PONTOS_MAXIMOS_POR_SKU,
+      regras: {
+        gatilho_positivacao: GATILHO_POSITIVACAO,
+        gatilho_giro: GATILHO_GIRO,
+        teto_percentual: TETO_PERCENTUAL,
+        pontos_maximos_por_sku: PONTOS_MAXIMOS_POR_SKU,
+      },
       identificacao: {
         total: numero(identificacao?.total),
         identificados: numero(identificacao?.identificados),
@@ -155,7 +182,7 @@ export async function onRequestGet({ request, env }) {
       },
       oportunidades,
       atualizado_em: new Date().toISOString(),
-      aviso: 'Parcial gerencial com dados do painel. A apuração oficial da campanha continua sendo CDD/Close-Up.',
+      aviso: 'Parcial gerencial com vendas faturadas da carteira do painel. A apuração oficial da campanha continua sendo CDD/Close-Up.',
     })
   } catch (error) {
     const detalhe = error instanceof Error ? error.message : String(error)
