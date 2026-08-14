@@ -34,6 +34,14 @@ test('oportunidade prioriza o SKU mais perto de atingir 80 por cento', () => {
   assert.match(card, /data-label="Faltam p\/80%"/)
 })
 
+test('Giro só destrava pontuação ao atingir 100 por cento da meta', () => {
+  assert.match(api, /pontos\(atingGiro,\s*0\.4,\s*100\)/)
+  assert.match(api, /atingimento_giro >= 100/)
+  assert.match(card, /Giro: SKUs ≥100%/)
+  assert.match(card, /Giro: 100% = começa a pontuar/)
+  assert.match(page, /Giro ≥100%/)
+})
+
 test('API calcula parcial gerencial por SKU identificado', async () => {
   const DB = testDatabase()
   await DB.prepare("INSERT INTO desafio_gigantes_produtos(sku,ean,produto,status,atualizado_em) VALUES('10018','111','Linha','IDENTIFICADO','2026-07-01')").run()
@@ -44,7 +52,7 @@ test('API calcula parcial gerencial por SKU identificado', async () => {
   assert.equal(body.skus, 1)
   assert.equal(body.identificados, 1)
   assert.equal(body.pos_80, 1)
-  assert.equal(body.giro_80, 1)
+  assert.equal(body.giro_100, 1)
   assert.equal(body.pontuacao_estimada, 140)
   assert.match(body.aviso, /CDD\/Close-Up/)
 })
