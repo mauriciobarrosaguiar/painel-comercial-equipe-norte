@@ -19,9 +19,9 @@ jobs:
       - name: Consultar D1
         run: |
           set -e
-          echo '=== SAP 11081/37606 NO DESAFIO ==='
+          echo '=== EANS CORRIGIDOS ==='
           npx --yes wrangler@4 d1 execute painel-equipe-norte-db --remote --json --command "SELECT sku,ean,produto,status,mensagem FROM desafio_gigantes_produtos WHERE sku IN ('11081','37606') ORDER BY sku;"
-          echo '=== SAP 11081/37606 NO PRODUTOS ==='
-          npx --yes wrangler@4 d1 execute painel-equipe-norte-db --remote --json --command "SELECT sku,ean,descricao,ativo,atualizado_em FROM produtos WHERE TRIM(COALESCE(sku,'')) IN ('11081','37606') ORDER BY sku,ean;"
-          echo '=== CLIENTES SEM GD COM VENDA AGOSTO ==='
-          npx --yes wrangler@4 d1 execute painel-equipe-norte-db --remote --json --command "SELECT cl.id,cl.cnpj,cl.razao_social,cl.consultor_id,COALESCE(cl.nome_gd,'') nome_gd,COUNT(DISTINCT pe.id) pedidos,SUM(COALESCE(pe.valor_faturado,0)) valor FROM clientes cl JOIN pedidos pe ON pe.cliente_id=cl.id WHERE cl.carteira_importada=1 AND cl.ativo=1 AND TRIM(COALESCE(cl.nome_gd,''))='' AND pe.ativo=1 AND UPPER(TRIM(COALESCE(pe.status,''))) IN ('FATURADO','FATURADO PARCIAL','FATURADO RECUPERADO') AND DATE(COALESCE(pe.data_faturamento,pe.data_pedido)) BETWEEN DATE('2026-08-01') AND DATE('2026-08-31') GROUP BY cl.id,cl.cnpj,cl.razao_social,cl.consultor_id,cl.nome_gd ORDER BY valor DESC;"
+          echo '=== DUPLICIDADES RESTANTES ==='
+          npx --yes wrangler@4 d1 execute painel-equipe-norte-db --remote --json --command "SELECT TRIM(ean) ean,GROUP_CONCAT(DISTINCT sku) saps,COUNT(DISTINCT sku) qtd_saps FROM desafio_gigantes_metas WHERE ano_mes='2026-08' AND TRIM(COALESCE(ean,''))<>'' GROUP BY TRIM(ean) HAVING COUNT(DISTINCT sku)>1 ORDER BY ean;"
+          echo '=== TOTAL EANS AGOSTO ==='
+          npx --yes wrangler@4 d1 execute painel-equipe-norte-db --remote --json --command "SELECT COUNT(DISTINCT sku) skus,COUNT(DISTINCT NULLIF(TRIM(ean),'')) eans FROM desafio_gigantes_metas WHERE ano_mes='2026-08';"
