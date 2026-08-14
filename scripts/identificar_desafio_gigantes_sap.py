@@ -148,10 +148,29 @@ def pesquisar_sap(driver, sap: str) -> tuple[str, str, str, str]:
     return "AMBIGUO", "", "", f"Mais de um produto retornado: {resumo}"
 
 
-def atualizar(db: str, sap: str, status: str, ean: str, produto: str, mensagem: str) -> None:
+def conflito_ean(db: str, sap: str, ean: str) -> str:
+    if not ean:
+        return ""
+    linhas = query(
+        db,
+        "SELECT sku FROM desafio_gigantes_produtos WHERE sku<>? AND status='IDENTIFICADO' AND TRIM(COALESCE(ean,''))=? ORDER BY sku LIMIT 1",
+        [sap, ean],
+    )
+    return str(linhas[0].get("sku", "")).strip() if linhas else ""
+
+
+def atualizar(db: str, sap: str, status: str, ean: str, produto: str, mensagem: str) -> str:
+    if status == "IDENTIFICADO" and ean:
+        outro_sap = conflito_ean(db, sap, ean)
+        if outro_sap:
+            status = "AMBIGUO"
+            mensagem = f"Conflito: o EAN {ean} já está vinculado ao SAP {outro_sap}. Revisar os dois SAPs no Catálogo A a Z."
+            ean = ""
+            produto = ""
     timestamp = agora()
     execute(db, "UPDATE desafio_gigantes_produtos SET ean=?,produto=?,status=?,tentativas=tentativas+1,ultima_consulta_em=?,mensagem=?,atualizado_em=? WHERE sku=?", [ean, produto, status, timestamp, mensagem[:1000], timestamp, sap])
     execute(db, "UPDATE desafio_gigantes_metas SET ean=?,produto_identificado=?,status_identificacao=?,atualizado_em=? WHERE sku=?", [ean, produto, status, timestamp, sap])
+    return status
 
 
 def resolver_cache_local(db: str) -> int:
@@ -162,8 +181,9 @@ def resolver_cache_local(db: str) -> int:
         ean = re.sub(r"\D", "", str(linha.get("ean", "")))
         if not sap or not ean:
             continue
-        atualizar(db, sap, "IDENTIFICADO", ean, str(linha.get("descricao", "")).strip(), "Identificado pelo cadastro local SAP/EAN já existente no painel.")
-        total += 1
+        status = atualizar(db, sap, "IDENTIFICADO", ean, str(linha.get("descricao", "")).strip(), "Identificado pelo cadastro local SAP/EAN já existente no painel.")
+        if status == "IDENTIFICADO":
+            total += 1
     return total
 
 
@@ -203,7 +223,7 @@ def main() -> int:
                 continue
             try:
                 status, ean, produto, mensagem = pesquisar_sap(driver, sap)
-                atualizar(db, sap, status, ean, produto, mensagem)
+                status = atualizar(db, sap, status, ean, produto, mensagem)
                 if status == "IDENTIFICADO": identificados += 1
                 elif status == "AMBIGUO": ambiguos += 1
                 elif status == "NAO_ENCONTRADO": nao_encontrados += 1

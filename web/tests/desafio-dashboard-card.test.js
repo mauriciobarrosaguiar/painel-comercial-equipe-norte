@@ -3,6 +3,7 @@ import test from 'node:test'
 import { readFileSync } from 'node:fs'
 import { testDatabase } from './d1-fixture.js'
 import { onRequestGet } from '../functions/api/desafio-gigantes.js'
+import { onRequestGet as onRequestGestao } from '../functions/api/desafio-gigantes-gestao.js'
 
 const app = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8')
 const shell = readFileSync(new URL('../src/AppShell.tsx', import.meta.url), 'utf8')
@@ -53,6 +54,9 @@ test('regras oficiais usam 80% na Positivação, 100% no Giro, teto 120 e máxim
   assert.doesNotMatch(api, /atingGiro,\s*0\.4/)
   assert.match(card, /120 Positivação \+ 120 Giro/)
   assert.match(card, /acima de \{teto\}% continua valendo no máximo/)
+  assert.match(card, /Giro atingido ≥100%/)
+  assert.match(card, /Giro pontuando/)
+  assert.match(page, /Giro ≥100%/)
   assert.match(page, /Giro pontuando/)
 })
 
@@ -63,6 +67,7 @@ test('API calcula 100 pontos de Positivação + 100 de Giro quando ambas estão 
   assert.equal(body.skus, 1)
   assert.equal(body.identificados, 1)
   assert.equal(body.pos_80, 1)
+  assert.equal(body.giro_bruto_100, 1)
   assert.equal(body.giro_100, 1)
   assert.equal(body.pontuacao_estimada, 200)
   assert.equal(body.maximo_estimado, 240)
@@ -74,18 +79,22 @@ test('resultado acima de 120% fica limitado a 120 pontos em cada indicador', asy
   const DB = testDatabase()
   await inserirMeta(DB,{metaPos:0.5,metaGiro:0.1})
   const body = await carregar(DB)
+  assert.equal(body.giro_bruto_100, 1)
+  assert.equal(body.giro_bruto_120, 1)
   assert.equal(body.pontuacao_estimada, 240)
   assert.equal(body.maximo_estimado, 240)
 })
 
-test('Giro acima de 100% não pontua enquanto a Positivação estiver abaixo de 80%', async () => {
+test('Giro acima de 100% aparece como atingido mas não pontua enquanto Positivação estiver abaixo de 80%', async () => {
   const DB = testDatabase()
   await inserirMeta(DB,{metaPos:2,metaGiro:0.1})
   const body = await carregar(DB)
   assert.equal(body.pos_80, 0)
+  assert.equal(body.giro_bruto_100, 1)
   assert.equal(body.giro_100, 0)
   assert.equal(body.pontuacao_estimada, 0)
   assert.equal(body.oportunidades[0].atingimento_giro > 120, true)
+  assert.equal(body.oportunidades[0].giro_atingido, true)
   assert.equal(body.oportunidades[0].pontos_giro, 0)
   assert.equal(body.oportunidades[0].atingimento_giro_considerado, 0)
 })
@@ -110,6 +119,19 @@ test('consolidado da GD considera apenas PDVs vinculados àquela GD', async () =
   const body = await carregar(DB,'ano_mes=2026-07')
   assert.equal(body.escopo, 'gerente')
   assert.equal(body.pos_80, 1)
+  assert.equal(body.giro_bruto_100, 1)
   assert.equal(body.giro_100, 1)
   assert.equal(body.pontuacao_estimada, 200)
+})
+
+test('gestão sinaliza EAN vinculado a mais de um SAP para correção', async () => {
+  const DB = testDatabase()
+  await inserirMeta(DB,{id:'dup-1',sku:'11081',ean:'7896004732626'})
+  await inserirMeta(DB,{id:'dup-2',sku:'37606',ean:'7896004732626'})
+  const response = await onRequestGestao({ request:new Request('https://painel.test/api/desafio-gigantes-gestao?ano_mes=2026-07'), env:{DB} })
+  assert.equal(response.status,200)
+  const body = await response.json()
+  assert.equal(body.identificacao.conflitos_ean,1)
+  assert.equal(body.saps_problema.filter((item)=>item.status==='CONFLITO_EAN').length,2)
+  assert.equal(body.alertas_qualidade.some((item)=>item.tipo==='EAN_DUPLICADO'),true)
 })
