@@ -55,8 +55,6 @@ export async function onRequestGet({ request, env }) {
     const filtro = parametros(request)
     const metasFiltro = filtroMetas(filtro)
     const ufJoin = filtro.uf ? "AND UPPER(TRIM(COALESCE(cl.uf,'')))=?" : ''
-    const binds = [...metasFiltro.binds, filtro.inicio, filtro.fim]
-    if (filtro.uf) binds.push(filtro.uf)
 
     const resultado = await env.DB.prepare(`
       SELECT
@@ -103,6 +101,7 @@ export async function onRequestGet({ request, env }) {
         atingimento_positivacao: atingPos,
         atingimento_giro: atingGiro,
         pontos_estimados: pontosPos + pontosGiro,
+        alvo_positivacao_80: alvo80,
         falta_pdv_80: Math.max(0, alvo80 - positivacao),
       }
     })
@@ -113,8 +112,8 @@ export async function onRequestGet({ request, env }) {
     const giro80 = linhas.filter((item) => item.atingimento_giro >= 80).length
     const pontuacao = linhas.reduce((total, item) => total + numero(item.pontos_estimados), 0)
     const oportunidades = linhas
-      .filter((item) => item.status_identificacao === 'IDENTIFICADO' && item.atingimento_positivacao < 80)
-      .sort((a, b) => b.falta_pdv_80 - a.falta_pdv_80 || a.atingimento_positivacao - b.atingimento_positivacao)
+      .filter((item) => item.status_identificacao === 'IDENTIFICADO' && item.atingimento_positivacao < 80 && item.falta_pdv_80 > 0)
+      .sort((a, b) => a.falta_pdv_80 - b.falta_pdv_80 || b.atingimento_positivacao - a.atingimento_positivacao || texto(a.sku).localeCompare(texto(b.sku)))
       .slice(0, 10)
 
     const identificacao = await env.DB.prepare(`
