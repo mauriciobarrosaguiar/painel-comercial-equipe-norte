@@ -90,8 +90,9 @@ export async function onRequestGet({ request, env }) {
       const giro = positivacao > 0 ? unidades / positivacao : 0
       const atingPos = percentual(positivacao, item.meta_positivacao)
       const atingGiro = percentual(giro, item.meta_giro)
+      const skuDestravado = atingPos >= 80
       const pontosPos = pontos(atingPos, 1, 80)
-      const pontosGiro = pontos(atingGiro, 0.4, 100)
+      const pontosGiro = skuDestravado ? pontos(atingGiro, 0.4, 100) : 0
       const alvo80 = Math.ceil(numero(item.meta_positivacao) * 0.8)
       return {
         ...item,
@@ -100,6 +101,8 @@ export async function onRequestGet({ request, env }) {
         unidades,
         atingimento_positivacao: atingPos,
         atingimento_giro: atingGiro,
+        sku_destravado: skuDestravado,
+        giro_pontuando: skuDestravado && atingGiro >= 100,
         pontos_estimados: pontosPos + pontosGiro,
         alvo_positivacao_80: alvo80,
         falta_pdv_80: Math.max(0, alvo80 - positivacao),
@@ -109,7 +112,7 @@ export async function onRequestGet({ request, env }) {
     const skus = new Set(linhas.map((item) => texto(item.sku)).filter(Boolean))
     const identificados = linhas.filter((item) => item.status_identificacao === 'IDENTIFICADO' && texto(item.ean)).length
     const pos80 = linhas.filter((item) => item.atingimento_positivacao >= 80).length
-    const giro100 = linhas.filter((item) => item.atingimento_giro >= 100).length
+    const giro100 = linhas.filter((item) => item.giro_pontuando).length
     const pontuacao = linhas.reduce((total, item) => total + numero(item.pontos_estimados), 0)
     const oportunidades = linhas
       .filter((item) => item.status_identificacao === 'IDENTIFICADO' && item.atingimento_positivacao < 80 && item.falta_pdv_80 > 0)

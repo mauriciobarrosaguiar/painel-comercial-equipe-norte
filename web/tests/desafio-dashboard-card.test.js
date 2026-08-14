@@ -34,12 +34,13 @@ test('oportunidade prioriza o SKU mais perto de atingir 80 por cento', () => {
   assert.match(card, /data-label="Faltam p\/80%"/)
 })
 
-test('Giro só destrava pontuação ao atingir 100 por cento da meta', () => {
-  assert.match(api, /pontos\(atingGiro,\s*0\.4,\s*100\)/)
-  assert.match(api, /atingimento_giro >= 100/)
-  assert.match(card, /Giro: SKUs ≥100%/)
-  assert.match(card, /Giro: 100% = começa a pontuar/)
-  assert.match(page, /Giro ≥100%/)
+test('Giro exige 100 por cento e SKU destravado pela positivação', () => {
+  assert.match(api, /const skuDestravado = atingPos >= 80/)
+  assert.match(api, /skuDestravado \? pontos\(atingGiro,\s*0\.4,\s*100\) : 0/)
+  assert.match(api, /skuDestravado && atingGiro >= 100/)
+  assert.match(card, /Giro pontuando: ≥100%/)
+  assert.match(card, /Giro ≥100% e Positivação já ≥80%/)
+  assert.match(page, /Giro pontuando/)
 })
 
 test('API calcula parcial gerencial por SKU identificado', async () => {
