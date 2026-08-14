@@ -8,6 +8,7 @@ import FocusModule from './FocusModule'
 import HistoryModule from './HistoryModule'
 import LoginPage, { SessionUser } from './LoginPage'
 import MarketFarmaModule from './MarketFarmaModule.new'
+import OrderCrossingHistoryBridge from './OrderCrossingHistoryBridge'
 import OrderSeparatorModule from './OrderSeparatorPdfBridgeV4'
 import { AppPage, readPageFromUrl, savePageInHistory } from './navigation'
 import OpportunitiesModule from './OpportunitiesModule'
@@ -105,7 +106,12 @@ export default function AppShell() {
           onLogout={() => void logout()}
           onInstall={() => void installApp()}
         />
-        {page === 'dashboard' && <DashboardSeparatorShortcut onOpen={() => go('separador')} />}
+        {page === 'dashboard' && (
+          <DashboardSeparatorShortcut
+            onOpen={() => go('separador')}
+            onCrossing={() => go('cruzamento')}
+          />
+        )}
       </>
     )
   }
@@ -116,6 +122,7 @@ export default function AppShell() {
   if (page === 'sips') module = <SipsModule onBack={back} />
   if (page === 'mercado') module = <MarketFarmaModule onBack={back} onAutomations={() => go('automacoes')} />
   if (page === 'separador') module = <OrderSeparatorModule onBack={back} />
+  if (page === 'cruzamento') module = <OrderCrossingHistoryBridge onBack={back} />
   if (page === 'automacoes') module = <AutomationsModule onBack={back} />
   if (page === 'historico') module = <HistoryModule onBack={back} onAutomations={() => go('automacoes')} />
   if (page === 'foco') module = <FocusModule onBack={back} />
