@@ -51,3 +51,20 @@ jobs:
             --header "x-admin-key: ${PAINEL_ADMIN_KEY}" \
             --header "content-type: application/json" \
             --data @payload.json | tee fechamento.json
+
+      - name: Congelar resultado do Desafio de Gigantes
+        env:
+          PAINEL_ADMIN_KEY: ${{ secrets.PAINEL_ADMIN_KEY }}
+          ANO_MES: ${{ inputs.ano_mes }}
+        shell: bash
+        run: |
+          node <<'NODE' > desafio-fechamento.json
+          const p={}
+          if(process.env.ANO_MES)p.ano_mes=process.env.ANO_MES
+          process.stdout.write(JSON.stringify(p))
+          NODE
+          curl --fail-with-body --silent --show-error \
+            --request POST "https://painel-equipe-norte.pages.dev/api/internal/desafio-gigantes-fechamento" \
+            --header "x-admin-key: ${PAINEL_ADMIN_KEY}" \
+            --header "content-type: application/json" \
+            --data @desafio-fechamento.json | tee desafio-fechamento-resposta.json
