@@ -3,7 +3,7 @@ import { onRequestGet as calcularDesafio } from '../api/desafio-gigantes.js'
 const texto = (value) => String(value ?? '').trim()
 
 async function resumoDesafio(env, anoMes, consultorId = '') {
-  const params = new URLSearchParams({ ano_mes: anoMes })
+  const params = new URLSearchParams({ ano_mes: anoMes, detalhes: '1' })
   if (consultorId) params.set('consultor', consultorId)
   const response = await calcularDesafio({
     request: new Request(`https://painel.local/api/desafio-gigantes?${params.toString()}`),
@@ -86,6 +86,7 @@ export async function fecharDesafioGigantes(env, anoMes, fechadoEm = new Date().
         maximo_estimado: Number(resumo.maximo_estimado || 0),
       },
       produtos_meta: produtos,
+      produtos_resultado: Array.isArray(resumo.produtos) ? resumo.produtos : [],
       fechado_em: fechadoEm,
       aviso: resumo.aviso || '',
     }
