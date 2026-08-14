@@ -8,7 +8,7 @@ const json = (data, status = 200) => new Response(JSON.stringify(data), { status
 const texto = (value) => String(value ?? '').trim()
 const numero = (value) => Number.isFinite(Number(value)) ? Number(value) : 0
 const percentual = (real, meta) => numero(meta) > 0 ? (numero(real) / numero(meta)) * 100 : 0
-const pontos = (atingimento, peso = 1) => atingimento >= 80 ? Math.min(120, atingimento) * peso : 0
+const pontos = (atingimento, peso = 1, gatilho = 80) => atingimento >= gatilho ? Math.min(120, atingimento) * peso : 0
 
 function mesAtual() {
   const partes = Object.fromEntries(new Intl.DateTimeFormat('en-CA', {
@@ -90,8 +90,8 @@ export async function onRequestGet({ request, env }) {
       const giro = positivacao > 0 ? unidades / positivacao : 0
       const atingPos = percentual(positivacao, item.meta_positivacao)
       const atingGiro = percentual(giro, item.meta_giro)
-      const pontosPos = pontos(atingPos, 1)
-      const pontosGiro = pontos(atingGiro, 0.4)
+      const pontosPos = pontos(atingPos, 1, 80)
+      const pontosGiro = pontos(atingGiro, 0.4, 100)
       const alvo80 = Math.ceil(numero(item.meta_positivacao) * 0.8)
       return {
         ...item,
@@ -109,7 +109,7 @@ export async function onRequestGet({ request, env }) {
     const skus = new Set(linhas.map((item) => texto(item.sku)).filter(Boolean))
     const identificados = linhas.filter((item) => item.status_identificacao === 'IDENTIFICADO' && texto(item.ean)).length
     const pos80 = linhas.filter((item) => item.atingimento_positivacao >= 80).length
-    const giro80 = linhas.filter((item) => item.atingimento_giro >= 80).length
+    const giro100 = linhas.filter((item) => item.atingimento_giro >= 100).length
     const pontuacao = linhas.reduce((total, item) => total + numero(item.pontos_estimados), 0)
     const oportunidades = linhas
       .filter((item) => item.status_identificacao === 'IDENTIFICADO' && item.atingimento_positivacao < 80 && item.falta_pdv_80 > 0)
@@ -137,7 +137,8 @@ export async function onRequestGet({ request, env }) {
       skus: skus.size,
       identificados,
       pos_80: pos80,
-      giro_80: giro80,
+      giro_100: giro100,
+      giro_80: giro100,
       pontuacao_estimada: pontuacao,
       maximo_estimado: linhas.length * 168,
       identificacao: {
@@ -156,7 +157,7 @@ export async function onRequestGet({ request, env }) {
   } catch (error) {
     const detalhe = error instanceof Error ? error.message : String(error)
     if (detalhe.includes('no such table')) {
-      return json({ ano_mes: mesAtual(), metas: 0, skus: 0, identificados: 0, pos_80: 0, giro_80: 0, pontuacao_estimada: 0, oportunidades: [], aviso: 'A base do Desafio de Gigantes ainda não foi importada.' })
+      return json({ ano_mes: mesAtual(), metas: 0, skus: 0, identificados: 0, pos_80: 0, giro_100: 0, giro_80: 0, pontuacao_estimada: 0, oportunidades: [], aviso: 'A base do Desafio de Gigantes ainda não foi importada.' })
     }
     return json({ erro: 'Não foi possível calcular o Desafio de Gigantes.', detalhe }, 500)
   }
