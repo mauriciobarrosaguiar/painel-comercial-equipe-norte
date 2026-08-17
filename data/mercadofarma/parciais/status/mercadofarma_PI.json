@@ -9,8 +9,8 @@
   "erro": "login: Message: \n",
   "etapa": "extracao_mercado_farma",
   "traceback": "Traceback (most recent call last):\n  File \"/home/runner/work/painel-comercial-equipe-norte/painel-comercial-equipe-norte/src/mercado_farma.py\", line 870, in _extrair_alvo\n    login_mercadofarma(driver, usuario, senha, log_fn=log_fn)\n  File \"/home/runner/work/painel-comercial-equipe-norte/painel-comercial-equipe-norte/src/mercadofarma_inventory.py\", line 181, in login_mercadofarma\n    wait(driver, 90).until(lambda d: \"mercadofarma.com.br\" in d.current_url.lower() and \"adfs\" not in d.current_url.lower())\n  File \"/opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/site-packages/selenium/webdriver/support/wait.py\", line 121, in until\n    raise TimeoutException(message, screen, stacktrace)\nselenium.common.exceptions.TimeoutException: Message: \n\n\nThe above exception was the direct cause of the following exception:\n\nTraceback (most recent call last):\n  File \"/home/runner/work/painel-comercial-equipe-norte/painel-comercial-equipe-norte/automacoes/mercadofarma.py\", line 209, in main\n    _extrair_alvo(alvo, eans, headless=not args.visivel, resultados=resultados, log_fn=_log, debug_dir=debug_dir)\n  File \"/home/runner/work/painel-comercial-equipe-norte/painel-comercial-equipe-norte/src/mercado_farma.py\", line 936, in _extrair_alvo\n    raise RuntimeError(f\"{etapa}: {exc}\") from exc\nRuntimeError: login: Message: \n\n",
-  "iniciado_em": "2026-08-17T04:40:38.087132-03:00",
-  "finalizado_em": "2026-08-17T04:42:23.648913-03:00",
+  "iniciado_em": "2026-08-17T10:50:57.096082-03:00",
+  "finalizado_em": "2026-08-17T10:52:58.612424-03:00",
   "fonte_clientes": "D1 / PAINEL EQUIPE NORTE",
   "fonte_produtos": "D1 / PRODUTOS MERCADO FARMA",
   "cnpjs_candidatos": [
