@@ -3,6 +3,7 @@ import test from 'node:test'
 import { readFileSync } from 'node:fs'
 import { testDatabase } from './d1-fixture.js'
 import { onRequestGet } from '../functions/api/desafio-gigantes-clientes.js'
+import { onRequestGet as exportarNaoPositivados } from '../functions/api/desafio-gigantes-nao-positivados-excel.js'
 
 const page = readFileSync(new URL('../src/DesafioGigantesPage.tsx', import.meta.url), 'utf8')
 const component = readFileSync(new URL('../src/DesafioClientesProdutos.tsx', import.meta.url), 'utf8')
@@ -26,6 +27,11 @@ test('tela do Desafio inclui mapa por cliente e por produto', () => {
   assert.match(component, /Não positivou/)
   assert.match(component, /Já positivou/)
   assert.match(component, /Clientes para vender/)
+})
+
+test('tela oferece Excel dos não positivados com preços do Mercado Farma', () => {
+  assert.match(component, /Extrair não positivados \+ preços/)
+  assert.match(component, /desafio-gigantes-nao-positivados-excel/)
 })
 
 test('mapa mostra quais produtos cada cliente positivou e recomenda o próximo SKU', async () => {
@@ -66,4 +72,23 @@ test('detalhe do produto lista clientes positivados e clientes para vender', asy
   assert.equal(a.positivou, true)
   assert.equal(a.unidades, 1)
   assert.equal(b.positivou, false)
+})
+
+test('Excel traz somente não positivados e apenas distribuidora com estoque', async () => {
+  const DB = testDatabase()
+  await preparar(DB)
+  const response = await exportarNaoPositivados({
+    request: new Request('https://painel.test/api/desafio-gigantes-nao-positivados-excel?ano_mes=2026-07&consultor=co1', { headers: { 'x-admin-key': 'chave-administrativa-teste' } }),
+    env: { DB, PAINEL_ADMIN_KEY: 'chave-administrativa-teste' },
+  })
+  assert.equal(response.status, 200)
+  assert.match(response.headers.get('content-type') || '', /spreadsheetml/)
+  const bytes = new Uint8Array(await response.arrayBuffer())
+  assert.equal(String.fromCharCode(bytes[0], bytes[1]), 'PK')
+  const raw = new TextDecoder().decode(bytes)
+  assert.match(raw, /Farmácia B/)
+  assert.doesNotMatch(raw, /Farmácia A/)
+  assert.match(raw, /Distribuidora A \(R\$\)/)
+  assert.doesNotMatch(raw, /Distribuidora B \(R\$\)/)
+  assert.match(raw, /Prioritário/)
 })
