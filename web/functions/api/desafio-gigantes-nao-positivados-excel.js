@@ -105,7 +105,7 @@ export async function onRequestGet({ request, env }) {
     const consultor = texto(params.get('consultor')).slice(0, 180)
     if (!consultor) return new Response('Selecione um consultor para extrair os não positivados.', { status: 400 })
     const { inicio, fim } = faixaMes(anoMes)
-    const cnpjCliente = cnpjLimpoSql('c.cnpj')
+    const cnpjCliente = cnpjLimpoSql('cl.cnpj')
     const cnpjOferta = cnpjLimpoSql('mf.cnpj_referencia')
     const cnpjExato = cnpjLimpoSql('ex.cnpj_referencia')
 
