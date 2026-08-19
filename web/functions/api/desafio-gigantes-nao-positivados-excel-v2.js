@@ -41,13 +41,13 @@ const styles = () => `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 
 function worksheet(linhas, distribuidoras, anoMes, consultorNome) {
   const baseHeaders = ['CONSULTOR','SETOR','CNPJ','PDV','CIDADE','UF','SAP','EAN','PRODUTO']
-  const distHeaders = distribuidoras.map((item) => `${item} (R$)`)
-  const finalHeaders = ['MELHOR PREÇO (R$)','MELHOR DISTRIBUIDORA','BASE DOS PREÇOS','ATUALIZADO EM']
+  const distHeaders = distribuidoras.map((item) => `${item} - SEM IMPOSTO (R$)`)
+  const finalHeaders = ['MELHOR PREÇO SEM IMPOSTO (R$)','MELHOR DISTRIBUIDORA','BASE DOS PREÇOS','ATUALIZADO EM']
   const headers = [...baseHeaders, ...distHeaders, ...finalHeaders]
   const lastColumn = columnName(headers.length - 1)
   const rows = [
-    `<row r="1" ht="28" customHeight="1">${stringCell('A1', 'DESAFIO DE GIGANTES — NÃO POSITIVADOS + PREÇOS', 1)}</row>`,
-    `<row r="2" ht="34" customHeight="1">${stringCell('A2', `Mês ${anoMes} · ${consultorNome || 'Consultor'} · somente produtos ainda não positivados. Preços com imposto quando disponíveis; entram apenas ofertas com estoque. Base CNPJ quando houver captura exata e, na ausência, mesma UF do PDV.`, 7)}</row>`,
+    `<row r="1" ht="28" customHeight="1">${stringCell('A1', 'DESAFIO DE GIGANTES — NÃO POSITIVADOS + PREÇOS SEM IMPOSTO', 1)}</row>`,
+    `<row r="2" ht="34" customHeight="1">${stringCell('A2', `Mês ${anoMes} · ${consultorNome || 'Consultor'} · somente produtos ainda não positivados. Preços sem imposto; entram apenas ofertas com estoque. Base CNPJ quando houver captura exata e, na ausência, mesma UF do PDV.`, 7)}</row>`,
     `<row r="4" ht="34" customHeight="1">${headers.map((label,index) => stringCell(`${columnName(index)}4`, label, 2)).join('')}</row>`,
   ]
   linhas.forEach((item, index) => {
@@ -81,7 +81,7 @@ function aplicarOfertas(item, ofertas) {
   const candidatas = exatas.length ? exatas : ofertas.filter((o) => texto(o.uf).toUpperCase() === item.uf)
   for (const oferta of candidatas) {
     const dist = texto(oferta.distribuidora)
-    const preco = numero(oferta.preco_com_imposto) > 0 ? numero(oferta.preco_com_imposto) : numero(oferta.preco_sem_imposto)
+    const preco = numero(oferta.preco_sem_imposto)
     if (!dist || preco <= 0 || numero(oferta.estoque) <= 0) continue
     if (!item.precos[dist] || preco < item.precos[dist]) item.precos[dist] = preco
     if (!item.melhor_preco || preco < item.melhor_preco) { item.melhor_preco = preco; item.melhor_distribuidora = dist }
@@ -103,7 +103,7 @@ export async function onRequestGet({ request, env }) {
       env.DB.prepare(`SELECT m.nome_colaborador,m.setor,m.sku,TRIM(COALESCE(m.ean,'')) ean,COALESCE(NULLIF(TRIM(m.produto_identificado),''),NULLIF(TRIM(m.produto_planilha),''),('SAP '||m.sku)) produto FROM desafio_gigantes_metas m WHERE m.ano_mes=? AND m.escopo='consultor' AND m.consultor_id=? AND COALESCE(m.status_identificacao,'')='IDENTIFICADO' AND TRIM(COALESCE(m.ean,''))<>'' ORDER BY m.sku`).bind(anoMes, consultor),
       env.DB.prepare(`SELECT cl.id cliente_id,REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(cl.cnpj,''),'.',''),'/',''),'-',''),' ','') cnpj,COALESCE(NULLIF(TRIM(cl.nome_fantasia),''),NULLIF(TRIM(cl.razao_social),''),cl.cnpj) pdv,COALESCE(cl.cidade,'') cidade,UPPER(TRIM(COALESCE(cl.uf,''))) uf FROM clientes cl WHERE cl.carteira_importada=1 AND cl.ativo=1 AND cl.consultor_id=? ORDER BY pdv COLLATE NOCASE`).bind(consultor),
       env.DB.prepare(`SELECT pe.cliente_id,TRIM(COALESCE(ip.ean,'')) ean,SUM(COALESCE(ip.quantidade_faturada,0)) unidades FROM pedidos pe JOIN itens_pedido ip ON ip.pedido_id=pe.id JOIN clientes cl ON cl.id=pe.cliente_id WHERE ${ITEM_FATURADO} AND cl.carteira_importada=1 AND cl.ativo=1 AND cl.consultor_id=? AND DATE(COALESCE(pe.data_faturamento,pe.data_pedido)) BETWEEN DATE(?) AND DATE(?) AND TRIM(COALESCE(ip.ean,'')) IN (SELECT TRIM(COALESCE(ean,'')) FROM desafio_gigantes_metas WHERE ano_mes=? AND escopo='consultor' AND consultor_id=? AND status_identificacao='IDENTIFICADO') GROUP BY pe.cliente_id,TRIM(COALESCE(ip.ean,'')) HAVING SUM(COALESCE(ip.quantidade_faturada,0))>0`).bind(consultor, inicio, fim, anoMes, consultor),
-      env.DB.prepare(`SELECT mf.ean,mf.uf,mf.cnpj_referencia,mf.distribuidora,mf.estoque,mf.preco_com_imposto,mf.preco_sem_imposto,mf.atualizado_em FROM mercado_farma_precos mf WHERE COALESCE(mf.estoque,0)>0 AND (COALESCE(mf.preco_com_imposto,0)>0 OR COALESCE(mf.preco_sem_imposto,0)>0) AND TRIM(COALESCE(mf.ean,'')) IN (SELECT TRIM(COALESCE(ean,'')) FROM desafio_gigantes_metas WHERE ano_mes=? AND escopo='consultor' AND consultor_id=? AND status_identificacao='IDENTIFICADO')`).bind(anoMes, consultor),
+      env.DB.prepare(`SELECT mf.ean,mf.uf,mf.cnpj_referencia,mf.distribuidora,mf.estoque,mf.preco_sem_imposto,mf.atualizado_em FROM mercado_farma_precos mf WHERE COALESCE(mf.estoque,0)>0 AND COALESCE(mf.preco_sem_imposto,0)>0 AND TRIM(COALESCE(mf.ean,'')) IN (SELECT TRIM(COALESCE(ean,'')) FROM desafio_gigantes_metas WHERE ano_mes=? AND escopo='consultor' AND consultor_id=? AND status_identificacao='IDENTIFICADO')`).bind(anoMes, consultor),
     ])
 
     const metas = metasR.results || [], clientes = clientesR.results || [], vendas = new Set((vendasR.results || []).map((v) => `${v.cliente_id}|${texto(v.ean)}`))
