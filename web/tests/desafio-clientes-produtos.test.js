@@ -29,6 +29,12 @@ test('tela do Desafio inclui mapa por cliente e por produto', () => {
   assert.match(component, /Clientes para vender/)
 })
 
+test('download dos não positivados fica visível no topo do Desafio', () => {
+  assert.match(page, /Baixar não positivados/)
+  assert.match(page, /dg-download-visible/)
+  assert.match(page, /desafio-gigantes-nao-positivados-excel/)
+})
+
 test('tela oferece Excel dos não positivados com preços do Mercado Farma', () => {
   assert.match(component, /Extrair não positivados \+ preços/)
   assert.match(component, /desafio-gigantes-nao-positivados-excel/)
