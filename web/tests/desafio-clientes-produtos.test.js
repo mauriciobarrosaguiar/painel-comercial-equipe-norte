@@ -80,7 +80,7 @@ test('detalhe do produto lista clientes positivados e clientes para vender', asy
   assert.equal(b.positivou, false)
 })
 
-test('Excel traz somente não positivados e apenas distribuidora com estoque', async () => {
+test('Excel traz somente não positivados, somente preço sem imposto e distribuidora com estoque', async () => {
   const DB = testDatabase()
   await preparar(DB)
   const response = await exportarNaoPositivados({
@@ -94,7 +94,9 @@ test('Excel traz somente não positivados e apenas distribuidora com estoque', a
   const raw = new TextDecoder().decode(bytes)
   assert.match(raw, /Farmácia B/)
   assert.doesNotMatch(raw, /Farmácia A/)
-  assert.match(raw, /Distribuidora A \(R\$\)/)
-  assert.doesNotMatch(raw, /Distribuidora B \(R\$\)/)
+  assert.match(raw, /Distribuidora A - SEM IMPOSTO \(R\$\)/)
+  assert.doesNotMatch(raw, /Distribuidora B - SEM IMPOSTO \(R\$\)/)
+  assert.match(raw, /MELHOR PREÇO SEM IMPOSTO \(R\$\)/)
+  assert.match(raw, /PREÇOS SEM IMPOSTO/)
   assert.match(raw, /Prioritário/)
 })
