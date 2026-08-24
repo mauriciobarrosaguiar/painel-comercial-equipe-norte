@@ -34,14 +34,52 @@ async function updateSipGoals(body, env) {
   const updates = [...normalized.entries()].filter(([sipId]) => allowed.has(sipId))
   if (!updates.length) return json({ erro: 'Nenhuma SIP ativa foi encontrada.' }, 404)
 
+  const sipIds = updates.map(([sipId]) => sipId)
+  const distributionResult = await env.DB.prepare(`
+    SELECT sip_id,
+           COUNT(*) clientes,
+           COALESCE(SUM(objetivo_preco_liquido),0) objetivo_atual
+      FROM sip_clientes
+     WHERE ativo=1
+       AND sip_id IN (${sipIds.map(() => '?').join(',')})
+     GROUP BY sip_id
+  `).bind(...sipIds).all()
+  const distribution = new Map((distributionResult.results || []).map((item) => [texto(item.sip_id), {
+    clientes: Math.max(0, Math.trunc(numero(item.clientes))),
+    objetivo_atual: Math.max(0, numero(item.objetivo_atual)),
+  }]))
+
   const now = new Date().toISOString()
-  await env.DB.batch(updates.map(([sipId, objective]) => env.DB.prepare(
-    'UPDATE sips SET meta_mes=?,atualizado_em=? WHERE id=? AND ativo=1',
-  ).bind(objective, now, sipId)))
+  const statements = []
+  for (const [sipId, objective] of updates) {
+    statements.push(env.DB.prepare(
+      'UPDATE sips SET meta_mes=?,atualizado_em=? WHERE id=? AND ativo=1',
+    ).bind(objective, now, sipId))
+
+    const current = distribution.get(sipId) || { clientes: 0, objetivo_atual: 0 }
+    if (current.clientes <= 0) continue
+
+    if (current.objetivo_atual > 0) {
+      const factor = objective / current.objetivo_atual
+      statements.push(env.DB.prepare(`
+        UPDATE sip_clientes
+           SET objetivo_preco_liquido=objetivo_preco_liquido*?,atualizado_em=?
+         WHERE sip_id=? AND ativo=1
+      `).bind(factor, now, sipId))
+    } else {
+      const individual = objective / current.clientes
+      statements.push(env.DB.prepare(`
+        UPDATE sip_clientes
+           SET objetivo_preco_liquido=?,atualizado_em=?
+         WHERE sip_id=? AND ativo=1
+      `).bind(individual, now, sipId))
+    }
+  }
+  await env.DB.batch(statements)
 
   return json({
     sucesso: true,
-    mensagem: 'Objetivos totais das SIPs atualizados.',
+    mensagem: 'Objetivos totais das SIPs atualizados e sincronizados com os CNPJs vinculados.',
     metas_atualizadas: updates.length,
     objetivo_total: updates.reduce((total, [, objective]) => total + objective, 0),
     atualizado_em: now,
