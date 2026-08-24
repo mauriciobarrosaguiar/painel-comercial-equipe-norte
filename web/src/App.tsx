@@ -30,6 +30,7 @@ const modules = [
   ['Histórico', 'Comparativos mensais e evolução dos principais indicadores.', '◫'],
   ['Automações', 'Extrações do Bússola e Mercado Farma com status em tempo real.', '⚙'],
   ['Administração', 'Integrações, metas, produtos e configurações.', '☷'],
+  ['Anotações de CNPJs', 'CNPJs para incluir ou excluir do painel nos próximos meses.', '✎'],
 ]
 const money = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
 const num = new Intl.NumberFormat('pt-BR')
@@ -144,7 +145,7 @@ export default function App({ user, page, onNavigate, onLogout, onInstall }: Pro
     const route: Record<string, AppPage> = {
       'Visão Geral': 'dashboard', Consultores: 'consultores', Clientes: 'clientes', 'Foco Semanal': 'foco',
       'Desafio de Gigantes': 'desafio', Oportunidades: 'oportunidades', 'Mercado Farma': 'mercado', 'SIP / Redes': 'sips', Histórico: 'historico',
-      Automações: 'automacoes', Administração: 'administracao',
+      Automações: 'automacoes', Administração: 'administracao', 'Anotações de CNPJs': 'cnpj-anotacoes',
     }
     const nextPage = route[title]
     if (nextPage) onNavigate(nextPage)
