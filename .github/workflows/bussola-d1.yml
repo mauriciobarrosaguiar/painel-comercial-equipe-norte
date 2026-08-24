@@ -57,29 +57,66 @@ jobs:
           CLOUDFLARE_D1_DATABASE: painel-equipe-norte-db
         run: python scripts/aplicar_mix_sap_d1.py
 
-      - name: Atualizar mês fechado com faturamentos retroativos
+      - name: Fechar mês anterior e reconciliar histórico
         env:
           PAINEL_URL: https://painel-equipe-norte.pages.dev
           PAINEL_ADMIN_KEY: ${{ secrets.PAINEL_ADMIN_KEY }}
         shell: bash
         run: |
           set -euo pipefail
-          ANO_MES=$(date -u -d "$(date -u +%Y-%m-01) -1 month" +%Y-%m)
-          jq -n \
-            --arg ano_mes "$ANO_MES" \
-            '{
-              ano_mes:$ano_mes,
-              automatico:true,
-              reprocessar:true,
-              somente_se_alterado:true,
-              apenas_fechado:true,
-              motivo:"Atualização automática após extração da Bússola: faturamentos retroativos incorporados ao mês fechado."
-            }' > reconciliar-fechamento.json
+          export TZ=America/Araguaina
+
+          fechar_mes() {
+            local MES="$1"
+            local APENAS_FECHADO="$2"
+            local MOTIVO="$3"
+
+            jq -n \
+              --arg ano_mes "$MES" \
+              --argjson apenas_fechado "$APENAS_FECHADO" \
+              --arg motivo "$MOTIVO" \
+              '{
+                ano_mes:$ano_mes,
+                automatico:true,
+                reprocessar:true,
+                somente_se_alterado:true,
+                apenas_fechado:$apenas_fechado,
+                motivo:$motivo
+              }' > reconciliar-fechamento.json
+
+            echo "Processando histórico de ${MES}..."
+            curl --fail-with-body --silent --show-error \
+              --request POST "${PAINEL_URL}/api/internal/fechamento-mensal" \
+              --header "x-admin-key: ${PAINEL_ADMIN_KEY}" \
+              --header "content-type: application/json" \
+              --data @reconciliar-fechamento.json
+            echo
+          }
+
+          ANO_MES=$(date -d "$(date +%Y-%m-01) -1 month" +%Y-%m)
+
+          # Primeira extração do novo mês cria automaticamente o fechamento do mês anterior.
+          fechar_mes \
+            "$ANO_MES" \
+            false \
+            "Fechamento automático após a virada do mês: metas congeladas e resultado faturado registrado no histórico."
+
+          # Em toda nova extração, meses já fechados também são recalculados.
+          # A API só cria nova versão se o realizado mudou e mantém as metas originais congeladas.
           curl --fail-with-body --silent --show-error \
-            --request POST "${PAINEL_URL}/api/internal/fechamento-mensal" \
-            --header "x-admin-key: ${PAINEL_ADMIN_KEY}" \
-            --header "content-type: application/json" \
-            --data @reconciliar-fechamento.json | tee reconciliacao-fechamento.json
+            "${PAINEL_URL}/api/historico" > historico-mensal.json
+
+          jq -r '.meses[]? | select(.origem == "FECHAMENTO") | .ano_mes' historico-mensal.json \
+            | sort -u \
+            | while read -r MES_FECHADO; do
+                [ -n "$MES_FECHADO" ] || continue
+                [ "$MES_FECHADO" = "$ANO_MES" ] && continue
+                [[ "$MES_FECHADO" > "$ANO_MES" ]] && continue
+                fechar_mes \
+                  "$MES_FECHADO" \
+                  true \
+                  "Atualização automática após extração da Bússola: faturamentos retroativos incorporados sem alterar a meta congelada do mês."
+              done
 
   finalizar_comando:
     if: ${{ always() && github.event_name == 'workflow_dispatch' && inputs.command_id != '' }}
@@ -97,7 +134,7 @@ jobs:
           set -euo pipefail
           if [ "$RESULTADO" = "success" ]; then
             STATUS="concluido"
-            MENSAGEM="Extração do Bússola concluída pela credencial da GD, sincronizada, classificada pelo MIX e os meses fechados foram reconciliados."
+            MENSAGEM="Extração do Bússola concluída pela credencial da GD, sincronizada, classificada pelo MIX, mês anterior fechado automaticamente e histórico reconciliado."
             ERRO=""
           else
             STATUS="erro"
