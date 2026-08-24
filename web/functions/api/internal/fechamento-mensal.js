@@ -3,6 +3,7 @@ import { ITEM_FATURADO, MIX_SEM_COMBATE } from '../../_lib/commercial.js'
 
 const numero = (value) => Number.isFinite(Number(value)) ? Number(value) : 0
 const texto = (value) => String(value ?? '').trim()
+const META_KEYS = ['meta_ol_sem_combate', 'meta_ol_prioritarios', 'meta_ol_lancamentos', 'meta_clientes']
 
 const mesAnterior = () => {
   const date = new Date()
@@ -17,6 +18,8 @@ const datasMes = (anoMes) => {
     fim: `${anoMes}-${String(new Date(Date.UTC(ano, mes, 0)).getUTCDate()).padStart(2, '0')}`,
   }
 }
+
+const percentual = (realizado, meta) => numero(meta) > 0 ? numero(realizado) / numero(meta) * 100 : 0
 
 const normalizar = (row) => {
   const result = {}
@@ -33,6 +36,10 @@ const normalizar = (row) => {
   result.ticket_medio_pedido = numero(result.pedidos) > 0
     ? numero(result.ol_total) / numero(result.pedidos)
     : 0
+  result.resultado_meta_ol = percentual(result.ol_sem_combate, result.meta_ol_sem_combate)
+  result.resultado_meta_prioritarios = percentual(result.ol_prioritarios, result.meta_ol_prioritarios)
+  result.resultado_meta_lancamentos = percentual(result.ol_lancamentos, result.meta_ol_lancamentos)
+  result.resultado_meta_clientes = percentual(result.clientes_com_venda, result.meta_clientes)
   return result
 }
 
@@ -70,6 +77,20 @@ async function admin(request, env) {
     return json({ erro: 'Chave administrativa inválida.' }, 401)
   }
   return null
+}
+
+function mapaMetas(rows) {
+  return new Map((rows || []).map((row) => [texto(row.referencia_id), row]))
+}
+
+function mesclarMetas(rows, metas) {
+  const porReferencia = mapaMetas(metas)
+  return (rows || []).map((row) => ({
+    ...row,
+    ...(porReferencia.get(texto(row.referencia_id)) || {}),
+    referencia_id: row.referencia_id,
+    referencia_nome: row.referencia_nome,
+  }))
 }
 
 async function calcularBlocos(env, anoMes) {
@@ -118,6 +139,19 @@ async function calcularBlocos(env, anoMes) {
     LEFT JOIN produtos pr ON pr.id=ip.produto_id
   `
 
+  const consultaMeta = (referenciaSql, origemSql, whereSql = '1=1') => env.DB.prepare(`
+    SELECT ${referenciaSql} referencia_id,
+           COALESCE(SUM(m.ol_sem_combate),0) meta_ol_sem_combate,
+           COALESCE(SUM(m.ol_prioritarios),0) meta_ol_prioritarios,
+           COALESCE(SUM(m.ol_lancamentos),0) meta_ol_lancamentos,
+           COALESCE(SUM(m.clientes_positivados),0) meta_clientes
+      ${origemSql}
+     WHERE m.escopo='consultor'
+       AND m.ano_mes=?
+       AND ${whereSql}
+     GROUP BY ${referenciaSql}
+  `).bind(anoMes)
+
   const consultas = [
     geral,
     env.DB.prepare("SELECT COUNT(*) clientes_ativos FROM clientes WHERE carteira_importada=1 AND ativo=1"),
@@ -164,6 +198,33 @@ async function calcularBlocos(env, anoMes) {
        ${pedidosFaturados}`,
       's.ativo=1',
     ),
+    consultaMeta(
+      'm.consultor_id',
+      'FROM metas m',
+      "TRIM(COALESCE(m.consultor_id,''))<>''",
+    ),
+    consultaMeta(
+      'c.uf',
+      `FROM metas m
+       JOIN (
+         SELECT DISTINCT consultor_id,UPPER(TRIM(uf)) uf
+           FROM clientes
+          WHERE carteira_importada=1 AND ativo=1
+            AND TRIM(COALESCE(consultor_id,''))<>''
+            AND TRIM(COALESCE(uf,''))<>''
+       ) c ON c.consultor_id=m.consultor_id`,
+      "TRIM(COALESCE(c.uf,''))<>''",
+    ),
+    consultaMeta(
+      'c.nome_gd',
+      `FROM metas m
+       JOIN (
+         SELECT DISTINCT consultor_id,COALESCE(NULLIF(TRIM(nome_gd),''),'SEM GD') nome_gd
+           FROM clientes
+          WHERE carteira_importada=1 AND ativo=1
+            AND TRIM(COALESCE(consultor_id,''))<>''
+       ) c ON c.consultor_id=m.consultor_id`,
+    ),
   ]
 
   const results = await env.DB.batch(consultas)
@@ -172,15 +233,12 @@ async function calcularBlocos(env, anoMes) {
     ...results[1].results?.[0],
     ...results[2].results?.[0],
   })
-  geralNormalizado.resultado_meta_ol = numero(geralNormalizado.meta_ol_sem_combate) > 0
-    ? numero(geralNormalizado.ol_sem_combate) / numero(geralNormalizado.meta_ol_sem_combate) * 100
-    : 0
 
   return [
     ['GERAL', [{ referencia_id: '', referencia_nome: 'Equipe Norte', ...geralNormalizado }]],
-    ['CONSULTOR', results[3].results || []],
-    ['UF', results[4].results || []],
-    ['GD', results[5].results || []],
+    ['CONSULTOR', mesclarMetas(results[3].results || [], results[7].results || [])],
+    ['UF', mesclarMetas(results[4].results || [], results[8].results || [])],
+    ['GD', mesclarMetas(results[5].results || [], results[9].results || [])],
     ['SIP', results[6].results || []],
   ]
 }
@@ -216,6 +274,23 @@ async function carregarAtual(env, anoMes) {
   })
 }
 
+function preservarMetasDoFechamento(novasLinhas, atuais) {
+  const anteriores = new Map(
+    (atuais || []).map((row) => [`${texto(row.escopo)}|${texto(row.referencia_id)}`, row.resultado || {}]),
+  )
+
+  return novasLinhas.map((row) => {
+    const anterior = anteriores.get(`${texto(row.escopo)}|${texto(row.referencia_id)}`)
+    if (!anterior) return row
+
+    const resultado = { ...row.resultado }
+    for (const key of META_KEYS) {
+      if (Object.prototype.hasOwnProperty.call(anterior, key)) resultado[key] = numero(anterior[key])
+    }
+    return { ...row, resultado: normalizar(resultado) }
+  })
+}
+
 export async function onRequestPost({ request, env }) {
   const negado = await admin(request, env)
   if (negado) return negado
@@ -226,10 +301,12 @@ export async function onRequestPost({ request, env }) {
     const automatico = Boolean(body.automatico)
     const reprocessar = Boolean(body.reprocessar || automatico)
     const somenteSeAlterado = Boolean(body.somente_se_alterado || automatico)
-    const apenasFechado = Boolean(body.apenas_fechado || automatico)
+    const apenasFechado = Object.prototype.hasOwnProperty.call(body, 'apenas_fechado')
+      ? Boolean(body.apenas_fechado)
+      : automatico
     const motivoInformado = texto(body.motivo).slice(0, 500)
     const motivo = motivoInformado || (automatico
-      ? 'Atualização automática após extração da Bússola: faturamentos retroativos incorporados ao mês fechado.'
+      ? 'Fechamento/atualização automática após extração da Bússola: metas congeladas e faturamentos retroativos incorporados ao mês fechado.'
       : '')
 
     if (!/^\d{4}-\d{2}$/.test(anoMes)) {
@@ -263,7 +340,8 @@ export async function onRequestPost({ request, env }) {
     }
 
     const blocos = await calcularBlocos(env, anoMes)
-    const novasLinhas = linhasDosBlocos(blocos)
+    let novasLinhas = linhasDosBlocos(blocos)
+    if (automatico && geralAtual) novasLinhas = preservarMetasDoFechamento(novasLinhas, atual)
 
     if (geralAtual && somenteSeAlterado && assinatura(atual) === assinatura(novasLinhas)) {
       return json({
