@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import App from './App'
 import AutomationsModule from './AutomationsModule'
 import ClientsModule from './ClientsModule'
+import CnpjNotesModule from './CnpjNotesModule'
 import DashboardSeparatorShortcut from './DashboardSeparatorShortcut'
 import DesafioGigantesPage from './DesafioGigantesPage'
 import FocusModule from './FocusModule'
@@ -127,6 +128,7 @@ export default function AppShell() {
   if (page === 'historico') module = <HistoryModule onBack={back} onAutomations={() => go('automacoes')} />
   if (page === 'foco') module = <FocusModule onBack={back} />
   if (page === 'desafio') module = <DesafioGigantesPage onBack={back} />
+  if (page === 'cnpj-anotacoes') module = <CnpjNotesModule onBack={back} />
   const exportType = page === 'clientes' ? 'clientes' : page === 'oportunidades' ? 'oportunidades' : ''
 
   return (
