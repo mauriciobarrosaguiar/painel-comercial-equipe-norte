@@ -29,6 +29,26 @@ test('ficha da SIP carrega clientes, notas, pendências e produtos', async () =>
   assert.match(body.link_exportacao, /sip_detalhado/)
 })
 
+test('detalhe usa a meta atual da SIP mesmo quando objetivos internos ainda estão no valor anterior', async () => {
+  const DB = testDatabase()
+  await DB.prepare("UPDATE sips SET meta_mes=1500 WHERE id='sip1'").run()
+
+  const response = await detalhe({
+    request: new Request('https://painel.local/api/sips/detalhe?id=sip1&inicio=2026-07-01&fim=2026-07-31'),
+    env: { DB },
+  })
+  assert.equal(response.status, 200)
+  const body = await response.json()
+
+  assert.equal(body.sip.meta_mes, 1500)
+  assert.equal(body.resumo_sip.objetivo, 1500)
+  assert.equal(body.totais.resultado_meta, body.totais.ol_sem_combate / 1500 * 100)
+  assert.equal(body.resumo_sip.gap_80, body.totais.ol_sem_combate - 1200)
+  assert.equal(body.resumo_sip.gap_90, body.totais.ol_sem_combate - 1350)
+  assert.equal(body.resumo_sip.gap_100, body.totais.ol_sem_combate - 1500)
+  assert.ok(Math.abs(body.clientes.reduce((total, item) => total + item.objetivo, 0) - 1500) < 0.01)
+})
+
 test('cadastro da SIP aceita acesso autenticado e salva registro', async () => {
   const DB = testDatabase()
   const response = await cadastro({
