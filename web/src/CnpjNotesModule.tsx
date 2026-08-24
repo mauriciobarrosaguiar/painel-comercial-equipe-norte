@@ -163,7 +163,7 @@ export default function CnpjNotesModule({ onBack }: { onBack: () => void }) {
   }
 
   async function remove(note: CnpjNote) {
-    if (!confirm(`Excluir a anotação de ${note.razao_social}?`)) return
+    if (!confirm(`Excluir somente a anotação de ${note.razao_social}?`)) return
     setBusy(true)
     setError('')
     setMessage('')
@@ -176,7 +176,7 @@ export default function CnpjNotesModule({ onBack }: { onBack: () => void }) {
       const result = await response.json()
       if (!response.ok) throw new Error(result.detalhe || result.erro || 'Não foi possível excluir a anotação.')
       if (editingId === note.id) resetForm()
-      setMessage('Anotação excluída.')
+      setMessage('Anotação excluída. Nenhum dado do Painel foi alterado.')
       await load()
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason))
@@ -190,25 +190,26 @@ export default function CnpjNotesModule({ onBack }: { onBack: () => void }) {
 
     <section className="cnpj-notes-hero">
       <div>
-        <span className="eyebrow">Planejamento de carteira</span>
+        <span className="eyebrow">Bloco de anotações</span>
         <h1>Anotações de CNPJs</h1>
-        <p>Organize os clientes que deverão ser incluídos ou excluídos do Painel nos próximos meses.</p>
+        <p>Use apenas como lembrete para os próximos meses. Nada salvo aqui inclui, exclui ou altera clientes, metas, vendas, pedidos ou resultados do Painel.</p>
       </div>
       <div className="cnpj-notes-hero-badge">{data.resumo.total} anotações</div>
     </section>
 
     <section className="cnpj-notes-summary">
-      <article><span>Total anotado</span><strong>{loading ? '—' : data.resumo.total}</strong><small>CNPJs em acompanhamento</small></article>
-      <article><span>Para incluir</span><strong>{loading ? '—' : data.resumo.incluir}</strong><small>Entrarão no Painel</small></article>
-      <article><span>Para excluir</span><strong>{loading ? '—' : data.resumo.excluir}</strong><small>Serão retirados do Painel</small></article>
+      <article><span>Total anotado</span><strong>{loading ? '—' : data.resumo.total}</strong><small>CNPJs somente em anotação</small></article>
+      <article><span>Anotar para incluir</span><strong>{loading ? '—' : data.resumo.incluir}</strong><small>Intenção futura, sem alterar o Painel</small></article>
+      <article><span>Anotar para excluir</span><strong>{loading ? '—' : data.resumo.excluir}</strong><small>Intenção futura, sem alterar o Painel</small></article>
     </section>
 
+    <div className="alert alert-success cnpj-notes-alert"><strong>Somente anotação:</strong> este módulo é isolado. Salvar, editar ou apagar um registro aqui não modifica nenhum CNPJ da carteira do Painel.</div>
     {error && <div className="alert alert-error cnpj-notes-alert">{error}</div>}
     {message && <div className="alert alert-success cnpj-notes-alert">{message}</div>}
 
     <section className="cnpj-notes-card cnpj-notes-form-card">
       <div className="cnpj-notes-card-heading">
-        <div><span className="eyebrow">{editingId ? 'Editando registro' : 'Nova anotação'}</span><h2>{editingId ? 'Atualizar CNPJ' : 'Cadastrar CNPJ'}</h2></div>
+        <div><span className="eyebrow">{editingId ? 'Editando anotação' : 'Nova anotação'}</span><h2>{editingId ? 'Atualizar anotação' : 'Anotar CNPJ'}</h2></div>
         {editingId && <button className="outline-button" type="button" onClick={resetForm}>Cancelar edição</button>}
       </div>
 
@@ -218,8 +219,8 @@ export default function CnpjNotesModule({ onBack }: { onBack: () => void }) {
         <label><span>RAZÃO SOCIAL</span><input value={form.razao_social} onChange={event => setField('razao_social', event.target.value)} placeholder="Razão social da empresa" required /></label>
         <label><span>NOME DO CONTATO</span><input value={form.nome_contato} onChange={event => setField('nome_contato', event.target.value)} placeholder="Nome do contato" /></label>
         <label><span>TELEFONE</span><input value={form.telefone} onChange={event => setField('telefone', formatPhone(event.target.value))} placeholder="(00) 00000-0000" inputMode="tel" /></label>
-        <label><span>AÇÃO NO PAINEL</span><select value={form.acao_painel} onChange={event => setField('acao_painel', event.target.value as 'INCLUIR' | 'EXCLUIR')}><option value="INCLUIR">Incluir no Painel</option><option value="EXCLUIR">Excluir do Painel</option></select></label>
-        <label className="cnpj-notes-wide"><span>OBSERVAÇÃO</span><textarea value={form.observacao} onChange={event => setField('observacao', event.target.value)} placeholder="Ex.: incluir no próximo ciclo, substituir cliente, aguardar definição do setor..." rows={4} /></label>
+        <label><span>INTENÇÃO FUTURA — SOMENTE ANOTAÇÃO</span><select value={form.acao_painel} onChange={event => setField('acao_painel', event.target.value as 'INCLUIR' | 'EXCLUIR')}><option value="INCLUIR">Anotar para incluir futuramente</option><option value="EXCLUIR">Anotar para excluir futuramente</option></select></label>
+        <label className="cnpj-notes-wide"><span>OBSERVAÇÃO</span><textarea value={form.observacao} onChange={event => setField('observacao', event.target.value)} placeholder="Ex.: avaliar inclusão no próximo ciclo, possível troca de cliente, aguardar definição do setor..." rows={4} /></label>
         <div className="cnpj-notes-form-actions"><button className="primary-action" type="submit" disabled={busy}>{busy ? 'Salvando…' : editingId ? 'Atualizar anotação' : 'Salvar anotação'}</button>{editingId && <button className="outline-button" type="button" onClick={resetForm}>Cancelar</button>}</div>
       </form>
     </section>
@@ -230,23 +231,23 @@ export default function CnpjNotesModule({ onBack }: { onBack: () => void }) {
         <div className="cnpj-notes-filters">
           <input value={search} onChange={event => setSearch(event.target.value)} placeholder="Buscar CNPJ, empresa ou contato" />
           <select value={consultantFilter} onChange={event => setConsultantFilter(event.target.value)}><option value="">Todos os consultores</option>{data.filtros.consultores.map(item => <option key={item.id} value={item.id}>{item.nome}</option>)}</select>
-          <select value={actionFilter} onChange={event => setActionFilter(event.target.value)}><option value="">Incluir e excluir</option><option value="INCLUIR">Somente incluir</option><option value="EXCLUIR">Somente excluir</option></select>
+          <select value={actionFilter} onChange={event => setActionFilter(event.target.value)}><option value="">Todas as intenções</option><option value="INCLUIR">Anotados para incluir</option><option value="EXCLUIR">Anotados para excluir</option></select>
         </div>
       </div>
 
       <div className="cnpj-notes-table-wrap">
         <table className="cnpj-notes-table">
-          <thead><tr><th>Ação</th><th>Empresa</th><th>Consultor</th><th>Contato</th><th>Observação</th><th>Atualização</th><th></th></tr></thead>
+          <thead><tr><th>Intenção anotada</th><th>Empresa</th><th>Consultor</th><th>Contato</th><th>Observação</th><th>Atualização</th><th></th></tr></thead>
           <tbody>
             {loading && <tr><td colSpan={7} className="cnpj-notes-empty">Carregando anotações…</td></tr>}
             {!loading && filtered.map(note => <tr key={note.id}>
-              <td><span className={`cnpj-action-badge cnpj-action-${note.acao_painel.toLowerCase()}`}>{note.acao_painel === 'INCLUIR' ? 'Incluir' : 'Excluir'}</span></td>
+              <td><span className={`cnpj-action-badge cnpj-action-${note.acao_painel.toLowerCase()}`}>{note.acao_painel === 'INCLUIR' ? 'Incluir futuramente' : 'Excluir futuramente'}</span></td>
               <td><strong>{note.razao_social}</strong><small>{formatCnpj(note.cnpj)}</small></td>
               <td><strong>{note.consultor}</strong></td>
               <td><strong>{note.nome_contato || '—'}</strong><small>{note.telefone || 'Sem telefone'}</small></td>
               <td className="cnpj-notes-observation">{note.observacao || '—'}</td>
               <td><small>{formatDate(note.atualizado_em)}</small></td>
-              <td><div className="cnpj-notes-row-actions"><button className="outline-button cnpj-notes-compact" type="button" onClick={() => edit(note)}>Editar</button><button className="danger-button cnpj-notes-compact" type="button" disabled={busy} onClick={() => void remove(note)}>Excluir</button></div></td>
+              <td><div className="cnpj-notes-row-actions"><button className="outline-button cnpj-notes-compact" type="button" onClick={() => edit(note)}>Editar</button><button className="danger-button cnpj-notes-compact" type="button" disabled={busy} onClick={() => void remove(note)}>Apagar anotação</button></div></td>
             </tr>)}
             {!loading && !filtered.length && <tr><td colSpan={7} className="cnpj-notes-empty">Nenhum CNPJ encontrado para os filtros selecionados.</td></tr>}
           </tbody>
