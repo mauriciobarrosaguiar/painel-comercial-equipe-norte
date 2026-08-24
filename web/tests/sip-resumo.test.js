@@ -3,6 +3,7 @@ import test from 'node:test'
 import { readFileSync } from 'node:fs'
 
 import { onRequestGet as listarSips } from '../functions/api/sips.js'
+import { onRequestPost as atualizarObjetivos } from '../functions/api/sips/objetivos.js'
 import { onRequestGet as exportarResumoGeral } from '../functions/api/sips/resumo-geral-exportar.js'
 import { onRequestGet as exportarResumoXlsx } from '../functions/api/sips/resumo-geral-excel.js'
 import { testDatabase } from './d1-fixture.js'
@@ -32,6 +33,33 @@ test('resumo consolida todos os CNPJs de cada SIP em uma única linha', async ()
   assert.equal(body.resumo_sip.total.objetivo, 1000)
   assert.equal(body.resumo_sip.total.realizado, 150)
   assert.match(body.resumo_sip.link_resumo_pdf, /formato=pdf/)
+})
+
+test('editar objetivo total da SIP sincroniza a meta dos CNPJs vinculados', async () => {
+  const DB = testDatabase()
+  const response = await atualizarObjetivos({
+    request: new Request('https://painel.local/api/sips/objetivos', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-admin-key': ADMIN_KEY },
+      body: JSON.stringify({ metas_sip: [{ sip_id: 'sip1', objetivo: 1500 }] }),
+    }),
+    env: { DB, PAINEL_ADMIN_KEY: ADMIN_KEY },
+  })
+  assert.equal(response.status, 200)
+
+  const sip = await DB.prepare("SELECT meta_mes FROM sips WHERE id='sip1'").first()
+  const clientes = await DB.prepare(`
+    SELECT cnpj,objetivo_preco_liquido
+      FROM sip_clientes
+     WHERE sip_id='sip1' AND ativo=1
+     ORDER BY cnpj
+  `).all()
+  const total = clientes.results.reduce((soma, item) => soma + Number(item.objetivo_preco_liquido || 0), 0)
+
+  assert.equal(Number(sip.meta_mes), 1500)
+  assert.ok(Math.abs(total - 1500) < 0.01)
+  assert.equal(Number(clientes.results[0].objetivo_preco_liquido), 600)
+  assert.equal(Number(clientes.results[1].objetivo_preco_liquido), 900)
 })
 
 test('download Excel gera arquivo XLSX verdadeiro', async () => {
@@ -92,6 +120,7 @@ test('página mostra uma única tabela consolidada por SIP e usa XLSX real', () 
   assert.match(styles, /sip-consolidated-table/)
   assert.match(endpoint, /metas_sip/)
   assert.match(endpoint, /UPDATE sips SET meta_mes/)
+  assert.match(endpoint, /objetivo_preco_liquido=objetivo_preco_liquido\*\?/)
   assert.match(xlsxEndpoint, /application\/vnd\.openxmlformats-officedocument\.spreadsheetml\.sheet/)
   assert.match(xlsxEndpoint, /\.xlsx/)
 })
