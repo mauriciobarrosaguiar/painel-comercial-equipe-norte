@@ -209,9 +209,14 @@ export async function onRequestGet({ request, env }) {
     }))
     const metaCadastrada = numero(sip.meta_mes)
     const objetivosCadastrados = clientes.reduce((total, item) => total + item.objetivo, 0)
-    if (clientes.length && objetivosCadastrados <= 0 && metaCadastrada > 0) {
-      const objetivoPadrao = metaCadastrada / clientes.length
-      clientes = clientes.map((item) => ({ ...item, objetivo: objetivoPadrao }))
+    if (clientes.length && metaCadastrada > 0 && Math.abs(objetivosCadastrados - metaCadastrada) > 0.01) {
+      if (objetivosCadastrados > 0) {
+        const fator = metaCadastrada / objetivosCadastrados
+        clientes = clientes.map((item) => ({ ...item, objetivo: item.objetivo * fator }))
+      } else {
+        const objetivoPadrao = metaCadastrada / clientes.length
+        clientes = clientes.map((item) => ({ ...item, objetivo: objetivoPadrao }))
+      }
     }
     clientes = clientes.map(comGaps)
 
@@ -255,7 +260,7 @@ export async function onRequestGet({ request, env }) {
       valor_a_faturar: 0,
       objetivo: 0,
     })
-    const meta = totais.objetivo > 0 ? totais.objetivo : metaCadastrada
+    const meta = metaCadastrada > 0 ? metaCadastrada : totais.objetivo
     const projetado = projetar(totais.ol_sem_combate, inicio, fim)
     const origin = new URL(request.url).origin
     const modoPublico = publico ? '1' : '0'
