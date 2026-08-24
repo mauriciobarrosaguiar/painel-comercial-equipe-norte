@@ -75,12 +75,13 @@ test('extração usa somente o fluxo principal da GD', () => {
   assert.doesNotMatch(workflow, /extrair_bussola_contingencia/)
 })
 
-test('cada extração recalcula o mês anterior fechado', () => {
-  assert.match(workflow, /Atualizar mês fechado com faturamentos retroativos/)
+test('cada extração fecha o mês anterior e reconcilia meses fechados', () => {
+  assert.match(workflow, /Fechar mês anterior e reconciliar histórico/)
   assert.match(workflow, /api\/internal\/fechamento-mensal/)
   assert.match(workflow, /automatico:true/)
   assert.match(workflow, /somente_se_alterado:true/)
-  assert.match(workflow, /apenas_fechado:true/)
+  assert.match(workflow, /apenas_fechado:\$apenas_fechado/)
+  assert.match(workflow, /api\/historico/)
 })
 
 test('execução antiga da Bússola é liberada e substituída no mesmo ciclo', async () => {
