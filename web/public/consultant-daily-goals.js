@@ -37,6 +37,11 @@
       .consultant-daily-goal.is-reached b{color:#0f7a55}
       .consultant-daily-goal.is-missing b{color:#b43b3b}
       .consultant-daily-goal-note{display:block;margin-top:5px;color:#6b7888;font-size:.68rem;line-height:1.35}
+      .consultant-goal-gaps{display:flex!important;flex-wrap:wrap;gap:4px 7px;margin-top:5px!important;color:#5e6f80!important;font-size:.61rem!important;line-height:1.3!important}
+      .consultant-goal-gaps span{white-space:nowrap}
+      .consultant-goal-gaps b{color:#203047;font-weight:850}
+      .consultant-goal-gaps .is-reached{color:#0f7a55}
+      .consultant-goal-gaps .is-reached b{color:#0f7a55}
     `
     document.head.appendChild(style)
   }
@@ -44,6 +49,7 @@
   const removeDailyGoals = () => {
     document.querySelectorAll('.consultant-daily-goal').forEach((node) => node.remove())
     document.querySelectorAll('.consultant-daily-goal-note').forEach((node) => node.remove())
+    document.querySelectorAll('.consultant-goal-gaps').forEach((node) => node.remove())
   }
 
   const updateMetric = (metric, daysLeft) => {
@@ -56,9 +62,11 @@
     const currentValue = parseMoney(valueNode.textContent)
     const targetValue = parseMoney(metaNode.textContent)
     let dailyNode = metric.querySelector(':scope > .consultant-daily-goal')
+    let gapsNode = metric.querySelector(':scope > .consultant-goal-gaps')
 
     if (!targetValue) {
       if (dailyNode) dailyNode.remove()
+      if (gapsNode) gapsNode.remove()
       return
     }
 
@@ -88,6 +96,29 @@
         : daysLeft > 0
           ? `Faltam ${money.format(remaining)}. Valor dividido por ${daysLeft} ${daysLeft === 1 ? 'dia útil restante' : 'dias úteis restantes'} no mês.`
           : `O mês não tem mais dias úteis. Ainda faltam ${money.format(remaining)} para a meta.`
+    }
+
+    const thresholds = [80, 90, 100]
+    const gaps = thresholds.map((threshold) => {
+      const targetAtThreshold = targetValue * threshold / 100
+      const missing = Math.max(0, targetAtThreshold - currentValue)
+      return { threshold, missing, reached: missing <= 0 }
+    })
+    const gapsSignature = gaps.map((item) => `${item.threshold}:${item.missing.toFixed(2)}`).join('|')
+
+    if (!gapsNode) {
+      gapsNode = document.createElement('small')
+      gapsNode.className = 'consultant-goal-gaps'
+      metric.appendChild(gapsNode)
+    }
+
+    if (gapsNode.dataset.signature !== gapsSignature) {
+      gapsNode.dataset.signature = gapsSignature
+      gapsNode.innerHTML = gaps.map((item) => item.reached
+        ? `<span class="is-reached"><b>${item.threshold}%</b> atingido ✓</span>`
+        : `<span><b>${item.threshold}%</b> falta ${money.format(item.missing)}</span>`
+      ).join('')
+      gapsNode.title = 'Quanto falta, em valor, para alcançar 80%, 90% e 100% da meta deste indicador.'
     }
   }
 
