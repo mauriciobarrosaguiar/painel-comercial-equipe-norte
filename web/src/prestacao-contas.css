@@ -1,0 +1,379 @@
+.accounting-page {
+  display: grid;
+  gap: 22px;
+}
+
+.accounting-hero {
+  display: flex;
+  align-items: stretch;
+  justify-content: space-between;
+  gap: 22px;
+  padding: 28px;
+  border-radius: 24px;
+  background:
+    radial-gradient(circle at top right, rgba(59, 130, 246, 0.16), transparent 32%),
+    linear-gradient(135deg, #0f172a, #172554);
+  color: #fff;
+  box-shadow: 0 18px 50px rgba(15, 23, 42, 0.18);
+}
+
+.accounting-hero h1 {
+  margin: 6px 0 8px;
+  font-size: clamp(2rem, 5vw, 3rem);
+  line-height: 1;
+}
+
+.accounting-hero p {
+  max-width: 760px;
+  margin: 0;
+  color: rgba(255, 255, 255, 0.76);
+  line-height: 1.55;
+}
+
+.accounting-hero .eyebrow {
+  color: #bfdbfe;
+}
+
+.accounting-total {
+  min-width: 230px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(8px);
+}
+
+.accounting-total span,
+.accounting-total small {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.accounting-total strong {
+  margin: 6px 0;
+  font-size: 2rem;
+}
+
+.accounting-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.accounting-summary article,
+.accounting-card {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 20px;
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.06);
+}
+
+.accounting-summary article {
+  display: grid;
+  gap: 5px;
+  padding: 20px;
+}
+
+.accounting-summary span,
+.accounting-summary small {
+  color: #64748b;
+}
+
+.accounting-summary strong {
+  color: #0f172a;
+  font-size: 1.65rem;
+}
+
+.accounting-card {
+  padding: 24px;
+}
+
+.accounting-card-heading,
+.accounting-list-heading,
+.accounting-report-top,
+.accounting-report-actions,
+.accounting-receipt-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.accounting-card-heading h2,
+.accounting-list-heading h2 {
+  margin: 4px 0 2px;
+  color: #0f172a;
+}
+
+.accounting-card-heading p,
+.accounting-list-heading p {
+  margin: 0;
+  color: #64748b;
+}
+
+.accounting-report-form {
+  display: grid;
+  grid-template-columns: 160px minmax(260px, 1fr) auto;
+  align-items: end;
+  gap: 14px;
+  margin-top: 18px;
+}
+
+.accounting-expense-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 18px;
+}
+
+.accounting-report-form label,
+.accounting-expense-form label {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+
+.accounting-report-form label span,
+.accounting-expense-form label span {
+  color: #475569;
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+}
+
+.accounting-report-form input,
+.accounting-report-form select,
+.accounting-expense-form input,
+.accounting-expense-form select {
+  min-height: 46px;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 12px;
+  background: #fff;
+  color: #0f172a;
+  font: inherit;
+}
+
+.accounting-expense-form input[type='file'] {
+  padding: 8px;
+}
+
+.accounting-expense-form label small {
+  color: #64748b;
+}
+
+.accounting-form-action {
+  display: flex;
+  align-items: end;
+}
+
+.accounting-form-action .primary-action {
+  min-height: 46px;
+}
+
+.accounting-tabs {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.accounting-tabs button {
+  border: 1px solid #cbd5e1;
+  border-radius: 999px;
+  padding: 8px 14px;
+  background: #fff;
+  color: #475569;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.accounting-tabs button.active {
+  background: #0f172a;
+  color: #fff;
+  border-color: #0f172a;
+}
+
+.accounting-report-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 18px;
+}
+
+.accounting-report-card {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+  padding: 18px;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  background: #f8fafc;
+}
+
+.accounting-report-card h3 {
+  margin: 0;
+  color: #0f172a;
+  word-break: break-word;
+}
+
+.accounting-report-top small {
+  color: #94a3b8;
+  text-align: right;
+}
+
+.accounting-report-value {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.accounting-report-value strong {
+  color: #0f172a;
+  font-size: 1.45rem;
+}
+
+.accounting-report-value span {
+  color: #64748b;
+  font-size: 0.86rem;
+}
+
+.accounting-badge {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 0.74rem;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+}
+
+.badge-rdv {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.badge-trade {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.accounting-alert {
+  margin: 0;
+}
+
+.accounting-table-wrap {
+  overflow-x: auto;
+  margin-top: 16px;
+}
+
+.accounting-table {
+  width: 100%;
+  min-width: 900px;
+  border-collapse: collapse;
+}
+
+.accounting-table th,
+.accounting-table td {
+  padding: 13px 11px;
+  border-bottom: 1px solid #e2e8f0;
+  text-align: left;
+  vertical-align: top;
+}
+
+.accounting-table th {
+  color: #64748b;
+  font-size: 0.75rem;
+  letter-spacing: 0.05em;
+}
+
+.accounting-table td {
+  color: #334155;
+}
+
+.accounting-table td strong,
+.accounting-table td small {
+  display: block;
+}
+
+.accounting-table td small {
+  margin-top: 4px;
+  color: #94a3b8;
+}
+
+.accounting-type {
+  display: inline-flex;
+  padding: 5px 8px;
+  border-radius: 8px;
+  background: #f1f5f9;
+  color: #475569;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.accounting-compact {
+  min-height: auto !important;
+  padding: 7px 10px !important;
+  font-size: 0.82rem !important;
+  text-decoration: none;
+}
+
+.accounting-empty {
+  grid-column: 1 / -1;
+  padding: 28px;
+  border: 1px dashed #cbd5e1;
+  border-radius: 14px;
+  color: #64748b;
+  text-align: center;
+  background: #f8fafc;
+}
+
+@media (max-width: 1050px) {
+  .accounting-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .accounting-report-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .accounting-hero,
+  .accounting-card-heading,
+  .accounting-list-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .accounting-total {
+    min-width: 0;
+  }
+
+  .accounting-summary,
+  .accounting-report-grid,
+  .accounting-expense-form,
+  .accounting-report-form {
+    grid-template-columns: 1fr;
+  }
+
+  .accounting-card {
+    padding: 18px;
+  }
+
+  .accounting-report-actions,
+  .accounting-report-value {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .accounting-report-actions button {
+    width: 100%;
+  }
+}
