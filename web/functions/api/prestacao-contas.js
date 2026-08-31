@@ -1,17 +1,51 @@
 import { authorized, json, readSession } from '../_lib/credentials.js'
 
 const texto = (value, limit = 500) => String(value ?? '').trim().slice(0, limit)
-
-async function usuarioAtual(request, env) {
-  const sessao = await readSession(request, env.PAINEL_ADMIN_KEY)
-  return texto(sessao?.login || 'admin', 180).toLowerCase()
-}
+const loginLocal = value => texto(value, 180).toLowerCase().split('@')[0]
 
 async function exigirAcesso(request, env) {
   if (!(await authorized(request, env.PAINEL_ADMIN_KEY))) {
     return json({ erro: 'Sessão inválida. Entre novamente no painel.' }, 401)
   }
   return null
+}
+
+async function usuarioAtual(request, env) {
+  const sessao = await readSession(request, env.PAINEL_ADMIN_KEY)
+  return {
+    login: loginLocal(sessao?.login || ''),
+    nome: texto(sessao?.nome || sessao?.login || 'Painel', 180),
+    consultor_id: texto(sessao?.consultor_id || '', 180),
+  }
+}
+
+async function validarConsultor(env, informado) {
+  const original = texto(informado, 180).toLowerCase()
+  const login = loginLocal(original)
+  if (!login) return { erro: 'Informe o login do consultor.' }
+  if (original.includes('@') && original !== `${login}@ems.com.br`) {
+    return { erro: 'Use o mesmo login do Painel ou o e-mail corporativo @ems.com.br.' }
+  }
+
+  const consultor = await env.DB.prepare(`
+    SELECT login, email, nome, consultor_id
+    FROM colaboradores_acesso
+    WHERE ativo = 1 AND LOWER(login) = ?
+    LIMIT 1
+  `).bind(login).first()
+
+  if (!consultor) {
+    return { erro: 'Este login não está autorizado para acessar o Painel da Equipe Norte.' }
+  }
+
+  return {
+    consultor: {
+      login: texto(consultor.login, 180).toLowerCase(),
+      email: texto(consultor.email, 180),
+      nome: texto(consultor.nome, 180),
+      consultor_id: texto(consultor.consultor_id, 180),
+    },
+  }
 }
 
 async function garantirTabelas(env) {
@@ -21,6 +55,9 @@ async function garantirTabelas(env) {
       nome TEXT NOT NULL,
       categoria TEXT NOT NULL,
       usuario_login TEXT NOT NULL DEFAULT '',
+      consultor_login TEXT NOT NULL DEFAULT '',
+      consultor_id TEXT NOT NULL DEFAULT '',
+      consultor_nome TEXT NOT NULL DEFAULT '',
       criado_por TEXT NOT NULL DEFAULT '',
       criado_em TEXT NOT NULL,
       atualizado_em TEXT NOT NULL
@@ -45,12 +82,53 @@ async function garantirTabelas(env) {
   `).run()
 
   const colunas = await env.DB.prepare('PRAGMA table_info(prestacao_relatorios)').all()
-  if (!(colunas.results || []).some(item => item.name === 'usuario_login')) {
+  const nomes = new Set((colunas.results || []).map(item => item.name))
+
+  if (!nomes.has('usuario_login')) {
     await env.DB.prepare("ALTER TABLE prestacao_relatorios ADD COLUMN usuario_login TEXT NOT NULL DEFAULT ''").run()
   }
+  if (!nomes.has('consultor_login')) {
+    await env.DB.prepare("ALTER TABLE prestacao_relatorios ADD COLUMN consultor_login TEXT NOT NULL DEFAULT ''").run()
+  }
+  if (!nomes.has('consultor_id')) {
+    await env.DB.prepare("ALTER TABLE prestacao_relatorios ADD COLUMN consultor_id TEXT NOT NULL DEFAULT ''").run()
+  }
+  if (!nomes.has('consultor_nome')) {
+    await env.DB.prepare("ALTER TABLE prestacao_relatorios ADD COLUMN consultor_nome TEXT NOT NULL DEFAULT ''").run()
+  }
+
+  await env.DB.prepare(`
+    UPDATE prestacao_relatorios
+    SET consultor_login = LOWER(TRIM(usuario_login))
+    WHERE TRIM(COALESCE(consultor_login, '')) = ''
+      AND TRIM(COALESCE(usuario_login, '')) <> ''
+  `).run()
+
+  await env.DB.prepare(`
+    UPDATE prestacao_relatorios
+    SET consultor_id = COALESCE((
+      SELECT ca.consultor_id
+      FROM colaboradores_acesso ca
+      WHERE LOWER(ca.login) = LOWER(prestacao_relatorios.consultor_login)
+      LIMIT 1
+    ), '')
+    WHERE TRIM(COALESCE(consultor_id, '')) = ''
+  `).run()
+
+  await env.DB.prepare(`
+    UPDATE prestacao_relatorios
+    SET consultor_nome = COALESCE((
+      SELECT ca.nome
+      FROM colaboradores_acesso ca
+      WHERE LOWER(ca.login) = LOWER(prestacao_relatorios.consultor_login)
+      LIMIT 1
+    ), criado_por, consultor_login)
+    WHERE TRIM(COALESCE(consultor_nome, '')) = ''
+  `).run()
 
   await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_prestacao_relatorios_categoria ON prestacao_relatorios(categoria)').run()
   await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_prestacao_relatorios_usuario ON prestacao_relatorios(usuario_login)').run()
+  await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_prestacao_relatorios_consultor ON prestacao_relatorios(consultor_login)').run()
   await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_prestacao_despesas_relatorio ON prestacao_despesas(relatorio_id)').run()
 }
 
@@ -66,12 +144,15 @@ function dataValida(value) {
   return /^\d{4}-\d{2}-\d{2}$/.test(value)
 }
 
-async function carregarRelatorios(env, usuarioLogin) {
+async function carregarRelatorios(env, consultorLogin) {
   const result = await env.DB.prepare(`
     SELECT
       r.id,
       r.nome,
       r.categoria,
+      r.consultor_login,
+      r.consultor_id,
+      r.consultor_nome,
       r.criado_por,
       r.criado_em,
       r.atualizado_em,
@@ -79,10 +160,12 @@ async function carregarRelatorios(env, usuarioLogin) {
       COALESCE(SUM(d.valor_centavos), 0) AS total_centavos
     FROM prestacao_relatorios r
     LEFT JOIN prestacao_despesas d ON d.relatorio_id = r.id
-    WHERE r.usuario_login = ?
-    GROUP BY r.id, r.nome, r.categoria, r.criado_por, r.criado_em, r.atualizado_em
+    WHERE LOWER(r.consultor_login) = ?
+    GROUP BY
+      r.id, r.nome, r.categoria, r.consultor_login, r.consultor_id, r.consultor_nome,
+      r.criado_por, r.criado_em, r.atualizado_em
     ORDER BY datetime(r.atualizado_em) DESC, r.nome COLLATE NOCASE
-  `).bind(usuarioLogin).all()
+  `).bind(consultorLogin).all()
 
   return (result.results || []).map(item => ({
     ...item,
@@ -98,7 +181,9 @@ export async function onRequestGet({ request, env }) {
   try {
     await garantirTabelas(env)
     const url = new URL(request.url)
-    const usuarioLogin = await usuarioAtual(request, env)
+    const acesso = await validarConsultor(env, url.searchParams.get('consultor'))
+    if (acesso.erro) return json({ erro: acesso.erro }, 401)
+    const consultor = acesso.consultor
     const comprovanteId = texto(url.searchParams.get('comprovante'), 160)
 
     if (comprovanteId) {
@@ -106,9 +191,9 @@ export async function onRequestGet({ request, env }) {
         SELECT d.comprovante_nome, d.comprovante_tipo, d.comprovante_blob
         FROM prestacao_despesas d
         INNER JOIN prestacao_relatorios r ON r.id = d.relatorio_id
-        WHERE d.id = ? AND r.usuario_login = ?
+        WHERE d.id = ? AND LOWER(r.consultor_login) = ?
         LIMIT 1
-      `).bind(comprovanteId, usuarioLogin).first()
+      `).bind(comprovanteId, consultor.login).first()
 
       if (!item) return json({ erro: 'Comprovante não encontrado.' }, 404)
 
@@ -129,7 +214,7 @@ export async function onRequestGet({ request, env }) {
     }
 
     const relatorioId = texto(url.searchParams.get('relatorio'), 160)
-    const relatorios = await carregarRelatorios(env, usuarioLogin)
+    const relatorios = await carregarRelatorios(env, consultor.login)
     let despesas = []
 
     if (relatorioId) {
@@ -147,9 +232,9 @@ export async function onRequestGet({ request, env }) {
           d.criado_em AS criado_em
         FROM prestacao_despesas d
         INNER JOIN prestacao_relatorios r ON r.id = d.relatorio_id
-        WHERE d.relatorio_id = ? AND r.usuario_login = ?
+        WHERE d.relatorio_id = ? AND LOWER(r.consultor_login) = ?
         ORDER BY date(d.data_despesa) DESC, datetime(d.criado_em) DESC
-      `).bind(relatorioId, usuarioLogin).all()
+      `).bind(relatorioId, consultor.login).all()
 
       despesas = (result.results || []).map(item => ({
         ...item,
@@ -158,7 +243,7 @@ export async function onRequestGet({ request, env }) {
       }))
     }
 
-    return json({ relatorios, despesas })
+    return json({ consultor, relatorios, despesas })
   } catch (error) {
     return json({
       erro: 'Não foi possível carregar a prestação de contas.',
@@ -168,7 +253,10 @@ export async function onRequestGet({ request, env }) {
 }
 
 async function salvarDespesa(request, env, form) {
-  const usuarioLogin = await usuarioAtual(request, env)
+  const acesso = await validarConsultor(env, form.get('consultor_login'))
+  if (acesso.erro) return json({ erro: acesso.erro }, 401)
+  const consultor = acesso.consultor
+
   const relatorioId = texto(form.get('relatorio_id'), 160)
   const estabelecimento = texto(form.get('estabelecimento'), 180)
   const tipoDespesa = texto(form.get('tipo_despesa'), 100)
@@ -185,8 +273,13 @@ async function salvarDespesa(request, env, form) {
     return json({ erro: 'Inclua a foto do comprovante.' }, 400)
   }
 
-  const relatorio = await env.DB.prepare('SELECT id FROM prestacao_relatorios WHERE id = ? AND usuario_login = ? LIMIT 1').bind(relatorioId, usuarioLogin).first()
-  if (!relatorio) return json({ erro: 'Relatório não encontrado.' }, 404)
+  const relatorio = await env.DB.prepare(`
+    SELECT id
+    FROM prestacao_relatorios
+    WHERE id = ? AND LOWER(consultor_login) = ?
+    LIMIT 1
+  `).bind(relatorioId, consultor.login).first()
+  if (!relatorio) return json({ erro: 'Relatório não encontrado para este consultor.' }, 404)
 
   const tipoArquivo = texto(comprovante.type || '', 100).toLowerCase()
   if (!tipoArquivo.startsWith('image/')) {
@@ -248,6 +341,16 @@ export async function onRequestPost({ request, env }) {
     const body = await request.json()
     const operacao = texto(body.operacao, 40).toLowerCase()
 
+    if (operacao === 'acessar-consultor') {
+      const acesso = await validarConsultor(env, body.login)
+      if (acesso.erro) return json({ erro: acesso.erro }, 401)
+      return json({ sucesso: true, consultor: acesso.consultor })
+    }
+
+    const acesso = await validarConsultor(env, body.consultor_login)
+    if (acesso.erro) return json({ erro: acesso.erro }, 401)
+    const consultor = acesso.consultor
+
     if (operacao === 'criar-relatorio') {
       const nome = texto(body.nome, 120)
       const categoria = texto(body.categoria, 20).toUpperCase()
@@ -255,32 +358,42 @@ export async function onRequestPost({ request, env }) {
       if (!['RDV', 'TRADE'].includes(categoria)) return json({ erro: 'Selecione RDV ou TRADE.' }, 400)
 
       const agora = new Date().toISOString()
-      const sessao = await readSession(request, env.PAINEL_ADMIN_KEY)
-      const criadoPor = texto(sessao?.nome || sessao?.login || 'Painel', 180)
-      const usuarioLogin = await usuarioAtual(request, env)
+      const usuario = await usuarioAtual(request, env)
       const id = 'rel-' + crypto.randomUUID()
 
       await env.DB.prepare(`
-        INSERT INTO prestacao_relatorios(id, nome, categoria, usuario_login, criado_por, criado_em, atualizado_em)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-      `).bind(id, nome, categoria, usuarioLogin, criadoPor, agora, agora).run()
+        INSERT INTO prestacao_relatorios(
+          id, nome, categoria, usuario_login, consultor_login, consultor_id, consultor_nome,
+          criado_por, criado_em, atualizado_em
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).bind(
+        id,
+        nome,
+        categoria,
+        usuario.login,
+        consultor.login,
+        consultor.consultor_id,
+        consultor.nome,
+        usuario.nome,
+        agora,
+        agora,
+      ).run()
 
-      return json({ sucesso: true, id })
+      return json({ sucesso: true, id, consultor })
     }
 
     if (operacao === 'excluir-despesa') {
       const id = texto(body.id, 160)
       if (!id) return json({ erro: 'Despesa não informada.' }, 400)
 
-      const usuarioLogin = await usuarioAtual(request, env)
       const despesa = await env.DB.prepare(`
         SELECT d.id, d.relatorio_id
         FROM prestacao_despesas d
         INNER JOIN prestacao_relatorios r ON r.id = d.relatorio_id
-        WHERE d.id = ? AND r.usuario_login = ?
+        WHERE d.id = ? AND LOWER(r.consultor_login) = ?
         LIMIT 1
-      `).bind(id, usuarioLogin).first()
-      if (!despesa) return json({ erro: 'Despesa não encontrada.' }, 404)
+      `).bind(id, consultor.login).first()
+      if (!despesa) return json({ erro: 'Despesa não encontrada para este consultor.' }, 404)
 
       await env.DB.prepare('DELETE FROM prestacao_despesas WHERE id = ?').bind(id).run()
       await env.DB.prepare('UPDATE prestacao_relatorios SET atualizado_em = ? WHERE id = ?')
@@ -294,9 +407,13 @@ export async function onRequestPost({ request, env }) {
       const id = texto(body.id, 160)
       if (!id) return json({ erro: 'Relatório não informado.' }, 400)
 
-      const usuarioLogin = await usuarioAtual(request, env)
-      const relatorio = await env.DB.prepare('SELECT id FROM prestacao_relatorios WHERE id = ? AND usuario_login = ? LIMIT 1').bind(id, usuarioLogin).first()
-      if (!relatorio) return json({ erro: 'Relatório não encontrado.' }, 404)
+      const relatorio = await env.DB.prepare(`
+        SELECT id
+        FROM prestacao_relatorios
+        WHERE id = ? AND LOWER(consultor_login) = ?
+        LIMIT 1
+      `).bind(id, consultor.login).first()
+      if (!relatorio) return json({ erro: 'Relatório não encontrado para este consultor.' }, 404)
 
       await env.DB.prepare('DELETE FROM prestacao_despesas WHERE relatorio_id = ?').bind(id).run()
       await env.DB.prepare('DELETE FROM prestacao_relatorios WHERE id = ?').bind(id).run()
