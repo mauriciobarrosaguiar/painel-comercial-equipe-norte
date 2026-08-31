@@ -199,7 +199,12 @@ export async function onRequestGet({ request, env }) {
 
       const nome = nomeArquivoSeguro(item.comprovante_nome)
       const nomeCabecalho = nome.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^\x20-\x7E]/g, '-')
-      const bytes = new Uint8Array(Array.isArray(item.comprovante_blob) ? item.comprovante_blob : [])
+      const blob = item.comprovante_blob
+      const bytes = blob instanceof ArrayBuffer
+        ? new Uint8Array(blob)
+        : ArrayBuffer.isView(blob)
+          ? new Uint8Array(blob.buffer, blob.byteOffset, blob.byteLength)
+          : new Uint8Array(Array.isArray(blob) ? blob : [])
       const disposition = url.searchParams.get('download') === '1' ? 'attachment' : 'inline'
 
       return new Response(bytes, {
