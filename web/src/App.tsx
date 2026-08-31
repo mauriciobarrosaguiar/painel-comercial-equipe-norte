@@ -27,6 +27,7 @@ const modules = [
   ['Oportunidades', 'Clientes sem compra, mix ausente e potenciais de crescimento.', '↗'],
   ['Mercado Farma', 'Preços, estoques e distribuidores organizados por UF.', '⌁'],
   ['Pedidos Clientes', 'Pedidos do Mercado Farma por cliente, período, status, faturamento e itens.', '▤'],
+  ['Prestação de Contas', 'Relatórios de RDV e TRADE com despesas, fotos e comprovantes para o Onfly.', '▧'],
   ['SIP / Redes', 'Grupos, redes, acessos e resultados consolidados.', '⬡'],
   ['Histórico', 'Comparativos mensais e evolução dos principais indicadores.', '◫'],
   ['Automações', 'Extrações do Bússola e Mercado Farma com status em tempo real.', '⚙'],
@@ -145,7 +146,7 @@ export default function App({ user, page, onNavigate, onLogout, onInstall }: Pro
   const open = (title: string) => {
     const route: Record<string, AppPage> = {
       'Visão Geral': 'dashboard', Consultores: 'consultores', Clientes: 'clientes', 'Foco Semanal': 'foco',
-      'Desafio de Gigantes': 'desafio', Oportunidades: 'oportunidades', 'Mercado Farma': 'mercado', 'Pedidos Clientes': 'pedidos-clientes', 'SIP / Redes': 'sips', Histórico: 'historico',
+      'Desafio de Gigantes': 'desafio', Oportunidades: 'oportunidades', 'Mercado Farma': 'mercado', 'Pedidos Clientes': 'pedidos-clientes', 'Prestação de Contas': 'prestacao-contas', 'SIP / Redes': 'sips', Histórico: 'historico',
       Automações: 'automacoes', Administração: 'administracao', 'Anotações de CNPJs': 'cnpj-anotacoes',
     }
     const nextPage = route[title]
