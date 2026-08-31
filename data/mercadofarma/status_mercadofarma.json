@@ -1,5 +1,5 @@
 {
-  "gerado_em": "2026-08-31T15:49:43.168278-03:00",
+  "gerado_em": "2026-08-31T20:26:34.058253-03:00",
   "arquivo": "data/mercadofarma/mercadofarma_consolidado.csv",
   "arquivo_excel": "data/mercadofarma/mercadofarma_consolidado.xlsx",
   "ufs_atualizadas": [
@@ -9,7 +9,7 @@
     "PI",
     "TO"
   ],
-  "total_linhas": 6046,
+  "total_linhas": 6024,
   "status": [
     {
       "uf": "MA",
@@ -22,8 +22,8 @@
       "erro": "",
       "etapa": "concluido",
       "traceback": "",
-      "iniciado_em": "2026-08-31T15:08:09.870833-03:00",
-      "finalizado_em": "2026-08-31T15:45:18.552325-03:00",
+      "iniciado_em": "2026-08-31T19:46:59.288139-03:00",
+      "finalizado_em": "2026-08-31T20:22:40.739630-03:00",
       "fonte_clientes": "D1 / PAINEL EQUIPE NORTE",
       "fonte_produtos": "D1 / PRODUTOS MERCADO FARMA",
       "cnpjs_candidatos": [
@@ -281,8 +281,8 @@
       "erro": "",
       "etapa": "concluido",
       "traceback": "",
-      "iniciado_em": "2026-08-31T15:08:15.153027-03:00",
-      "finalizado_em": "2026-08-31T15:49:11.846344-03:00",
+      "iniciado_em": "2026-08-31T19:46:56.244009-03:00",
+      "finalizado_em": "2026-08-31T20:26:02.814035-03:00",
       "fonte_clientes": "D1 / PAINEL EQUIPE NORTE",
       "fonte_produtos": "D1 / PRODUTOS MERCADO FARMA",
       "cnpjs_candidatos": [
@@ -303,8 +303,8 @@
       "erro": "",
       "etapa": "concluido",
       "traceback": "",
-      "iniciado_em": "2026-08-31T15:08:13.364584-03:00",
-      "finalizado_em": "2026-08-31T15:45:22.111169-03:00",
+      "iniciado_em": "2026-08-31T19:46:52.223728-03:00",
+      "finalizado_em": "2026-08-31T20:25:40.472003-03:00",
       "fonte_clientes": "D1 / PAINEL EQUIPE NORTE",
       "fonte_produtos": "D1 / PRODUTOS MERCADO FARMA",
       "cnpjs_candidatos": [
@@ -326,8 +326,8 @@
       "erro": "",
       "etapa": "concluido",
       "traceback": "",
-      "iniciado_em": "2026-08-31T15:08:15.127336-03:00",
-      "finalizado_em": "2026-08-31T15:45:32.193455-03:00",
+      "iniciado_em": "2026-08-31T19:46:48.586313-03:00",
+      "finalizado_em": "2026-08-31T20:22:17.480702-03:00",
       "fonte_clientes": "D1 / PAINEL EQUIPE NORTE",
       "fonte_produtos": "D1 / PRODUTOS MERCADO FARMA",
       "cnpjs_candidatos": [
@@ -553,8 +553,8 @@
       "erro": "",
       "etapa": "concluido",
       "traceback": "",
-      "iniciado_em": "2026-08-31T15:08:10.809784-03:00",
-      "finalizado_em": "2026-08-31T15:44:37.926130-03:00",
+      "iniciado_em": "2026-08-31T19:46:53.116621-03:00",
+      "finalizado_em": "2026-08-31T20:22:34.599932-03:00",
       "fonte_clientes": "D1 / PAINEL EQUIPE NORTE",
       "fonte_produtos": "D1 / PRODUTOS MERCADO FARMA",
       "cnpjs_candidatos": [
