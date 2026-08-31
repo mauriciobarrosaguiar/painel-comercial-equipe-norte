@@ -1,12 +1,22 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react'
+import { FormEvent, useMemo, useState } from 'react'
 import './prestacao-contas.css'
 
 type Category = 'RDV' | 'TRADE'
+
+type ConsultantAccess = {
+  login: string
+  email: string
+  nome: string
+  consultor_id: string
+}
 
 type Report = {
   id: string
   nome: string
   categoria: Category
+  consultor_login: string
+  consultor_id: string
+  consultor_nome: string
   criado_por: string
   criado_em: string
   atualizado_em: string
@@ -118,6 +128,8 @@ async function optimizeReceipt(file: File): Promise<File> {
 }
 
 export default function PrestacaoContasModule({ onBack }: { onBack: () => void }) {
+  const [consultant, setConsultant] = useState<ConsultantAccess | null>(null)
+  const [accessLogin, setAccessLogin] = useState('')
   const [data, setData] = useState<ApiData>({ relatorios: [], despesas: [] })
   const [selectedId, setSelectedId] = useState('')
   const [categoryFilter, setCategoryFilter] = useState<'TODOS' | Category>('TODOS')
@@ -129,7 +141,7 @@ export default function PrestacaoContasModule({ onBack }: { onBack: () => void }
   const [dataDespesa, setDataDespesa] = useState(today())
   const [receipt, setReceipt] = useState<File | null>(null)
   const [inputKey, setInputKey] = useState(0)
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
@@ -153,17 +165,20 @@ export default function PrestacaoContasModule({ onBack }: { onBack: () => void }
     value: data.relatorios.reduce((sum, item) => sum + Number(item.total_centavos || 0), 0),
   }), [data.relatorios])
 
-  async function load(reportId = selectedId) {
+  async function load(reportId = selectedId, login = consultant?.login || '') {
+    if (!login) return
     setLoading(true)
     try {
-      const suffix = reportId ? '?relatorio=' + encodeURIComponent(reportId) : ''
-      const response = await fetch('/api/prestacao-contas' + suffix, { cache: 'no-store' })
+      const params = new URLSearchParams({ consultor: login })
+      if (reportId) params.set('relatorio', reportId)
+      const response = await fetch('/api/prestacao-contas?' + params.toString(), { cache: 'no-store' })
       const result = await response.json()
       if (!response.ok) throw new Error(result.detalhe || result.erro || 'Não foi possível carregar a prestação de contas.')
       setData({
         relatorios: result.relatorios || [],
         despesas: result.despesas || [],
       })
+      if (result.consultor) setConsultant(result.consultor)
       setError('')
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason))
@@ -171,8 +186,6 @@ export default function PrestacaoContasModule({ onBack }: { onBack: () => void }
       setLoading(false)
     }
   }
-
-  useEffect(() => { void load('') }, [])
 
   async function postJson(body: Record<string, unknown>) {
     const response = await fetch('/api/prestacao-contas', {
@@ -185,17 +198,52 @@ export default function PrestacaoContasModule({ onBack }: { onBack: () => void }
     return result
   }
 
-  async function createReport(event: FormEvent) {
+  async function accessConsultant(event: FormEvent) {
     event.preventDefault()
     setBusy(true)
     setError('')
     setMessage('')
     try {
-      const result = await postJson({ operacao: 'criar-relatorio', nome: newName, categoria: newCategory })
-      setMessage('Relatório criado. Agora você já pode incluir as despesas.')
+      const result = await postJson({ operacao: 'acessar-consultor', login: accessLogin })
+      const nextConsultant = result.consultor as ConsultantAccess
+      setConsultant(nextConsultant)
+      setSelectedId('')
+      setData({ relatorios: [], despesas: [] })
+      setMessage('Acesso liberado para ' + nextConsultant.nome + '.')
+      await load('', nextConsultant.login)
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  function switchConsultant() {
+    setConsultant(null)
+    setAccessLogin('')
+    setSelectedId('')
+    setData({ relatorios: [], despesas: [] })
+    setError('')
+    setMessage('')
+  }
+
+  async function createReport(event: FormEvent) {
+    event.preventDefault()
+    if (!consultant) return
+    setBusy(true)
+    setError('')
+    setMessage('')
+    try {
+      const result = await postJson({
+        operacao: 'criar-relatorio',
+        nome: newName,
+        categoria: newCategory,
+        consultor_login: consultant.login,
+      })
+      setMessage('Relatório criado para ' + consultant.nome + '. Agora você já pode incluir as despesas.')
       setSelectedId(result.id)
       setNewName(reportSuggestion(newCategory))
-      await load(result.id)
+      await load(result.id, consultant.login)
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason))
     } finally {
@@ -205,7 +253,7 @@ export default function PrestacaoContasModule({ onBack }: { onBack: () => void }
 
   async function addExpense(event: FormEvent) {
     event.preventDefault()
-    if (!selectedReport) return
+    if (!selectedReport || !consultant) return
     if (!receipt) {
       setError('Inclua a foto do comprovante.')
       return
@@ -218,6 +266,7 @@ export default function PrestacaoContasModule({ onBack }: { onBack: () => void }
       const optimized = await optimizeReceipt(receipt)
       const form = new FormData()
       form.set('operacao', 'salvar-despesa')
+      form.set('consultor_login', consultant.login)
       form.set('relatorio_id', selectedReport.id)
       form.set('estabelecimento', estabelecimento)
       form.set('valor', valor)
@@ -236,7 +285,7 @@ export default function PrestacaoContasModule({ onBack }: { onBack: () => void }
       setReceipt(null)
       setInputKey(current => current + 1)
       setMessage('Despesa e comprovante salvos com sucesso.')
-      await load(selectedReport.id)
+      await load(selectedReport.id, consultant.login)
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason))
     } finally {
@@ -245,14 +294,14 @@ export default function PrestacaoContasModule({ onBack }: { onBack: () => void }
   }
 
   async function deleteExpense(expense: Expense) {
-    if (!confirm('Excluir esta despesa e o comprovante salvo?')) return
+    if (!consultant || !confirm('Excluir esta despesa e o comprovante salvo?')) return
     setBusy(true)
     setError('')
     setMessage('')
     try {
-      await postJson({ operacao: 'excluir-despesa', id: expense.id })
+      await postJson({ operacao: 'excluir-despesa', id: expense.id, consultor_login: consultant.login })
       setMessage('Despesa excluída.')
-      await load(selectedId)
+      await load(selectedId, consultant.login)
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason))
     } finally {
@@ -261,15 +310,15 @@ export default function PrestacaoContasModule({ onBack }: { onBack: () => void }
   }
 
   async function deleteReport(report: Report) {
-    if (!confirm('Excluir o relatório "' + report.nome + '" e todas as despesas dele?')) return
+    if (!consultant || !confirm('Excluir o relatório "' + report.nome + '" e todas as despesas dele?')) return
     setBusy(true)
     setError('')
     setMessage('')
     try {
-      await postJson({ operacao: 'excluir-relatorio', id: report.id })
+      await postJson({ operacao: 'excluir-relatorio', id: report.id, consultor_login: consultant.login })
       if (selectedId === report.id) setSelectedId('')
       setMessage('Relatório excluído.')
-      await load('')
+      await load('', consultant.login)
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason))
     } finally {
@@ -278,22 +327,64 @@ export default function PrestacaoContasModule({ onBack }: { onBack: () => void }
   }
 
   function openReport(report: Report) {
+    if (!consultant) return
     setSelectedId(report.id)
     setMessage('')
     setError('')
-    void load(report.id)
+    void load(report.id, consultant.login)
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
-  if (selectedReport) {
+  if (!consultant) {
     return <main className="content accounting-page">
-      <button className="back-button" type="button" onClick={() => { setSelectedId(''); setData(current => ({ ...current, despesas: [] })) }}>← Voltar aos relatórios</button>
+      <button className="back-button" type="button" onClick={onBack}>← Voltar ao painel</button>
+
+      <section className="accounting-access-shell">
+        <div className="accounting-access-icon">▧</div>
+        <span className="eyebrow">Prestação de Contas</span>
+        <h1>Acessar consultor</h1>
+        <p>Digite o mesmo login EMS usado para acessar o Painel. O módulo abrirá somente os relatórios vinculados a esse consultor.</p>
+
+        <form className="accounting-access-form" onSubmit={event => void accessConsultant(event)}>
+          <label>
+            <span>LOGIN DO CONSULTOR</span>
+            <input
+              autoFocus
+              autoComplete="username"
+              value={accessLogin}
+              onChange={event => setAccessLogin(event.target.value)}
+              placeholder="Ex.: m0043497"
+              required
+            />
+          </label>
+          {error && <div className="alert alert-error accounting-alert">{error}</div>}
+          <button className="primary-action" type="submit" disabled={busy}>
+            {busy ? 'Validando…' : 'Acessar prestação de contas'}
+          </button>
+        </form>
+      </section>
+    </main>
+  }
+
+  if (selectedReport) {
+    const receiptBase = '/api/prestacao-contas?consultor=' + encodeURIComponent(consultant.login) + '&comprovante='
+
+    return <main className="content accounting-page">
+      <div className="accounting-nav-actions">
+        <button className="back-button" type="button" onClick={() => { setSelectedId(''); setData(current => ({ ...current, despesas: [] })) }}>← Voltar aos relatórios</button>
+        <button className="outline-button" type="button" onClick={switchConsultant}>Trocar consultor</button>
+      </div>
+
+      <section className="accounting-consultant-bar">
+        <div><span>CONSULTOR</span><strong>{consultant.nome}</strong></div>
+        <div><span>LOGIN</span><strong>{consultant.login}</strong></div>
+      </section>
 
       <section className="accounting-hero">
         <div>
           <span className="eyebrow">Prestação de contas · {selectedReport.categoria}</span>
           <h1>{selectedReport.nome}</h1>
-          <p>Inclua cada despesa com a foto do comprovante. Depois, abra ou baixe o arquivo para lançar no Onfly.</p>
+          <p>Relatório de {consultant.nome}. Inclua cada despesa com a foto do comprovante e depois baixe o arquivo para lançar no Onfly.</p>
         </div>
         <div className="accounting-total">
           <span>Total do relatório</span>
@@ -336,8 +427,8 @@ export default function PrestacaoContasModule({ onBack }: { onBack: () => void }
                 <td><span className="accounting-type">{expense.tipo_despesa}</span></td>
                 <td><strong>{formatMoneyFromCents(expense.valor_centavos)}</strong></td>
                 <td><div className="accounting-receipt-actions">
-                  <a className="outline-button accounting-compact" href={'/api/prestacao-contas?comprovante=' + encodeURIComponent(expense.id)} target="_blank" rel="noreferrer">Abrir</a>
-                  <a className="outline-button accounting-compact" href={'/api/prestacao-contas?comprovante=' + encodeURIComponent(expense.id) + '&download=1'}>Baixar</a>
+                  <a className="outline-button accounting-compact" href={receiptBase + encodeURIComponent(expense.id)} target="_blank" rel="noreferrer">Abrir</a>
+                  <a className="outline-button accounting-compact" href={receiptBase + encodeURIComponent(expense.id) + '&download=1'}>Baixar</a>
                 </div><small>{expense.comprovante_nome}</small></td>
                 <td><button className="danger-button accounting-compact" type="button" disabled={busy} onClick={() => void deleteExpense(expense)}>Excluir</button></td>
               </tr>)}
@@ -350,13 +441,21 @@ export default function PrestacaoContasModule({ onBack }: { onBack: () => void }
   }
 
   return <main className="content accounting-page">
-    <button className="back-button" type="button" onClick={onBack}>← Voltar ao painel</button>
+    <div className="accounting-nav-actions">
+      <button className="back-button" type="button" onClick={onBack}>← Voltar ao painel</button>
+      <button className="outline-button" type="button" onClick={switchConsultant}>Trocar consultor</button>
+    </div>
+
+    <section className="accounting-consultant-bar">
+      <div><span>CONSULTOR</span><strong>{consultant.nome}</strong></div>
+      <div><span>LOGIN</span><strong>{consultant.login}</strong></div>
+    </section>
 
     <section className="accounting-hero">
       <div>
         <span className="eyebrow">Organização antes do Onfly</span>
         <h1>Prestação de Contas</h1>
-        <p>Organize relatórios de RDV e TRADE, salve os comprovantes no momento da compra e deixe tudo pronto para lançar depois no Onfly.</p>
+        <p>Relatórios de RDV e TRADE vinculados exclusivamente a {consultant.nome}. Cada novo relatório criado nesta tela ficará registrado para este consultor.</p>
       </div>
       <div className="accounting-total">
         <span>Total armazenado</span>
@@ -376,7 +475,7 @@ export default function PrestacaoContasModule({ onBack }: { onBack: () => void }
     </section>
 
     <section className="accounting-card">
-      <div className="accounting-card-heading"><div><span className="eyebrow">Novo relatório</span><h2>Criar relatório</h2><p>Exemplo: RDV JUNHO ou TRADE CAMPANHA X.</p></div></div>
+      <div className="accounting-card-heading"><div><span className="eyebrow">Novo relatório</span><h2>Criar relatório para {consultant.nome}</h2><p>Exemplo: RDV JUNHO ou TRADE CAMPANHA X.</p></div></div>
       <form className="accounting-report-form" onSubmit={event => void createReport(event)}>
         <label><span>TIPO</span><select value={newCategory} onChange={event => { const category = event.target.value as Category; setNewCategory(category); setNewName(reportSuggestion(category)) }}><option value="RDV">RDV</option><option value="TRADE">TRADE</option></select></label>
         <label className="accounting-report-name"><span>NOME DO RELATÓRIO</span><input value={newName} onChange={event => setNewName(event.target.value)} placeholder="Ex.: RDV JUNHO" maxLength={120} required /></label>
@@ -386,7 +485,7 @@ export default function PrestacaoContasModule({ onBack }: { onBack: () => void }
 
     <section className="accounting-card">
       <div className="accounting-list-heading">
-        <div><span className="eyebrow">Meus relatórios</span><h2>Prestação de contas</h2></div>
+        <div><span className="eyebrow">Relatórios do consultor</span><h2>{consultant.nome}</h2><p>Login: {consultant.login}</p></div>
         <div className="accounting-tabs">
           {(['TODOS', 'RDV', 'TRADE'] as const).map(item => <button key={item} type="button" className={categoryFilter === item ? 'active' : ''} onClick={() => setCategoryFilter(item)}>{item}</button>)}
         </div>
@@ -397,10 +496,11 @@ export default function PrestacaoContasModule({ onBack }: { onBack: () => void }
         {!loading && visibleReports.map(report => <article className="accounting-report-card" key={report.id}>
           <div className="accounting-report-top"><span className={'accounting-badge badge-' + report.categoria.toLowerCase()}>{report.categoria}</span><small>{formatDateTime(report.atualizado_em)}</small></div>
           <h3>{report.nome}</h3>
+          <small className="accounting-report-owner">{report.consultor_nome || consultant.nome} · {report.consultor_login || consultant.login}</small>
           <div className="accounting-report-value"><strong>{formatMoneyFromCents(report.total_centavos)}</strong><span>{report.quantidade_despesas} despesa(s)</span></div>
           <div className="accounting-report-actions"><button className="primary-action" type="button" onClick={() => openReport(report)}>Abrir relatório</button><button className="danger-button" type="button" disabled={busy} onClick={() => void deleteReport(report)}>Excluir</button></div>
         </article>)}
-        {!loading && !visibleReports.length && <div className="accounting-empty">Nenhum relatório encontrado. Crie o primeiro acima.</div>}
+        {!loading && !visibleReports.length && <div className="accounting-empty">Nenhum relatório encontrado para este consultor. Crie o primeiro acima.</div>}
       </div>
     </section>
   </main>
