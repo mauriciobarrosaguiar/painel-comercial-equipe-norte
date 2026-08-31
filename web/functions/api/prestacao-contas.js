@@ -113,6 +113,7 @@ export async function onRequestGet({ request, env }) {
       if (!item) return json({ erro: 'Comprovante não encontrado.' }, 404)
 
       const nome = nomeArquivoSeguro(item.comprovante_nome)
+      const nomeCabecalho = nome.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^\x20-\x7E]/g, '-')
       const bytes = new Uint8Array(Array.isArray(item.comprovante_blob) ? item.comprovante_blob : [])
       const disposition = url.searchParams.get('download') === '1' ? 'attachment' : 'inline'
 
@@ -120,7 +121,7 @@ export async function onRequestGet({ request, env }) {
         status: 200,
         headers: {
           'content-type': texto(item.comprovante_tipo || 'image/jpeg', 100),
-          'content-disposition': disposition + '; filename="' + nome.replace(/"/g, '') + '"',
+          'content-disposition': disposition + '; filename="' + nomeCabecalho.replace(/"/g, '') + '"',
           'cache-control': 'private, no-store',
           'x-content-type-options': 'nosniff',
         },
@@ -134,16 +135,16 @@ export async function onRequestGet({ request, env }) {
     if (relatorioId) {
       const result = await env.DB.prepare(`
         SELECT
-          id,
-          relatorio_id,
-          estabelecimento,
-          valor_centavos,
-          tipo_despesa,
-          data_despesa,
-          comprovante_nome,
-          comprovante_tipo,
-          comprovante_tamanho,
-          criado_em
+          d.id AS id,
+          d.relatorio_id AS relatorio_id,
+          d.estabelecimento AS estabelecimento,
+          d.valor_centavos AS valor_centavos,
+          d.tipo_despesa AS tipo_despesa,
+          d.data_despesa AS data_despesa,
+          d.comprovante_nome AS comprovante_nome,
+          d.comprovante_tipo AS comprovante_tipo,
+          d.comprovante_tamanho AS comprovante_tamanho,
+          d.criado_em AS criado_em
         FROM prestacao_despesas d
         INNER JOIN prestacao_relatorios r ON r.id = d.relatorio_id
         WHERE d.relatorio_id = ? AND r.usuario_login = ?
