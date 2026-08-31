@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import './operations.css'
 import './client-orders.css'
 
 type Summary = {
