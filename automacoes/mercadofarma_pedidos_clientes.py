@@ -458,12 +458,6 @@ def proximo_lista(driver):
     for button in reversed(candidatos):
         if not button.is_displayed():
             continue
-        try:
-            raw = texto(card_root(driver, button).text)
-            if "PEDIDO" in raw.upper() and "DETALHES DO PEDIDO" in raw.upper():
-                continue
-        except Exception:
-            pass
         disabled = button.get_attribute("disabled")
         aria = texto(button.get_attribute("aria-disabled")).lower()
         classes = texto(button.get_attribute("class")).lower()
