@@ -13,6 +13,7 @@ export type AppPage =
   | 'foco'
   | 'desafio'
   | 'cnpj-anotacoes'
+  | 'pedidos-clientes'
 
 const PAGE_SLUG: Record<AppPage, string> = {
   dashboard: '',
@@ -29,6 +30,7 @@ const PAGE_SLUG: Record<AppPage, string> = {
   foco: 'foco-semanal',
   desafio: 'desafio-de-gigantes',
   'cnpj-anotacoes': 'anotacoes-cnpj',
+  'pedidos-clientes': 'pedidos-clientes',
 }
 
 const SLUG_PAGE = new Map<string, AppPage>(
@@ -50,6 +52,8 @@ SLUG_PAGE.set('desafio', 'desafio')
 SLUG_PAGE.set('gigantes', 'desafio')
 SLUG_PAGE.set('cnpj', 'cnpj-anotacoes')
 SLUG_PAGE.set('anotacoes', 'cnpj-anotacoes')
+SLUG_PAGE.set('pedidos-mercado-farma', 'pedidos-clientes')
+SLUG_PAGE.set('pedidos-clientes', 'pedidos-clientes')
 
 export function readPageFromUrl(search = window.location.search): AppPage {
   const slug = new URLSearchParams(search).get('pagina')?.trim().toLowerCase() || ''
