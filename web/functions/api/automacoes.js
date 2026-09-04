@@ -1,6 +1,6 @@
 import { authorized, json } from '../_lib/credentials.js'
 
-const TIPOS = new Set(['BUSSOLA', 'MERCADO_FARMA', 'PEDIDOS_CLIENTES', 'AUDITORIA', 'FECHAMENTO_MENSAL', 'MIGRAR_BASES'])
+const TIPOS = new Set(['BUSSOLA', 'MERCADO_FARMA', 'AUDITORIA', 'FECHAMENTO_MENSAL', 'MIGRAR_BASES'])
 const REPOSITORIO = 'mauriciobarrosaguiar/painel-comercial-equipe-norte'
 const ATIVOS = new Set(['aguardando', 'executando'])
 const texto = value => String(value ?? '').trim()
@@ -16,17 +16,6 @@ const DISPAROS = {
       acao: 'atualizar_mercadofarma_paralelo',
       ufs: texto(parametros?.ufs) || 'MA,MT,PA,PI,TO',
       command_id: id,
-    }),
-  },
-  PEDIDOS_CLIENTES: {
-    workflow: 'mercadofarma-pedidos-clientes.yml',
-    inputs: (id, parametros) => ({
-      inicio: texto(parametros?.inicio),
-      fim: texto(parametros?.fim),
-      ufs: texto(parametros?.ufs) || 'MA,MT,PA,PI,TO',
-      command_id: id,
-      limite_clientes: texto(parametros?.limite_clientes) || '0',
-      headless: 'true',
     }),
   },
 }
@@ -164,15 +153,6 @@ export async function onRequestPost({ request, env }) {
     const id = `cmd-${crypto.randomUUID()}`
     const agora = new Date().toISOString()
     const parametros = body.parametros && typeof body.parametros === 'object' ? body.parametros : {}
-    if (tipo === 'PEDIDOS_CLIENTES') {
-      const inicio = texto(parametros.inicio)
-      const fim = texto(parametros.fim)
-      const formato = /^\\d{4}-\\d{2}-\\d{2}$/
-      if (!formato.test(inicio) || !formato.test(fim)) {
-        return json({ erro: 'Informe a data inicial e final no formato AAAA-MM-DD.' }, 400)
-      }
-      if (inicio > fim) return json({ erro: 'A data inicial não pode ser posterior à data final.' }, 400)
-    }
     const disparoImediato = Boolean(configuracao && tokenDisponivel(env))
     const estadoInicial = 'aguardando'
     const mensagemInicial = disparoImediato
