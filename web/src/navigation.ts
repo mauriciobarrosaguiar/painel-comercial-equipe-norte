@@ -13,7 +13,6 @@ export type AppPage =
   | 'foco'
   | 'desafio'
   | 'cnpj-anotacoes'
-  | 'pedidos-clientes'
   | 'prestacao-contas'
 
 const PAGE_SLUG: Record<AppPage, string> = {
@@ -31,7 +30,6 @@ const PAGE_SLUG: Record<AppPage, string> = {
   foco: 'foco-semanal',
   desafio: 'desafio-de-gigantes',
   'cnpj-anotacoes': 'anotacoes-cnpj',
-  'pedidos-clientes': 'pedidos-clientes',
   'prestacao-contas': 'prestacao-contas',
 }
 
@@ -54,8 +52,6 @@ SLUG_PAGE.set('desafio', 'desafio')
 SLUG_PAGE.set('gigantes', 'desafio')
 SLUG_PAGE.set('cnpj', 'cnpj-anotacoes')
 SLUG_PAGE.set('anotacoes', 'cnpj-anotacoes')
-SLUG_PAGE.set('pedidos-mercado-farma', 'pedidos-clientes')
-SLUG_PAGE.set('pedidos-clientes', 'pedidos-clientes')
 SLUG_PAGE.set('prestacao', 'prestacao-contas')
 SLUG_PAGE.set('prestacao-contas', 'prestacao-contas')
 
