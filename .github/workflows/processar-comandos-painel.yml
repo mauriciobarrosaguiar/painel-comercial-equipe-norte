@@ -85,8 +85,6 @@ jobs:
 
             jq -c '.comando.parametros // {}' comando.json > parametros.json
             ano_mes=$(jq -r '.ano_mes // empty' parametros.json)
-            inicio=$(jq -r '.inicio // empty' parametros.json)
-            fim=$(jq -r '.fim // empty' parametros.json)
             ufs=$(jq -r '.ufs // "MA,MT,PA,PI,TO"' parametros.json)
             mensagem=""
             acompanha_workflow="false"
@@ -102,17 +100,6 @@ jobs:
                 saida=$(gh workflow run mercadofarma.yml --repo "$GITHUB_REPOSITORY" --ref main -f acao=atualizar_mercadofarma_paralelo -f ufs="$ufs" -f command_id="$id" 2>&1)
                 codigo=$?
                 mensagem="Extração do Mercado Farma enviada para as UFs ${ufs}."
-                acompanha_workflow="true"
-                ;;
-              PEDIDOS_CLIENTES)
-                if [ -z "$inicio" ] || [ -z "$fim" ]; then
-                  saida="Período ausente para PEDIDOS_CLIENTES."
-                  codigo=2
-                else
-                  saida=$(gh workflow run mercadofarma-pedidos-clientes.yml --repo "$GITHUB_REPOSITORY" --ref main -f inicio="$inicio" -f fim="$fim" -f ufs="$ufs" -f command_id="$id" 2>&1)
-                  codigo=$?
-                fi
-                mensagem="Extração dos pedidos dos clientes enviada para ${inicio} a ${fim}."
                 acompanha_workflow="true"
                 ;;
               MIGRAR_BASES)
