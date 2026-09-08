@@ -11,7 +11,6 @@ import LoginPage, { SessionUser } from './LoginPage'
 import MarketFarmaModule from './MarketFarmaModule.new'
 import OrderCrossingHistoryBridge from './OrderCrossingHistoryBridge'
 import OrderSeparatorModule from './OrderSeparatorPdfBridgeV4'
-import PrestacaoContasModule from './PrestacaoContasModule'
 import { AppPage, readPageFromUrl, savePageInHistory } from './navigation'
 import OpportunitiesModule from './OpportunitiesModule'
 import SipsModule from './SipsModule'
@@ -130,7 +129,6 @@ export default function AppShell() {
   if (page === 'foco') module = <FocusModule onBack={back} />
   if (page === 'desafio') module = <DesafioGigantesPage onBack={back} />
   if (page === 'cnpj-anotacoes') module = <CnpjNotesModule onBack={back} />
-  if (page === 'prestacao-contas') module = <PrestacaoContasModule onBack={back} />
   const exportType = page === 'clientes' ? 'clientes' : page === 'oportunidades' ? 'oportunidades' : ''
 
   return (
