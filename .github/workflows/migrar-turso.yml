@@ -1,14 +1,12 @@
-name: Migrar D1 para Turso
+name: Migrar D1 para Turso (somente contingência)
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
-    paths:
-      - "scripts/migrar_d1_turso.py"
-      - "scripts/migrar_d1_turso_v2.py"
-      - ".github/workflows/migrar-turso.yml"
+    inputs:
+      confirmacao:
+        description: "Digite MIGRAR_D1_PARA_TURSO para sobrescrever/atualizar o Turso a partir do backup D1"
+        required: true
+        default: ""
 
 permissions:
   contents: read
@@ -19,6 +17,7 @@ concurrency:
 
 jobs:
   migrar:
+    if: ${{ inputs.confirmacao == 'MIGRAR_D1_PARA_TURSO' }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
@@ -29,6 +28,11 @@ jobs:
       TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
 
     steps:
+      - name: Confirmar operação de contingência
+        run: |
+          echo "ATENÇÃO: esta rotina existe apenas para contingência."
+          echo "O Turso é o banco principal; o D1 não deve ser usado como fonte normal depois do cutover."
+
       - name: Baixar repositório
         uses: actions/checkout@v4
 
