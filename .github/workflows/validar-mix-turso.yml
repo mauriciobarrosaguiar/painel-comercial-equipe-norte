@@ -1,0 +1,56 @@
+name: Validar MIX no Turso
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "scripts/aplicar_mix_sap_turso.py"
+      - ".github/workflows/validar-mix-turso.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Baixar repositório
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Instalar cliente HTTP
+        run: python -m pip install --disable-pip-version-check "requests>=2.34,<3"
+
+      - name: Validar sintaxe
+        run: python -m py_compile scripts/aplicar_mix_sap_turso.py scripts/turso_backend.py
+
+      - name: Aplicar e validar MIX diretamente no Turso
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/aplicar_mix_sap_turso.py
+          python - <<'PY'
+          from scripts import turso_backend as turso
+
+          dados = turso.executar(
+              turso.database_id(),
+              "SELECT COUNT(*) AS total, SUM(CASE WHEN tipo_mix IS NULL OR TRIM(tipo_mix)='' THEN 1 ELSE 0 END) AS sem_mix FROM produtos WHERE ativo=1",
+          )
+          linha = turso.linhas(dados)[0]
+          total = int(linha.get('total') or 0)
+          sem_mix = int(linha.get('sem_mix') or 0)
+          print(f'Produtos ativos validados no Turso: {total}; sem classificação: {sem_mix}')
+          if total <= 0 or sem_mix != 0:
+              raise SystemExit('Validação do MIX no Turso falhou.')
+          PY
