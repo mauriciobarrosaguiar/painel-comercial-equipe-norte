@@ -1,11 +1,12 @@
 from pathlib import Path
 
 
-def test_workflow_sincroniza_consolidado_no_d1():
+def test_workflow_sincroniza_consolidado_no_d1_sem_duplicar():
     workflow = Path('.github/workflows/mercadofarma.yml').read_text(encoding='utf-8')
     assert 'automacoes/mercadofarma_atualizado.py' in workflow
-    assert 'scripts/importar_mercadofarma_d1.py' in workflow
+    assert 'scripts/importar_mercadofarma_d1_filtrado.py' in workflow
     assert 'CLOUDFLARE_D1_API_TOKEN' in workflow
+    assert '\n  push:' not in workflow
 
 
 def test_parser_atualizado_substitui_leitor_antigo():
