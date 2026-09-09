@@ -14,14 +14,24 @@ permissions:
 jobs:
   validar:
     runs-on: ubuntu-latest
+    env:
+      PAINEL_ADMIN_KEY: ${{ secrets.PAINEL_ADMIN_KEY }}
     steps:
       - name: Consultar diagnóstico Turso
         shell: bash
         run: |
           set -euo pipefail
           URL="https://painel-equipe-norte.pages.dev/api/turso-health"
+          if [ -z "${PAINEL_ADMIN_KEY:-}" ]; then
+            echo "::error::PAINEL_ADMIN_KEY ausente."
+            exit 1
+          fi
           for tentativa in 1 2 3 4 5 6; do
-            STATUS=$(curl --silent --show-error --output resposta.json --write-out '%{http_code}' "$URL" || true)
+            STATUS=$(curl --silent --show-error \
+              --header "x-admin-key: ${PAINEL_ADMIN_KEY}" \
+              --output resposta.json \
+              --write-out '%{http_code}' \
+              "$URL" || true)
             echo "Tentativa ${tentativa}: HTTP ${STATUS}"
             cat resposta.json || true
             echo
