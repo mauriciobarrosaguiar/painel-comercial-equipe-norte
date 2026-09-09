@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import os
+import sqlite3
 import time
 from typing import Any, Iterable
 
@@ -102,6 +103,8 @@ def _decode_result(result: dict[str, Any]) -> dict[str, Any]:
 
 
 def _pipeline(statements: list[tuple[str, list[Any]]]) -> list[dict[str, Any]]:
+    if not statements:
+        return []
     requests_payload: list[dict[str, Any]] = []
     for sql, params in statements:
         stmt: dict[str, Any] = {"sql": str(sql)}
@@ -153,13 +156,35 @@ def _pipeline(statements: list[tuple[str, list[Any]]]) -> list[dict[str, Any]]:
     raise RuntimeError(f"Falha temporária repetida no Turso: {last_error}")
 
 
+def _split_sql(sql: str) -> list[str]:
+    source = str(sql or "")
+    statements: list[str] = []
+    buffer = ""
+    for line in source.splitlines(keepends=True):
+        buffer += line
+        if sqlite3.complete_statement(buffer):
+            statement = buffer.strip()
+            if statement:
+                statements.append(statement)
+            buffer = ""
+    if buffer.strip():
+        statements.append(buffer.strip())
+    return statements
+
+
 def executar(
     _database_id: str,
     sql: str,
     params: Iterable[Any] | None = None,
 ) -> dict[str, Any]:
-    result = _pipeline([(sql, list(params or []))])[0]
-    return {"success": True, "result": [result]}
+    normalized = list(params or [])
+    if normalized:
+        statements = [(sql, normalized)]
+    else:
+        parts = _split_sql(sql)
+        statements = [(part, []) for part in parts] if parts else [(sql, [])]
+    results = _pipeline(statements)
+    return {"success": True, "result": results}
 
 
 def executar_lotes(
@@ -169,10 +194,15 @@ def executar_lotes(
 ) -> None:
     for inicio in range(0, len(consultas), tamanho):
         bloco = consultas[inicio : inicio + tamanho]
-        statements = [
-            (str(item["sql"]), list(item.get("params") or []))
-            for item in bloco
-        ]
+        statements: list[tuple[str, list[Any]]] = []
+        for item in bloco:
+            sql = str(item["sql"])
+            params = list(item.get("params") or [])
+            if params:
+                statements.append((sql, params))
+            else:
+                parts = _split_sql(sql)
+                statements.extend((part, []) for part in (parts or [sql]))
         _pipeline(statements)
 
 
