@@ -7,6 +7,7 @@ on:
       - main
     paths:
       - "scripts/migrar_d1_turso.py"
+      - "scripts/migrar_d1_turso_v2.py"
       - ".github/workflows/migrar-turso.yml"
 
 permissions:
@@ -51,7 +52,7 @@ jobs:
           done
 
       - name: Validar sintaxe do migrador
-        run: python -m py_compile scripts/migrar_d1_turso.py
+        run: python -m py_compile scripts/migrar_d1_turso.py scripts/migrar_d1_turso_v2.py
 
       - name: Copiar schema e dados do D1 para o Turso
-        run: python scripts/migrar_d1_turso.py
+        run: python scripts/migrar_d1_turso_v2.py
