@@ -28,6 +28,8 @@ jobs:
       PERSISTENCE_KEY: ${{ secrets.PERSISTENCE_KEY }}
       MERCADOFARMA_USUARIO: ${{ secrets.MERCADOFARMA_USUARIO }}
       MERCADOFARMA_SENHA: ${{ secrets.MERCADOFARMA_SENHA }}
+      TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+      TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       CLOUDFLARE_D1_DATABASE: painel-equipe-norte-db
@@ -45,5 +47,5 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Identificar SAPs pendentes
-        run: python scripts/identificar_desafio_gigantes_sap.py
+      - name: Identificar SAPs pendentes no Turso
+        run: python scripts/identificar_desafio_gigantes_turso.py
