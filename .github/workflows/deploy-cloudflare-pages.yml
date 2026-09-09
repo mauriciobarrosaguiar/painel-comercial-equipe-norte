@@ -40,7 +40,7 @@ jobs:
       - name: Compilar painel
         run: npm run build
 
-      - name: Localizar ou criar banco D1
+      - name: Preservar banco D1 como backup
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -69,37 +69,22 @@ jobs:
           const databaseId = database?.uuid || database?.database_id || database?.id
 
           if (!databaseId) {
-            throw new Error('Não foi possível localizar o ID do banco D1.')
+            throw new Error('Não foi possível localizar o ID do banco D1 de backup.')
           }
 
           const config = JSON.parse(fs.readFileSync('wrangler.jsonc', 'utf8'))
           config.d1_databases[0].database_id = databaseId
           fs.writeFileSync('wrangler.jsonc', `${JSON.stringify(config, null, 2)}\n`)
-          console.log('Banco D1 localizado e configuração preparada.')
+          console.log('D1 preservado apenas como binding de contingência/backup.')
           NODE
 
-      - name: Aplicar migrações do banco
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      - name: Não gravar migrações no D1
         shell: bash
         run: |
-          set +e
-          SAIDA=$(npx wrangler@4.112.0 d1 migrations apply DB --remote --config wrangler.jsonc 2>&1)
-          CODIGO=$?
-          set -e
-          printf '%s\n' "$SAIDA"
-
-          if [ "$CODIGO" -eq 0 ]; then
-            exit 0
-          fi
-
-          if printf '%s' "$SAIDA" | grep -Eq "exceeded D1's free tier daily row write limit|code: 7500"; then
-            echo "::warning::O D1 atingiu a cota diária de gravações. O deploy continuará sem bloquear o painel; a migração pendente será aplicada automaticamente no próximo deploy após o reset da cota."
-            exit 0
-          fi
-
-          exit "$CODIGO"
+          set -euo pipefail
+          echo "Turso é o banco principal de produção."
+          echo "Migrações D1 desativadas para evitar novas gravações e consumo da cota diária."
+          echo "O D1 permanece disponível somente para contingência e backup."
 
       - name: Definir main como branch de produção
         env:
@@ -165,12 +150,12 @@ jobs:
         shell: bash
         run: |
           if [ -z "${TURSO_DATABASE_URL:-}" ] || [ -z "${TURSO_AUTH_TOKEN:-}" ]; then
-            echo "::warning::TURSO_DATABASE_URL e/ou TURSO_AUTH_TOKEN ainda não foram adicionados aos Secrets do GitHub."
-          else
-            printf '%s' "$TURSO_DATABASE_URL" | npx wrangler@4.112.0 pages secret put TURSO_DATABASE_URL --project-name painel-equipe-norte
-            printf '%s' "$TURSO_AUTH_TOKEN" | npx wrangler@4.112.0 pages secret put TURSO_AUTH_TOKEN --project-name painel-equipe-norte
-            echo "Credenciais Turso configuradas no Cloudflare Pages."
+            echo "::error::TURSO_DATABASE_URL e/ou TURSO_AUTH_TOKEN não estão configurados. O deploy de produção não pode prosseguir sem o banco principal."
+            exit 1
           fi
+          printf '%s' "$TURSO_DATABASE_URL" | npx wrangler@4.112.0 pages secret put TURSO_DATABASE_URL --project-name painel-equipe-norte
+          printf '%s' "$TURSO_AUTH_TOKEN" | npx wrangler@4.112.0 pages secret put TURSO_AUTH_TOKEN --project-name painel-equipe-norte
+          echo "Credenciais Turso configuradas no Cloudflare Pages."
 
       - name: Publicar versão no ambiente de produção
         env:
