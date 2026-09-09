@@ -156,6 +156,22 @@ jobs:
             echo "Token de disparo imediato configurado no Cloudflare Pages."
           fi
 
+      - name: Configurar conexão Turso no Cloudflare Pages
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+        shell: bash
+        run: |
+          if [ -z "${TURSO_DATABASE_URL:-}" ] || [ -z "${TURSO_AUTH_TOKEN:-}" ]; then
+            echo "::warning::TURSO_DATABASE_URL e/ou TURSO_AUTH_TOKEN ainda não foram adicionados aos Secrets do GitHub."
+          else
+            printf '%s' "$TURSO_DATABASE_URL" | npx wrangler@4.112.0 pages secret put TURSO_DATABASE_URL --project-name painel-equipe-norte
+            printf '%s' "$TURSO_AUTH_TOKEN" | npx wrangler@4.112.0 pages secret put TURSO_AUTH_TOKEN --project-name painel-equipe-norte
+            echo "Credenciais Turso configuradas no Cloudflare Pages."
+          fi
+
       - name: Publicar versão no ambiente de produção
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
