@@ -1,0 +1,35 @@
+name: Validar Turso em produção
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/validar-turso-producao.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  validar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Consultar diagnóstico Turso
+        shell: bash
+        run: |
+          set -euo pipefail
+          URL="https://painel-equipe-norte.pages.dev/api/turso-health"
+          for tentativa in 1 2 3 4 5 6; do
+            STATUS=$(curl --silent --show-error --output resposta.json --write-out '%{http_code}' "$URL" || true)
+            echo "Tentativa ${tentativa}: HTTP ${STATUS}"
+            cat resposta.json || true
+            echo
+            if [ "$STATUS" = "200" ] && jq -e '.ok == true and .backend == "turso"' resposta.json >/dev/null 2>&1; then
+              jq . resposta.json
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "::error::O diagnóstico Turso não ficou saudável em produção."
+          exit 1
