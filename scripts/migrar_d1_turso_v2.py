@@ -3,7 +3,7 @@ from __future__ import annotations
 import base64
 from typing import Any
 
-from scripts import migrar_d1_turso as legacy
+import migrar_d1_turso as legacy
 
 
 def turso_value(value: Any) -> dict[str, Any]:
