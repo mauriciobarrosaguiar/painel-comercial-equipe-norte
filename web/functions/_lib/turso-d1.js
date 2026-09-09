@@ -41,6 +41,13 @@ function arg(value) {
   return { type: 'text', value: String(value) }
 }
 
+function stmt(statement) {
+  return {
+    sql: statement.sql,
+    ...(statement.args.length ? { args: statement.args.map(arg) } : {}),
+  }
+}
+
 function decodeBlob(base64) {
   const binary = atob(base64 || '')
   const bytes = new Uint8Array(binary.length)
@@ -80,16 +87,7 @@ function d1Result(result) {
   }
 }
 
-async function pipeline(client, statements) {
-  const requests = statements.map((statement) => ({
-    type: 'execute',
-    stmt: {
-      sql: statement.sql,
-      ...(statement.args.length ? { args: statement.args.map(arg) } : {}),
-    },
-  }))
-  requests.push({ type: 'close' })
-
+async function postPipeline(client, requests) {
   const response = await fetch(`${client.url}/v2/pipeline`, {
     method: 'POST',
     headers: {
@@ -101,8 +99,13 @@ async function pipeline(client, statements) {
   })
   const payload = await response.json().catch(() => ({}))
   if (!response.ok) throw new Error(`Turso HTTP ${response.status}: ${JSON.stringify(payload).slice(0, 1000)}`)
+  return payload?.results || []
+}
 
-  const results = payload?.results || []
+async function pipeline(client, statements) {
+  const requests = statements.map((statement) => ({ type: 'execute', stmt: stmt(statement) }))
+  requests.push({ type: 'close' })
+  const results = await postPipeline(client, requests)
   return statements.map((_, index) => {
     const item = results[index]
     if (!item || item.type !== 'ok' || item.response?.type !== 'execute') {
@@ -111,6 +114,57 @@ async function pipeline(client, statements) {
     }
     return item.response.result || {}
   })
+}
+
+function ok(step) { return { type: 'ok', step } }
+function error(step) { return { type: 'error', step } }
+function and(...conds) { return { type: 'and', conds } }
+function or(...conds) { return { type: 'or', conds } }
+
+async function transactionalBatch(client, statements) {
+  if (!statements.length) return []
+
+  const steps = [{ stmt: { sql: 'BEGIN IMMEDIATE' } }]
+  statements.forEach((statement, index) => {
+    const stepIndex = index + 1
+    steps.push({ condition: ok(stepIndex - 1), stmt: stmt(statement) })
+  })
+
+  const lastUserStep = statements.length
+  const commitStep = steps.length
+  steps.push({ condition: ok(lastUserStep), stmt: { sql: 'COMMIT' } })
+  steps.push({
+    condition: and(
+      ok(0),
+      or(...Array.from({ length: statements.length }, (_, index) => error(index + 1)), error(commitStep)),
+    ),
+    stmt: { sql: 'ROLLBACK' },
+  })
+
+  const results = await postPipeline(client, [
+    { type: 'batch', batch: { steps } },
+    { type: 'close' },
+  ])
+  const item = results[0]
+  if (!item || item.type !== 'ok' || item.response?.type !== 'batch') {
+    const detail = item?.error?.message || item?.error || item || 'resposta ausente'
+    throw new Error(`Batch Turso falhou: ${typeof detail === 'string' ? detail : JSON.stringify(detail)}`)
+  }
+
+  const batch = item.response.result || {}
+  const stepResults = batch.step_results || []
+  const stepErrors = batch.step_errors || []
+  for (let index = 0; index < statements.length; index += 1) {
+    const stepIndex = index + 1
+    const failure = stepErrors[stepIndex]
+    if (failure) throw new Error(`Batch Turso falhou: ${failure.message || JSON.stringify(failure)}`)
+    if (!stepResults[stepIndex]) throw new Error(`Batch Turso não executou a instrução ${index + 1}.`)
+  }
+  const commitFailure = stepErrors[commitStep]
+  if (commitFailure || !stepResults[commitStep]) {
+    throw new Error(`Commit Turso falhou: ${commitFailure?.message || 'commit não executado'}`)
+  }
+  return statements.map((_, index) => stepResults[index + 1] || {})
 }
 
 class TursoStatement {
@@ -167,7 +221,7 @@ class TursoD1Database {
       }
       throw new TypeError('Turso batch recebeu uma instrução inválida.')
     })
-    const results = await pipeline(this.client, normalized)
+    const results = await transactionalBatch(this.client, normalized)
     return results.map(d1Result)
   }
 }
