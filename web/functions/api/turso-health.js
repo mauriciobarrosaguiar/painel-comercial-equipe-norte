@@ -11,6 +11,14 @@ const json = (body, status = 200) => new Response(JSON.stringify(body), {
 export async function onRequestGet({ env }) {
   try {
     const db = createTursoD1(env)
+    let envDbMutavel = false
+    try {
+      env.DB = db
+      envDbMutavel = env.DB === db
+    } catch {
+      envDbMutavel = false
+    }
+
     const results = await db.batch([
       db.prepare('SELECT 1 AS ok'),
       db.prepare("SELECT COUNT(*) total FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"),
@@ -23,6 +31,7 @@ export async function onRequestGet({ env }) {
     return json({
       ok: Number(results[0]?.results?.[0]?.ok || 0) === 1,
       backend: 'turso',
+      env_db_mutavel: envDbMutavel,
       tabelas: Number(results[1]?.results?.[0]?.total || 0),
       clientes: Number(results[2]?.results?.[0]?.total || 0),
       pedidos: Number(results[3]?.results?.[0]?.total || 0),
