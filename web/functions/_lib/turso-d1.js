@@ -34,7 +34,7 @@ function arg(value) {
     if (!Number.isFinite(value)) return { type: 'null' }
     return Number.isInteger(value)
       ? { type: 'integer', value: String(value) }
-      : { type: 'float', value: String(value) }
+      : { type: 'float', value }
   }
   const base64 = encodeBlob(value)
   if (base64 !== null) return { type: 'blob', base64 }
