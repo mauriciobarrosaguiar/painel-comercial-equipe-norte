@@ -1,0 +1,57 @@
+name: Migrar D1 para Turso
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "scripts/migrar_d1_turso.py"
+      - ".github/workflows/migrar-turso.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: migracao-d1-turso
+  cancel-in-progress: false
+
+jobs:
+  migrar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_API_TOKEN }}
+      CLOUDFLARE_D1_DATABASE: painel-equipe-norte-db
+      TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+      TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+
+    steps:
+      - name: Baixar repositório
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Instalar cliente HTTP
+        run: python -m pip install --disable-pip-version-check "requests>=2.34,<3"
+
+      - name: Validar credenciais obrigatórias
+        shell: bash
+        run: |
+          set -euo pipefail
+          for nome in CLOUDFLARE_ACCOUNT_ID CLOUDFLARE_API_TOKEN TURSO_DATABASE_URL TURSO_AUTH_TOKEN; do
+            if [ -z "${!nome:-}" ]; then
+              echo "::error::Secret obrigatório ausente: ${nome}"
+              exit 1
+            fi
+          done
+
+      - name: Validar sintaxe do migrador
+        run: python -m py_compile scripts/migrar_d1_turso.py
+
+      - name: Copiar schema e dados do D1 para o Turso
+        run: python scripts/migrar_d1_turso.py
