@@ -29,6 +29,7 @@ jobs:
             scripts/extrair_bussola_turso.py \
             scripts/aplicar_mix_sap_turso.py \
             scripts/importar_mercadofarma_turso_filtrado.py \
+            scripts/identificar_desafio_gigantes_turso.py \
             automacoes/mercadofarma_turso_atualizado.py
 
       - name: Configurar Node
