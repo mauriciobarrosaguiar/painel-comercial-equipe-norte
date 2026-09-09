@@ -102,6 +102,7 @@ jobs:
             "Fechamento automático após a virada do mês: metas congeladas e resultado faturado registrado no histórico."
 
           curl --fail-with-body --silent --show-error \
+            --header "x-admin-key: ${PAINEL_ADMIN_KEY}" \
             "${PAINEL_URL}/api/historico" > historico-mensal.json
 
           jq -r '.meses[]? | select(.origem == "FECHAMENTO") | .ano_mes' historico-mensal.json \
