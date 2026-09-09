@@ -1,4 +1,4 @@
-name: Extrair Bússola para D1
+name: Extrair Bússola para Turso
 
 on:
   workflow_dispatch:
@@ -12,7 +12,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: bussola-d1
+  group: bussola-turso
   cancel-in-progress: false
 
 jobs:
@@ -39,23 +39,27 @@ jobs:
         run: |
           google-chrome --version || chromium --version || chromium-browser --version
 
-      - name: Extrair Bússola e sincronizar D1
+      - name: Extrair Bússola e sincronizar Turso
         env:
           PYTHONPATH: ${{ github.workspace }}
           PAINEL_BASE_URL: https://painel-equipe-norte.pages.dev
           PAINEL_ADMIN_KEY: ${{ secrets.PAINEL_ADMIN_KEY }}
+          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_API_TOKEN }}
           CLOUDFLARE_D1_DATABASE: painel-equipe-norte-db
-        run: python scripts/extrair_bussola_d1_corrigido.py
+        run: python scripts/extrair_bussola_turso.py
 
-      - name: Aplicar classificação MIX por código SAP
+      - name: Aplicar classificação MIX por código SAP no Turso
         env:
           PYTHONPATH: ${{ github.workspace }}
+          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_API_TOKEN }}
           CLOUDFLARE_D1_DATABASE: painel-equipe-norte-db
-        run: python scripts/aplicar_mix_sap_d1.py
+        run: python scripts/aplicar_mix_sap_turso.py
 
       - name: Fechar mês anterior e reconciliar histórico
         env:
@@ -95,14 +99,11 @@ jobs:
 
           ANO_MES=$(date -d "$(date +%Y-%m-01) -1 month" +%Y-%m)
 
-          # Primeira extração do novo mês cria automaticamente o fechamento do mês anterior.
           fechar_mes \
             "$ANO_MES" \
             false \
             "Fechamento automático após a virada do mês: metas congeladas e resultado faturado registrado no histórico."
 
-          # Em toda nova extração, meses já fechados também são recalculados.
-          # A API só cria nova versão se o realizado mudou e mantém as metas originais congeladas.
           curl --fail-with-body --silent --show-error \
             "${PAINEL_URL}/api/historico" > historico-mensal.json
 
@@ -134,7 +135,7 @@ jobs:
           set -euo pipefail
           if [ "$RESULTADO" = "success" ]; then
             STATUS="concluido"
-            MENSAGEM="Extração do Bússola concluída pela credencial da GD, sincronizada, classificada pelo MIX, mês anterior fechado automaticamente e histórico reconciliado."
+            MENSAGEM="Extração do Bússola concluída pela credencial da GD, sincronizada no Turso, classificada pelo MIX, mês anterior fechado automaticamente e histórico reconciliado."
             ERRO=""
           else
             STATUS="erro"
