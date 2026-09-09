@@ -1,0 +1,49 @@
+name: Validar migração Turso
+
+on:
+  push:
+    branches:
+      - migracao-turso
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Validar Python Turso
+        run: |
+          python -m py_compile \
+            scripts/turso_backend.py \
+            scripts/extrair_bussola_turso.py \
+            scripts/aplicar_mix_sap_turso.py \
+            scripts/importar_mercadofarma_turso_filtrado.py \
+            automacoes/mercadofarma_turso_atualizado.py
+
+      - name: Configurar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Validar JavaScript Turso
+        run: |
+          node --check web/functions/_lib/turso-d1.js
+          node --check web/functions/api/_middleware.js
+          node --check web/functions/api/turso-health.js
+
+      - name: Compilar painel
+        working-directory: web
+        run: |
+          npm ci --ignore-scripts
+          npm run build
