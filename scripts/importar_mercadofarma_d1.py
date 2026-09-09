@@ -20,6 +20,44 @@ API_BASE = "https://api.cloudflare.com/client/v4"
 D1_MAX_BOUND_PARAMS = 100
 API_BATCH_STATEMENTS = 5
 
+COLUNAS_PRECOS = [
+    "id",
+    "uf",
+    "cnpj_referencia",
+    "produto_id",
+    "ean",
+    "produto",
+    "distribuidora",
+    "estoque",
+    "desconto",
+    "pf_distribuidora",
+    "pf_fabrica",
+    "preco_com_imposto",
+    "preco_sem_imposto",
+    "status",
+    "erro",
+    "atualizado_em",
+]
+CAMPOS_TEXTO_COMPARACAO = [
+    "id",
+    "uf",
+    "cnpj_referencia",
+    "produto_id",
+    "ean",
+    "produto",
+    "distribuidora",
+    "status",
+    "erro",
+]
+CAMPOS_NUMERICOS_COMPARACAO = [
+    "estoque",
+    "desconto",
+    "pf_distribuidora",
+    "pf_fabrica",
+    "preco_com_imposto",
+    "preco_sem_imposto",
+]
+
 
 def env_obrigatoria(nome: str) -> str:
     valor = str(os.environ.get(nome, "") or "").strip()
@@ -126,6 +164,8 @@ def executar_lotes(
     consultas: list[dict[str, Any]],
     tamanho: int = API_BATCH_STATEMENTS,
 ) -> None:
+    if not consultas:
+        return
     url = f"{API_BASE}/accounts/{ACCOUNT_ID}/d1/database/{database_id}/query"
     for inicio in range(0, len(consultas), tamanho):
         bloco = consultas[inicio : inicio + tamanho]
@@ -269,6 +309,46 @@ def consultas_multiplos_valores(
     return consultas
 
 
+def linhas_d1(dados: dict[str, Any]) -> list[dict[str, Any]]:
+    resultados = dados.get("result") or []
+    if not resultados or not isinstance(resultados[0], dict):
+        return []
+    linhas = resultados[0].get("results") or []
+    return [item for item in linhas if isinstance(item, dict)]
+
+
+def chave_preco(registro: dict[str, Any]) -> tuple[str, str, str]:
+    return (
+        texto(registro.get("uf")).upper(),
+        texto(registro.get("ean")),
+        texto(registro.get("distribuidora")),
+    )
+
+
+def preco_mudou(atual: dict[str, Any], desejado: dict[str, Any]) -> bool:
+    for campo in CAMPOS_TEXTO_COMPARACAO:
+        if texto(atual.get(campo)) != texto(desejado.get(campo)):
+            return True
+    for campo in CAMPOS_NUMERICOS_COMPARACAO:
+        if abs(numero(atual.get(campo)) - numero(desejado.get(campo))) > 0.000001:
+            return True
+    return False
+
+
+def consultas_exclusao(ids: list[str]) -> list[dict[str, Any]]:
+    consultas: list[dict[str, Any]] = []
+    for inicio in range(0, len(ids), D1_MAX_BOUND_PARAMS):
+        bloco = ids[inicio : inicio + D1_MAX_BOUND_PARAMS]
+        marcadores = ",".join("?" for _ in bloco)
+        consultas.append(
+            {
+                "sql": f"DELETE FROM mercado_farma_precos WHERE id IN ({marcadores})",
+                "params": bloco,
+            }
+        )
+    return consultas
+
+
 def sincronizar() -> None:
     base = carregar_base()
     database_id = localizar_database_id()
@@ -296,40 +376,7 @@ def sincronizar() -> None:
     )
 
     try:
-        executar(
-            database_id,
-            """
-            CREATE TABLE IF NOT EXISTS mercado_farma_precos_staging (
-              run_id TEXT NOT NULL,
-              id TEXT NOT NULL,
-              uf TEXT NOT NULL,
-              cnpj_referencia TEXT,
-              produto_id TEXT,
-              ean TEXT NOT NULL,
-              produto TEXT,
-              distribuidora TEXT NOT NULL,
-              estoque REAL NOT NULL DEFAULT 0,
-              desconto REAL NOT NULL DEFAULT 0,
-              pf_distribuidora REAL NOT NULL DEFAULT 0,
-              pf_fabrica REAL NOT NULL DEFAULT 0,
-              preco_com_imposto REAL NOT NULL DEFAULT 0,
-              preco_sem_imposto REAL NOT NULL DEFAULT 0,
-              status TEXT,
-              erro TEXT,
-              atualizado_em TEXT NOT NULL
-            );
-            CREATE INDEX IF NOT EXISTS idx_mf_staging_run
-              ON mercado_farma_precos_staging(run_id);
-            """,
-        )
-        executar(
-            database_id,
-            (
-                "DELETE FROM mercado_farma_precos_staging "
-                "WHERE atualizado_em < datetime('now','-2 days')"
-            ),
-        )
-
+        # Produtos: grava apenas novos EANs ou produtos cujo cadastro realmente mudou.
         colunas_produtos = [
             "id",
             "ean",
@@ -367,125 +414,112 @@ def sincronizar() -> None:
                 "descricao=excluded.descricao,"
                 "laboratorio=excluded.laboratorio,"
                 "ativo=1,"
-                "atualizado_em=excluded.atualizado_em"
+                "atualizado_em=excluded.atualizado_em "
+                "WHERE COALESCE(produtos.descricao,'')<>COALESCE(excluded.descricao,'') "
+                "OR COALESCE(produtos.laboratorio,'')<>COALESCE(excluded.laboratorio,'') "
+                "OR COALESCE(produtos.ativo,0)<>1"
             ),
         )
         executar_lotes(database_id, consultas_produtos)
 
-        colunas_staging = [
-            "run_id",
-            "id",
-            "uf",
-            "cnpj_referencia",
-            "produto_id",
-            "ean",
-            "produto",
-            "distribuidora",
-            "estoque",
-            "desconto",
-            "pf_distribuidora",
-            "pf_fabrica",
-            "preco_com_imposto",
-            "preco_sem_imposto",
-            "status",
-            "erro",
-            "atualizado_em",
-        ]
-        linhas_staging: list[list[Any]] = []
+        # Carrega o estado atual somente para leitura. A partir daqui o D1 recebe
+        # escrita apenas para linhas novas, alteradas ou removidas.
+        atuais: dict[tuple[str, str, str], dict[str, Any]] = {}
+        for uf in ufs:
+            dados = executar(
+                database_id,
+                """
+                SELECT
+                  id,uf,cnpj_referencia,produto_id,ean,produto,distribuidora,
+                  estoque,desconto,pf_distribuidora,pf_fabrica,
+                  preco_com_imposto,preco_sem_imposto,status,erro,atualizado_em
+                FROM mercado_farma_precos
+                WHERE UPPER(TRIM(uf))=?
+                """,
+                [uf],
+            )
+            for registro in linhas_d1(dados):
+                atuais[chave_preco(registro)] = registro
+
+        desejados: dict[tuple[str, str, str], dict[str, Any]] = {}
         for item in base.itertuples(index=False):
-            uf = texto(item.UF)
+            uf = texto(item.UF).upper()
             ean = texto(item.EAN)
             distribuidora = texto(item.DISTRIBUIDORA)
             atualizado = texto(item.DATA_ATUALIZACAO) or timestamp
-            linhas_staging.append(
-                [
-                    run_uuid,
-                    id_estavel("mf", uf, ean, distribuidora),
-                    uf,
-                    texto(item.CNPJ_REFERENCIA),
-                    id_estavel("prod", ean),
-                    ean,
-                    texto(item.PRODUTO),
-                    distribuidora,
-                    numero(item.ESTOQUE),
-                    numero(item.DESCONTO),
-                    numero(item.PF_DIST),
-                    numero(item.PF_FABRICA),
-                    numero(item.PRECO_COM_IMPOSTO),
-                    numero(item.PRECO_SEM_IMPOSTO),
-                    texto(item.STATUS),
-                    texto(item.ERRO),
-                    atualizado,
-                ]
-            )
+            registro = {
+                "id": id_estavel("mf", uf, ean, distribuidora),
+                "uf": uf,
+                "cnpj_referencia": texto(item.CNPJ_REFERENCIA),
+                "produto_id": id_estavel("prod", ean),
+                "ean": ean,
+                "produto": texto(item.PRODUTO),
+                "distribuidora": distribuidora,
+                "estoque": numero(item.ESTOQUE),
+                "desconto": numero(item.DESCONTO),
+                "pf_distribuidora": numero(item.PF_DIST),
+                "pf_fabrica": numero(item.PF_FABRICA),
+                "preco_com_imposto": numero(item.PRECO_COM_IMPOSTO),
+                "preco_sem_imposto": numero(item.PRECO_SEM_IMPOSTO),
+                "status": texto(item.STATUS),
+                "erro": texto(item.ERRO),
+                "atualizado_em": atualizado,
+            }
+            desejados[chave_preco(registro)] = registro
 
-        consultas_staging = consultas_multiplos_valores(
-            "mercado_farma_precos_staging",
-            colunas_staging,
-            linhas_staging,
-            "",
-        )
-        executar_lotes(database_id, consultas_staging)
+        novos = 0
+        alterados = 0
+        linhas_gravar: list[list[Any]] = []
+        for chave, desejado in desejados.items():
+            atual = atuais.get(chave)
+            if atual is None:
+                novos += 1
+            elif not preco_mudou(atual, desejado):
+                continue
+            else:
+                alterados += 1
+            linhas_gravar.append([desejado[coluna] for coluna in COLUNAS_PRECOS])
 
-        executar(
-            database_id,
-            """
-            INSERT INTO mercado_farma_precos (
-              id,uf,cnpj_referencia,produto_id,ean,produto,distribuidora,
-              estoque,desconto,pf_distribuidora,pf_fabrica,
-              preco_com_imposto,preco_sem_imposto,status,erro,atualizado_em
-            )
-            SELECT
-              id,uf,cnpj_referencia,produto_id,ean,produto,distribuidora,
-              estoque,desconto,pf_distribuidora,pf_fabrica,
-              preco_com_imposto,preco_sem_imposto,status,erro,atualizado_em
-            FROM mercado_farma_precos_staging
-            WHERE run_id = ?
-            ON CONFLICT(uf,ean,distribuidora) DO UPDATE SET
-              id=excluded.id,
-              cnpj_referencia=excluded.cnpj_referencia,
-              produto_id=excluded.produto_id,
-              produto=excluded.produto,
-              estoque=excluded.estoque,
-              desconto=excluded.desconto,
-              pf_distribuidora=excluded.pf_distribuidora,
-              pf_fabrica=excluded.pf_fabrica,
-              preco_com_imposto=excluded.preco_com_imposto,
-              preco_sem_imposto=excluded.preco_sem_imposto,
-              status=excluded.status,
-              erro=excluded.erro,
-              atualizado_em=excluded.atualizado_em
-            """,
-            [run_uuid],
+        conflito_precos = (
+            "ON CONFLICT(uf,ean,distribuidora) DO UPDATE SET "
+            "id=excluded.id,"
+            "cnpj_referencia=excluded.cnpj_referencia,"
+            "produto_id=excluded.produto_id,"
+            "produto=excluded.produto,"
+            "estoque=excluded.estoque,"
+            "desconto=excluded.desconto,"
+            "pf_distribuidora=excluded.pf_distribuidora,"
+            "pf_fabrica=excluded.pf_fabrica,"
+            "preco_com_imposto=excluded.preco_com_imposto,"
+            "preco_sem_imposto=excluded.preco_sem_imposto,"
+            "status=excluded.status,"
+            "erro=excluded.erro,"
+            "atualizado_em=excluded.atualizado_em"
         )
+        consultas_precos = consultas_multiplos_valores(
+            "mercado_farma_precos",
+            COLUNAS_PRECOS,
+            linhas_gravar,
+            conflito_precos,
+        )
+        executar_lotes(database_id, consultas_precos)
 
-        marcadores_uf = ",".join("?" for _ in ufs)
-        executar(
-            database_id,
-            f"""
-            DELETE FROM mercado_farma_precos
-            WHERE uf IN ({marcadores_uf})
-              AND NOT EXISTS (
-                SELECT 1
-                FROM mercado_farma_precos_staging s
-                WHERE s.run_id = ?
-                  AND s.uf = mercado_farma_precos.uf
-                  AND s.ean = mercado_farma_precos.ean
-                  AND s.distribuidora = mercado_farma_precos.distribuidora
-              )
-            """,
-            [*ufs, run_uuid],
-        )
-        executar(
-            database_id,
-            "DELETE FROM mercado_farma_precos_staging WHERE run_id = ?",
-            [run_uuid],
-        )
+        chaves_removidas = set(atuais) - set(desejados)
+        ids_remover = [
+            texto(atuais[chave].get("id"))
+            for chave in chaves_removidas
+            if texto(atuais[chave].get("id"))
+        ]
+        executar_lotes(database_id, consultas_exclusao(ids_remover))
 
         resumo = json.dumps(
             {
                 "registros": int(len(base)),
                 "ufs": ufs,
+                "novos": novos,
+                "alterados": alterados,
+                "removidos": len(ids_remover),
+                "gravacoes_precos": len(linhas_gravar) + len(ids_remover),
                 "sincronizado_em": timestamp,
             },
             ensure_ascii=False,
@@ -510,14 +544,20 @@ def sincronizar() -> None:
             ),
             [
                 len(base),
-                f"Mercado Farma sincronizado para {', '.join(ufs)}",
+                (
+                    f"Mercado Farma sincronizado para {', '.join(ufs)}. "
+                    f"D1: {novos} novos, {alterados} alterados e "
+                    f"{len(ids_remover)} removidos."
+                ),
                 timestamp,
                 extracao_id,
             ],
         )
         print(
-            "Mercado Farma sincronizado com sucesso: "
-            f"{len(base)} registros, UFs {', '.join(ufs)}."
+            "Mercado Farma sincronizado com escrita incremental: "
+            f"{len(base)} registros analisados; "
+            f"{novos} novos, {alterados} alterados, "
+            f"{len(ids_remover)} removidos."
         )
     except Exception as exc:
         try:
