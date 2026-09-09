@@ -4,12 +4,12 @@ const AGENDAVEIS = new Map([
   ['BUSSOLA', {
     nome: 'Bússola',
     descricao: 'Atualiza pedidos, faturamento, clientes e indicadores comerciais.',
-    padrao: 30,
+    padrao: 300,
   }],
   ['MERCADO_FARMA', {
     nome: 'Mercado Farma',
     descricao: 'Atualiza preços e estoques das UFs configuradas.',
-    padrao: 30,
+    padrao: 720,
   }],
   ['AUDITORIA', {
     nome: 'Auditoria dos cálculos',
