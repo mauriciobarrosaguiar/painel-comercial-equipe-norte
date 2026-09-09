@@ -21,6 +21,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # Esta validação também serve como barreira de corte: o painel só pode
+          # trocar o D1 pelo Turso depois que pedidos e itens estiverem carregados.
           URL="https://painel-equipe-norte.pages.dev/api/turso-health"
           if [ -z "${PAINEL_ADMIN_KEY:-}" ]; then
             echo "::error::PAINEL_ADMIN_KEY ausente."
