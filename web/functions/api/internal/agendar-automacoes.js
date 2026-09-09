@@ -1,6 +1,11 @@
 import { authorized, json } from '../../_lib/credentials.js'
 
 const AGENDAVEIS = new Set(['BUSSOLA', 'MERCADO_FARMA', 'AUDITORIA'])
+const INTERVALOS_MINIMOS = new Map([
+  ['BUSSOLA', 300],
+  ['MERCADO_FARMA', 720],
+  ['AUDITORIA', 1440],
+])
 const texto = value => String(value ?? '').trim()
 const numero = value => Number.isFinite(Number(value)) ? Number(value) : 0
 
@@ -67,7 +72,9 @@ export async function onRequestPost({ request, env }) {
         continue
       }
 
-      const intervalo = Math.min(10080, Math.max(5, Math.trunc(numero(configuracao.intervalo_minutos) || 30)))
+      const minimo = INTERVALOS_MINIMOS.get(tipo) || 5
+      const intervaloSolicitado = Math.trunc(numero(configuracao.intervalo_minutos) || minimo)
+      const intervalo = Math.min(10080, Math.max(minimo, intervaloSolicitado))
       const id = `cmd-${crypto.randomUUID()}`
       const parametrosSalvos = parametros(configuracao.parametros_json)
       if (tipo === 'MERCADO_FARMA' && !texto(parametrosSalvos.ufs)) {
@@ -101,9 +108,9 @@ export async function onRequestPost({ request, env }) {
       const proxima = new Date(agora.getTime() + intervalo * 60_000).toISOString()
       await env.DB.prepare(`
         UPDATE configuracoes_automacao
-           SET ultima_execucao_em=?,proxima_execucao_em=?,atualizado_em=?
+           SET intervalo_minutos=?,ultima_execucao_em=?,proxima_execucao_em=?,atualizado_em=?
          WHERE tipo=?
-      `).bind(agoraIso, proxima, agoraIso, tipo).run()
+      `).bind(intervalo, agoraIso, proxima, agoraIso, tipo).run()
 
       agendados.push({ id, tipo, intervalo_minutos: intervalo, proxima_execucao_em: proxima })
     }
