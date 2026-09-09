@@ -93,13 +93,34 @@ jobs:
             exit 1
           fi
 
-      - name: Confirmar dashboard e banco D1
+      - name: Confirmar dashboard usando Turso
         shell: bash
         run: |
           set -euo pipefail
-          codigo=$(curl --silent --show-error --cookie cookies-m0043497.txt --output dashboard.json --write-out '%{http_code}' \
-            "${PAINEL_URL}/api/dashboard?periodo=mes-atual")
-          test "$codigo" = "200"
+          pronto=0
+          for tentativa in $(seq 1 36); do
+            codigo=$(curl --silent --show-error \
+              --cookie cookies-m0043497.txt \
+              --dump-header dashboard.headers \
+              --output dashboard.json \
+              --write-out '%{http_code}' \
+              "${PAINEL_URL}/api/dashboard?periodo=mes-atual" || true)
+
+            backend=$(awk 'BEGIN{IGNORECASE=1} /^x-db-backend:/ {gsub("\r", "", $2); print tolower($2)}' dashboard.headers | tail -n 1)
+            if [ "$codigo" = "200" ] && [ "$backend" = "turso" ]; then
+              pronto=1
+              break
+            fi
+            echo "Aguardando dashboard no Turso (${tentativa}/36, HTTP ${codigo}, backend=${backend:-ausente})."
+            sleep 10
+          done
+
+          if [ "$pronto" != "1" ]; then
+            echo "Dashboard não confirmou o Turso como banco de produção."
+            cat dashboard.json || true
+            exit 1
+          fi
+
           python - <<'PY'
           import json
           with open('dashboard.json', encoding='utf-8') as arquivo:
@@ -108,7 +129,7 @@ jobs:
           ausentes = [campo for campo in obrigatorios if campo not in dados]
           if ausentes:
               raise SystemExit(f'Campos ausentes no dashboard: {ausentes}')
-          print('Produção validada com seis acessos, D1 e dashboard ativos.')
+          print('Produção validada com seis acessos, Turso e dashboard ativos.')
           PY
 
       - name: Publicar resultado da produção
@@ -122,7 +143,7 @@ jobs:
           descricao="Validação da produção falhou"
           if [ "$RESULTADO_JOB" = "success" ]; then
             estado=success
-            descricao="Seis acessos, D1, dashboard e instalação validados"
+            descricao="Seis acessos, Turso, dashboard e instalação validados"
           fi
           gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" \
             -f state="$estado" \
