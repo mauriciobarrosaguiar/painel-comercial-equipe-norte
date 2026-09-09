@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import os
 import re
 import sys
@@ -29,18 +28,26 @@ TURSO_HEADERS = {
 SKIP_TABLES = {"d1_migrations", "_cf_KV"}
 
 
-def request_json(method: str, url: str, *, headers: dict[str, str], payload: dict[str, Any] | None = None) -> dict[str, Any]:
+def request_json(
+    method: str,
+    url: str,
+    *,
+    headers: dict[str, str],
+    payload: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     last = ""
     for attempt in range(1, 6):
         response = requests.request(method, url, headers=headers, json=payload, timeout=120)
         if response.status_code == 429 or response.status_code >= 500:
             last = f"HTTP {response.status_code}: {response.text[:500]}"
-            time.sleep(min(2 ** attempt, 20))
+            time.sleep(min(2**attempt, 20))
             continue
         try:
             data = response.json()
         except ValueError as exc:
-            raise RuntimeError(f"Resposta inválida HTTP {response.status_code}: {response.text[:500]}") from exc
+            raise RuntimeError(
+                f"Resposta inválida HTTP {response.status_code}: {response.text[:500]}"
+            ) from exc
         if not response.ok:
             raise RuntimeError(f"HTTP {response.status_code}: {data}")
         return data
@@ -92,6 +99,13 @@ def turso_value(value: Any) -> dict[str, Any]:
         return {"type": "integer", "value": str(value)}
     if isinstance(value, float):
         return {"type": "float", "value": str(value)}
+    if isinstance(value, (bytes, bytearray, memoryview)):
+        import base64
+
+        return {
+            "type": "blob",
+            "base64": base64.b64encode(bytes(value)).decode("ascii"),
+        }
     return {"type": "text", "value": str(value)}
 
 
@@ -146,7 +160,7 @@ def schema_objects() -> list[dict[str, Any]]:
 
 def table_columns(table: str) -> list[str]:
     rows = d1_query(f"PRAGMA table_xinfo({quote_ident(table)})")
-    cols = []
+    cols: list[str] = []
     for row in rows:
         try:
             hidden = int(row.get("hidden") or 0)
@@ -157,7 +171,44 @@ def table_columns(table: str) -> list[str]:
     return cols
 
 
-def copy_table(table: str, *, page_size: int = 500, insert_batch: int = 50) -> int:
+def foreign_key_parents(table: str, valid_tables: set[str]) -> set[str]:
+    parents: set[str] = set()
+    for row in d1_query(f"PRAGMA foreign_key_list({quote_ident(table)})"):
+        parent = str(row.get("table") or "").strip()
+        if parent and parent != table and parent in valid_tables:
+            parents.add(parent)
+    return parents
+
+
+def order_tables(tables: list[str]) -> list[str]:
+    valid = set(tables)
+    dependencies = {table: foreign_key_parents(table, valid) for table in tables}
+    ordered: list[str] = []
+    pending = set(tables)
+
+    while pending:
+        ready = sorted(
+            table
+            for table in pending
+            if not (dependencies.get(table, set()) & pending)
+        )
+        if not ready:
+            # Ciclo de FK: mantém ordem estável. A cópia usa FK OFF por lote como
+            # contingência, preservando exatamente os dados já válidos no D1.
+            ready = [sorted(pending)[0]]
+        for table in ready:
+            ordered.append(table)
+            pending.remove(table)
+
+    return ordered
+
+
+def copy_table(
+    table: str,
+    *,
+    page_size: int = 500,
+    insert_batch: int = 50,
+) -> int:
     columns = table_columns(table)
     if not columns:
         print(f"[skip] {table}: sem colunas copiáveis")
@@ -182,7 +233,15 @@ def copy_table(table: str, *, page_size: int = 500, insert_batch: int = 50) -> i
                 + ",".join(placeholders for _ in chunk)
             )
             args = [row.get(col) for row in chunk for col in columns]
-            turso_pipeline([(sql, args)])
+            # Cada pipeline usa uma conexão única. Desabilitamos FK somente neste
+            # lote de cópia para suportar ciclos e relações antigas já válidas no D1.
+            turso_pipeline(
+                [
+                    ("PRAGMA foreign_keys=OFF", []),
+                    (sql, args),
+                    ("PRAGMA foreign_keys=ON", []),
+                ]
+            )
 
         total += len(rows)
         offset += len(rows)
@@ -211,12 +270,14 @@ def main() -> None:
 
     objects = schema_objects()
     tables = [
-        obj for obj in objects
+        obj
+        for obj in objects
         if obj.get("type") == "table"
         and str(obj.get("name") or "") not in SKIP_TABLES
     ]
     later = [
-        obj for obj in objects
+        obj
+        for obj in objects
         if obj.get("type") in {"view", "index", "trigger"}
         and str(obj.get("tbl_name") or "") not in SKIP_TABLES
     ]
@@ -227,12 +288,20 @@ def main() -> None:
         if not sql:
             continue
         if "IF NOT EXISTS" not in sql.upper():
-            sql = re.sub(r"(?i)^CREATE\s+TABLE\s+", "CREATE TABLE IF NOT EXISTS ", sql, count=1)
+            sql = re.sub(
+                r"(?i)^CREATE\s+TABLE\s+",
+                "CREATE TABLE IF NOT EXISTS ",
+                sql,
+                count=1,
+            )
         turso_pipeline([(sql, [])])
 
+    table_names = [str(obj["name"]) for obj in tables]
+    ordered_tables = order_tables(table_names)
+    print("Ordem de cópia calculada por chaves estrangeiras.")
+
     copied: dict[str, int] = {}
-    for obj in tables:
-        table = str(obj["name"])
+    for table in ordered_tables:
         copied[table] = copy_table(table)
 
     for obj in later:
@@ -243,24 +312,52 @@ def main() -> None:
         name = str(obj.get("name") or "")
         if "IF NOT EXISTS" not in sql.upper():
             if obj_type == "INDEX":
-                sql = re.sub(r"(?i)^CREATE\s+UNIQUE\s+INDEX\s+", "CREATE UNIQUE INDEX IF NOT EXISTS ", sql, count=1)
-                sql = re.sub(r"(?i)^CREATE\s+INDEX\s+", "CREATE INDEX IF NOT EXISTS ", sql, count=1)
+                sql = re.sub(
+                    r"(?i)^CREATE\s+UNIQUE\s+INDEX\s+",
+                    "CREATE UNIQUE INDEX IF NOT EXISTS ",
+                    sql,
+                    count=1,
+                )
+                sql = re.sub(
+                    r"(?i)^CREATE\s+INDEX\s+",
+                    "CREATE INDEX IF NOT EXISTS ",
+                    sql,
+                    count=1,
+                )
             elif obj_type == "VIEW":
-                sql = re.sub(r"(?i)^CREATE\s+VIEW\s+", "CREATE VIEW IF NOT EXISTS ", sql, count=1)
+                sql = re.sub(
+                    r"(?i)^CREATE\s+VIEW\s+",
+                    "CREATE VIEW IF NOT EXISTS ",
+                    sql,
+                    count=1,
+                )
             elif obj_type == "TRIGGER":
-                sql = re.sub(r"(?i)^CREATE\s+TRIGGER\s+", "CREATE TRIGGER IF NOT EXISTS ", sql, count=1)
+                sql = re.sub(
+                    r"(?i)^CREATE\s+TRIGGER\s+",
+                    "CREATE TRIGGER IF NOT EXISTS ",
+                    sql,
+                    count=1,
+                )
         try:
             turso_pipeline([(sql, [])])
         except Exception as exc:
             print(f"[aviso] não foi possível recriar {obj_type} {name}: {exc}")
 
-    mismatches = []
+    mismatches: list[tuple[str, int, int]] = []
     for table, expected in copied.items():
         actual = scalar_turso(f"SELECT COUNT(*) FROM {quote_ident(table)}")
         actual_int = int(actual or 0)
         if actual_int != expected:
             mismatches.append((table, expected, actual_int))
         print(f"[ok] {table}: D1={expected} Turso={actual_int}")
+
+    fk_check = turso_pipeline([("PRAGMA foreign_key_check", [])])[0]
+    fk_rows = fk_check.get("rows") or []
+    if fk_rows:
+        print(
+            f"[aviso] O Turso reportou {len(fk_rows)} divergências de FK já presentes nos dados copiados.",
+            file=sys.stderr,
+        )
 
     if mismatches:
         print("Divergências encontradas:", mismatches, file=sys.stderr)
