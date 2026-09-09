@@ -42,11 +42,13 @@ jobs:
               and (.tabelas | tonumber) > 0
               and (.clientes | tonumber) > 0
               and (.produtos | tonumber) > 0
+              and (.pedidos | tonumber) > 0
+              and (.itens_pedido | tonumber) > 0
             ' resposta.json >/dev/null 2>&1; then
               jq . resposta.json
               exit 0
             fi
             sleep 10
           done
-          echo "::error::O Turso ainda não está pronto para assumir o binding DB em produção."
+          echo "::error::O Turso ainda não recebeu os pedidos e itens necessários para assumir a produção."
           exit 1
