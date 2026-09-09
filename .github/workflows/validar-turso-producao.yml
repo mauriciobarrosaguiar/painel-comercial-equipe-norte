@@ -25,11 +25,18 @@ jobs:
             echo "Tentativa ${tentativa}: HTTP ${STATUS}"
             cat resposta.json || true
             echo
-            if [ "$STATUS" = "200" ] && jq -e '.ok == true and .backend == "turso"' resposta.json >/dev/null 2>&1; then
+            if [ "$STATUS" = "200" ] && jq -e '
+              .ok == true
+              and .backend == "turso"
+              and .env_db_mutavel == true
+              and (.tabelas | tonumber) > 0
+              and (.clientes | tonumber) > 0
+              and (.produtos | tonumber) > 0
+            ' resposta.json >/dev/null 2>&1; then
               jq . resposta.json
               exit 0
             fi
             sleep 10
           done
-          echo "::error::O diagnóstico Turso não ficou saudável em produção."
+          echo "::error::O Turso ainda não está pronto para assumir o binding DB em produção."
           exit 1
