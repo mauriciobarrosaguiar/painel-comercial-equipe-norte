@@ -1,0 +1,125 @@
+name: Importar metas e MIX SET26
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/importar-metas-mix-set26.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: importar-metas-mix-set26
+  cancel-in-progress: false
+
+jobs:
+  importar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Baixar repositório
+        uses: actions/checkout@v4
+
+      - name: Conferir arquivo preparado
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(jq '.rows | length' data/metas_mix_set26.json)" -eq 6
+          test "$(jq '[.rows[] | select(.escopo == "consultor")] | length' data/metas_mix_set26.json)" -eq 5
+          test "$(jq '[.rows[] | select(.escopo == "gerente")] | length' data/metas_mix_set26.json)" -eq 1
+          test "$(jq '.mix_rows | length' data/metas_mix_set26.json)" -eq 172
+          test "$(jq '[.mix_rows[] | select(.tipo_mix == "PRIORITARIO")] | length' data/metas_mix_set26.json)" -eq 96
+          test "$(jq '[.mix_rows[] | select(.tipo_mix == "LANCAMENTO")] | length' data/metas_mix_set26.json)" -eq 52
+          test "$(jq '[.mix_rows[] | select(.tipo_mix == "COMBATE")] | length' data/metas_mix_set26.json)" -eq 24
+          echo "Arquivo conferido: 5 consultores + 1 GD; 96 prioritários, 52 lançamentos e 24 combate."
+
+      - name: Aguardar publicação da proteção de filtro
+        run: sleep 45
+
+      - name: Importar metas e MIX no painel
+        env:
+          PAINEL_URL: https://painel-equipe-norte.pages.dev
+          PAINEL_ADMIN_KEY: ${{ secrets.PAINEL_ADMIN_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail-with-body --silent --show-error \
+            --request POST "${PAINEL_URL}/api/admin/bases" \
+            --header "x-admin-key: ${PAINEL_ADMIN_KEY}" \
+            --header "content-type: application/json" \
+            --data @data/metas_mix_set26.json \
+            | tee resultado-importacao.json
+          echo
+          jq . resultado-importacao.json
+          test "$(jq -r '.sucesso // false' resultado-importacao.json)" = "true"
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Instalar cliente HTTP
+        run: python -m pip install --disable-pip-version-check "requests>=2.34,<3"
+
+      - name: Reaplicar classificação no Turso
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+        run: python scripts/aplicar_mix_sap_turso.py
+
+      - name: Validar metas e MIX gravados
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from scripts import turso_backend as turso
+
+          db = turso.database_id()
+
+          def rows(sql, params=None):
+              return turso.linhas(turso.executar(db, sql, params or []))
+
+          metas = rows("SELECT escopo, COUNT(*) AS total FROM metas WHERE ano_mes=? GROUP BY escopo ORDER BY escopo", ["2026-09"])
+          contagem_metas = {str(r.get("escopo")): int(r.get("total") or 0) for r in metas}
+          print("Metas SET/26:", contagem_metas)
+          if contagem_metas.get("consultor") != 5 or contagem_metas.get("gerente") != 1:
+              raise SystemExit(f"Quantidade inesperada de metas: {contagem_metas}")
+
+          mauricio = rows("""
+              SELECT m.ol_sem_combate, m.ol_prioritarios, m.ol_lancamentos, m.demanda_sem_combate
+                FROM metas m
+                JOIN consultores c ON c.id=m.consultor_id
+               WHERE m.ano_mes='2026-09' AND m.escopo='consultor'
+                 AND UPPER(TRIM(c.nome))='MAURICIO BARROS DE AGUIAR'
+               LIMIT 1
+          """)
+          if not mauricio:
+              raise SystemExit("Meta de Mauricio não encontrada.")
+          m = mauricio[0]
+          print("Meta Mauricio:", m)
+          if abs(float(m.get("ol_sem_combate") or 0) - 210867.5353579919) > 0.01:
+              raise SystemExit("Meta OL Sem Combate de Mauricio divergiu do arquivo.")
+
+          mix = rows("SELECT tipo_mix, COUNT(*) AS total FROM produtos_mix_sap WHERE ativo=1 GROUP BY tipo_mix")
+          contagem_mix = {str(r.get("tipo_mix")): int(r.get("total") or 0) for r in mix}
+          print("MIX ativo:", contagem_mix)
+          esperado = {"PRIORITARIO": 96, "LANCAMENTO": 52, "COMBATE": 24}
+          if any(contagem_mix.get(k) != v for k, v in esperado.items()) or sum(contagem_mix.values()) != 172:
+              raise SystemExit(f"MIX divergente. Esperado {esperado}; obtido {contagem_mix}")
+
+          produtos = rows("SELECT COUNT(*) AS total, SUM(CASE WHEN tipo_mix IS NULL OR TRIM(tipo_mix)='' OR tipo_mix='SEM CLASSIFICACAO' THEN 1 ELSE 0 END) AS sem_mix FROM produtos WHERE ativo=1")
+          p = produtos[0]
+          print(f"Produtos ativos: {p.get('total')}; sem classificação: {p.get('sem_mix')}")
+          if int(p.get("total") or 0) <= 0 or int(p.get("sem_mix") or 0) != 0:
+              raise SystemExit("Ainda existem produtos ativos sem classificação após a importação.")
+
+          print("IMPORTACAO_METAS_MIX_SET26_OK")
+          PY
