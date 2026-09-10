@@ -1,6 +1,7 @@
 import { onRequestGet as obterBases, onRequestPost as importarBases } from './bases-v2.js'
 import { onRequestPost as fecharMes } from '../internal/fechamento-mensal.js'
 import { onRequestPost as dispararDesafioSap } from '../desafio-gigantes-disparar.js'
+import { salvarArquivoDesafioGigantes } from '../../_lib/desafio-gigantes-arquivo.js'
 
 const texto = (value) => String(value ?? '').trim()
 const digitos = (value) => texto(value).replace(/\D/g, '')
@@ -253,6 +254,17 @@ export async function onRequestPost(context) {
 
   let resultado = {}
   try { resultado = await response.json() } catch {}
+
+  let arquivoOriginal = { salvo: false }
+  try {
+    arquivoOriginal = await salvarArquivoDesafioGigantes(context.env, body)
+  } catch (error) {
+    arquivoOriginal = {
+      salvo: false,
+      erro: `Metas importadas, mas não foi possível guardar o arquivo original: ${error instanceof Error ? error.message : String(error)}`,
+    }
+  }
+
   let automacaoSap = { acionada: false, status: 'erro', mensagem: 'A planilha foi importada, mas a verificação SAP não pôde ser acionada.' }
   try {
     const disparo = await acionarSapAposImportacao(contextoImportacao)
@@ -265,7 +277,7 @@ export async function onRequestPost(context) {
   } catch (error) {
     automacaoSap.mensagem = `A planilha foi importada, mas o disparo SAP falhou: ${error instanceof Error ? error.message : String(error)}`
   }
-  return new Response(JSON.stringify({ ...resultado, automacao_sap: automacaoSap }), {
+  return new Response(JSON.stringify({ ...resultado, arquivo_original: arquivoOriginal, automacao_sap: automacaoSap }), {
     status: response.status,
     headers: response.headers,
   })
