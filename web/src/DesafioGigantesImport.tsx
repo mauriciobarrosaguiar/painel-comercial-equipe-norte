@@ -37,6 +37,11 @@ async function lerArquivo(file:File){
   const matriz=(n:string):unknown[][]=>wb.find(({sheet})=>sheet===n)?.data||[]
   return [...lerAba(matriz(consultar)),...lerAba(matriz(gd),true)]
 }
+async function arquivoParaBase64(file:File){
+  const bytes=new Uint8Array(await file.arrayBuffer());let binary='';const chunk=0x8000
+  for(let i=0;i<bytes.length;i+=chunk)binary+=String.fromCharCode(...bytes.subarray(i,i+chunk))
+  return btoa(binary)
+}
 
 export default function DesafioGigantesImport(){
   const [mes,setMes]=useState(mesAtual());const [status,setStatus]=useState<Status>(EMPTY)
@@ -51,11 +56,13 @@ export default function DesafioGigantesImport(){
     setCarregando(true);setErro('');setMensagem('')
     try{
       const rows=await lerArquivo(file)
-      const res=await fetch('/api/admin/bases',{method:'POST',cache:'no-store',headers:{'content-type':'application/json'},body:JSON.stringify({tipo:'desafio_gigantes',rows,nome_arquivo:file.name,ano_mes:mes})})
-      const data=await res.json() as {erro?:string;total?:number;consultores?:number;gerentes?:number;ignoradas?:number;skus?:number;bases?:{desafio_gigantes?:Status}}
+      const arquivo_base64=await arquivoParaBase64(file)
+      const res=await fetch('/api/admin/bases',{method:'POST',cache:'no-store',headers:{'content-type':'application/json'},body:JSON.stringify({tipo:'desafio_gigantes',rows,nome_arquivo:file.name,ano_mes:mes,arquivo_base64,mime_type:file.type||'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',tamanho_bytes:file.size})})
+      const data=await res.json() as {erro?:string;total?:number;consultores?:number;gerentes?:number;ignoradas?:number;skus?:number;bases?:{desafio_gigantes?:Status};arquivo_original?:{salvo?:boolean;erro?:string}}
       if(!res.ok) throw new Error(data.erro||'A importação não foi concluída.')
       if(data.bases?.desafio_gigantes)setStatus(data.bases.desafio_gigantes)
-      setMensagem(`${data.gerentes||0} GD, ${data.consultores||0} consultores, ${Number(data.total||0).toLocaleString('pt-BR')} metas e ${data.skus||0} SAPs únicos. ${Number(data.ignoradas||0).toLocaleString('pt-BR')} linhas de outros territórios ignoradas.`)
+      const avisoArquivo=data.arquivo_original?.erro?` ${data.arquivo_original.erro}`:''
+      setMensagem(`${data.gerentes||0} GD, ${data.consultores||0} consultores, ${Number(data.total||0).toLocaleString('pt-BR')} metas e ${data.skus||0} SAPs únicos. ${Number(data.ignoradas||0).toLocaleString('pt-BR')} linhas de outros territórios ignoradas.${avisoArquivo}`)
     }catch(reason){setErro(reason instanceof Error?reason.message:String(reason))}finally{setCarregando(false)}
   }
   const pronto=status.metas>0
@@ -74,7 +81,7 @@ export default function DesafioGigantesImport(){
         <div style={{marginTop:4,wordBreak:'break-word'}}>{arquivoNome||'Nome do arquivo não encontrado no histórico.'}</div>
         {arquivoData&&<small style={{display:'block',marginTop:4}}>Importada em {arquivoData}</small>}
         <a className="outline-button" style={{display:'inline-flex',marginTop:10,textDecoration:'none'}} href={`/api/admin/desafio-gigantes-planilha?ano_mes=${encodeURIComponent(mesDownload)}`} download>Baixar planilha importada</a>
-        <small style={{display:'block',marginTop:8}}>O download traz uma cópia em Excel dos dados que ficaram gravados no painel.</small>
+        <small style={{display:'block',marginTop:8}}>Novas importações guardam o arquivo original. Para importações antigas, o painel gera uma cópia em Excel dos dados gravados.</small>
       </div>}
       {erro&&<div className="alert alert-error">{erro}</div>}{mensagem&&<div className="alert alert-success">{mensagem}</div>}
       <label className={`file-button ${carregando?'disabled':''}`}><input type="file" accept=".xlsx" disabled={carregando} onChange={e=>void importar(e)}/>{carregando?'Lendo CONSULTOR e G.DISTRITAL…':pronto?'Substituir planilha de metas':'Selecionar planilha de metas'}</label>
