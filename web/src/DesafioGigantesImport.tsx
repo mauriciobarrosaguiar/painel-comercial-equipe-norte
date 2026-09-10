@@ -2,10 +2,12 @@ import { ChangeEvent, useEffect, useState } from 'react'
 import readWorkbook from 'read-excel-file/browser'
 
 type Row = Record<string, unknown>
-type Status = { metas:number; produtos:number; identificados:number; pendentes:number; ambiguos:number; nao_encontrados:number; erros:number; ano_mes:string }
-const EMPTY: Status = { metas:0, produtos:0, identificados:0, pendentes:0, ambiguos:0, nao_encontrados:0, erros:0, ano_mes:'' }
+type ArquivoImportado = { nome_arquivo:string; importado_em:string }
+type Status = { metas:number; produtos:number; identificados:number; pendentes:number; ambiguos:number; nao_encontrados:number; erros:number; ano_mes:string; arquivo?:ArquivoImportado }
+const EMPTY: Status = { metas:0, produtos:0, identificados:0, pendentes:0, ambiguos:0, nao_encontrados:0, erros:0, ano_mes:'', arquivo:{nome_arquivo:'',importado_em:''} }
 const slug=(v:unknown)=>String(v??'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'')
 const mesAtual=()=>{const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`}
+const dataHora=(value:string)=>{if(!value)return '';const d=new Date(value);return Number.isNaN(d.getTime())?'':d.toLocaleString('pt-BR')}
 
 function cabecalho(matrix:unknown[][], gd=false){
   for(let i=0;i<Math.min(matrix.length,20);i+=1){
@@ -57,6 +59,9 @@ export default function DesafioGigantesImport(){
     }catch(reason){setErro(reason instanceof Error?reason.message:String(reason))}finally{setCarregando(false)}
   }
   const pronto=status.metas>0
+  const mesDownload=status.ano_mes||mes
+  const arquivoNome=status.arquivo?.nome_arquivo||''
+  const arquivoData=dataHora(status.arquivo?.importado_em||'')
   return <section className="bases-section">
     <div className="bases-heading"><div><span className="eyebrow">Campanha</span><h2>Desafio de Gigantes</h2><p>Importe o arquivo oficial. O painel usa somente consultores e GD do território e ignora G.REGIONAL.</p></div><button className="outline-button" type="button" onClick={()=>void atualizar()}>Atualizar situação</button></div>
     <div className="base-cards"><article className="base-card">
@@ -64,6 +69,13 @@ export default function DesafioGigantesImport(){
       <small><strong>Abas usadas:</strong> CONSULTOR e G.DISTRITAL. G.REGIONAL é ignorada.</small>
       <label className="month-field"><span>Mês das metas</span><input type="month" value={mes} onChange={e=>setMes(e.target.value)}/></label>
       {pronto&&<div className="integration-status-grid"><div><span>Produtos SAP</span><strong>{status.produtos}</strong></div><div><span>Identificados</span><strong>{status.identificados}</strong></div><div><span>Pendentes</span><strong>{status.pendentes}</strong></div><div><span>Revisar</span><strong>{status.ambiguos+status.nao_encontrados+status.erros}</strong></div></div>}
+      {pronto&&<div style={{margin:'12px 0',padding:'12px 14px',border:'1px solid #dbe4ea',borderRadius:12,background:'#f8fafc'}}>
+        <div style={{fontWeight:700}}>Planilha usada</div>
+        <div style={{marginTop:4,wordBreak:'break-word'}}>{arquivoNome||'Nome do arquivo não encontrado no histórico.'}</div>
+        {arquivoData&&<small style={{display:'block',marginTop:4}}>Importada em {arquivoData}</small>}
+        <a className="outline-button" style={{display:'inline-flex',marginTop:10,textDecoration:'none'}} href={`/api/admin/desafio-gigantes-planilha?ano_mes=${encodeURIComponent(mesDownload)}`} download>Baixar planilha importada</a>
+        <small style={{display:'block',marginTop:8}}>O download traz uma cópia em Excel dos dados que ficaram gravados no painel.</small>
+      </div>}
       {erro&&<div className="alert alert-error">{erro}</div>}{mensagem&&<div className="alert alert-success">{mensagem}</div>}
       <label className={`file-button ${carregando?'disabled':''}`}><input type="file" accept=".xlsx" disabled={carregando} onChange={e=>void importar(e)}/>{carregando?'Lendo CONSULTOR e G.DISTRITAL…':pronto?'Substituir planilha de metas':'Selecionar planilha de metas'}</label>
     </article></div>
