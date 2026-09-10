@@ -1,4 +1,5 @@
 import { authorized } from '../../_lib/credentials.js'
+import { obterArquivoDesafioGigantes } from '../../_lib/desafio-gigantes-arquivo.js'
 import { buildXlsx, columnName, numberCell, stringCell } from '../../_lib/xlsx-compatible.js'
 
 const texto = (value) => String(value ?? '').trim()
@@ -44,7 +45,7 @@ function worksheet(rows, anoMes, nomeArquivo) {
   const lastColumn = columnName(headers.length - 1)
   const xmlRows = [
     `<row r="1" ht="28" customHeight="1">${stringCell('A1', `DESAFIO DE GIGANTES — METAS IMPORTADAS — ${anoMes}`, 1)}</row>`,
-    `<row r="2" ht="28" customHeight="1">${stringCell('A2', `Arquivo informado na importação: ${nomeArquivo || 'não identificado'}`, 4)}</row>`,
+    `<row r="2" ht="28" customHeight="1">${stringCell('A2', `Cópia dos dados gravados. Arquivo informado na importação: ${nomeArquivo || 'não identificado'}`, 4)}</row>`,
     `<row r="4" ht="34" customHeight="1">${headers.map((label, index) => stringCell(`${columnName(index)}4`, label, 2)).join('')}</row>`,
   ]
 
@@ -83,6 +84,15 @@ function worksheet(rows, anoMes, nomeArquivo) {
 </worksheet>`
 }
 
+function attachmentHeaders(nome, mimeType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet') {
+  return {
+    'content-type': mimeType,
+    'content-disposition': `attachment; filename="${nome}"`,
+    'cache-control': 'no-store',
+    'x-content-type-options': 'nosniff',
+  }
+}
+
 export async function onRequestGet({ request, env }) {
   if (!(await authorized(request, env.PAINEL_ADMIN_KEY))) {
     return new Response('Acesso não autorizado.', {
@@ -97,6 +107,14 @@ export async function onRequestGet({ request, env }) {
     const anoMesParam = texto(params.get('ano_mes'))
     const anoMes = /^\d{4}-\d{2}$/.test(anoMesParam) ? anoMesParam : texto(ultima?.ano_mes)
     if (!anoMes) return new Response('Não há metas do Desafio de Gigantes para baixar.', { status: 404 })
+
+    const original = await obterArquivoDesafioGigantes(env, anoMes).catch(() => null)
+    if (original?.bytes?.length) {
+      const nomeDownload = safeFileName(original.nome_arquivo, `desafio-gigantes-${anoMes}`)
+      return new Response(original.bytes, {
+        headers: attachmentHeaders(nomeDownload, texto(original.mime_type) || undefined),
+      })
+    }
 
     const [metasResult, importacaoResult] = await env.DB.batch([
       env.DB.prepare(`
@@ -123,7 +141,8 @@ export async function onRequestGet({ request, env }) {
 
     const importacao = importacaoResult.results?.[0] || {}
     const nomeOriginal = texto(importacao.nome_arquivo)
-    const nomeDownload = safeFileName(nomeOriginal, `desafio-gigantes-${anoMes}`)
+    const base = safeFileName(nomeOriginal, `desafio-gigantes-${anoMes}`).replace(/\.xlsx$/i, '')
+    const nomeDownload = safeFileName(`copia-dados-${base}`, `copia-dados-desafio-gigantes-${anoMes}`)
     const bytes = buildXlsx({
       sheetName: 'Metas importadas',
       title: `Desafio de Gigantes - metas importadas - ${anoMes}`,
@@ -131,14 +150,7 @@ export async function onRequestGet({ request, env }) {
       stylesXml: styles(),
     })
 
-    return new Response(bytes, {
-      headers: {
-        'content-type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        'content-disposition': `attachment; filename="${nomeDownload}"`,
-        'cache-control': 'no-store',
-        'x-content-type-options': 'nosniff',
-      },
-    })
+    return new Response(bytes, { headers: attachmentHeaders(nomeDownload) })
   } catch (error) {
     return new Response(`Não foi possível gerar a planilha: ${error instanceof Error ? error.message : String(error)}`, {
       status: 500,
