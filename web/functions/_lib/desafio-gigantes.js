@@ -100,16 +100,22 @@ export async function importarDesafioGigantes(env, rows, nomeArquivo, anoMes) {
 }
 
 export async function obterStatusDesafioGigantes(env) {
-  const [metas, produtos, ultima] = await env.DB.batch([
+  const [metas, produtos, ultima, importacao] = await env.DB.batch([
     env.DB.prepare('SELECT COUNT(*) total FROM desafio_gigantes_metas'),
     env.DB.prepare(`SELECT COUNT(*) total,SUM(CASE WHEN status='IDENTIFICADO' THEN 1 ELSE 0 END) identificados,SUM(CASE WHEN status='PENDENTE' THEN 1 ELSE 0 END) pendentes,SUM(CASE WHEN status='AMBIGUO' THEN 1 ELSE 0 END) ambiguos,SUM(CASE WHEN status='NAO_ENCONTRADO' THEN 1 ELSE 0 END) nao_encontrados,SUM(CASE WHEN status='ERRO' THEN 1 ELSE 0 END) erros FROM desafio_gigantes_produtos WHERE sku IN (SELECT DISTINCT sku FROM desafio_gigantes_metas)`),
     env.DB.prepare('SELECT MAX(ano_mes) ano_mes FROM desafio_gigantes_metas'),
+    env.DB.prepare("SELECT nome_arquivo,criado_em FROM importacoes WHERE tipo='DESAFIO_GIGANTES_METAS' ORDER BY criado_em DESC LIMIT 1"),
   ])
   const status = produtos.results?.[0] || {}
+  const arquivo = importacao.results?.[0] || {}
   return {
     metas: Number(metas.results?.[0]?.total || 0), produtos: Number(status.total || 0),
     identificados: Number(status.identificados || 0), pendentes: Number(status.pendentes || 0),
     ambiguos: Number(status.ambiguos || 0), nao_encontrados: Number(status.nao_encontrados || 0),
     erros: Number(status.erros || 0), ano_mes: texto(ultima.results?.[0]?.ano_mes),
+    arquivo: {
+      nome_arquivo: texto(arquivo.nome_arquivo),
+      importado_em: texto(arquivo.criado_em),
+    },
   }
 }
