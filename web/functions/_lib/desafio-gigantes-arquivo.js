@@ -2,6 +2,33 @@ const texto = (value) => String(value ?? '').trim()
 const CHUNK_SIZE = 240000
 const MAX_BASE64 = 28 * 1024 * 1024
 
+async function garantirTabelas(env) {
+  await env.DB.batch([
+    env.DB.prepare(`
+      CREATE TABLE IF NOT EXISTS desafio_gigantes_arquivos (
+        ano_mes TEXT PRIMARY KEY,
+        nome_arquivo TEXT NOT NULL,
+        mime_type TEXT NOT NULL DEFAULT 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        tamanho_bytes INTEGER NOT NULL DEFAULT 0,
+        total_chunks INTEGER NOT NULL DEFAULT 0,
+        importado_em TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `),
+    env.DB.prepare(`
+      CREATE TABLE IF NOT EXISTS desafio_gigantes_arquivo_chunks (
+        ano_mes TEXT NOT NULL,
+        indice INTEGER NOT NULL,
+        conteudo_base64 TEXT NOT NULL,
+        PRIMARY KEY (ano_mes, indice)
+      )
+    `),
+    env.DB.prepare(`
+      CREATE INDEX IF NOT EXISTS idx_desafio_gigantes_arquivo_chunks_mes
+        ON desafio_gigantes_arquivo_chunks(ano_mes, indice)
+    `),
+  ])
+}
+
 export async function salvarArquivoDesafioGigantes(env, payload) {
   const anoMes = texto(payload?.ano_mes)
   const nomeArquivo = texto(payload?.nome_arquivo) || `desafio-gigantes-${anoMes}.xlsx`
@@ -11,6 +38,8 @@ export async function salvarArquivoDesafioGigantes(env, payload) {
 
   if (!/^\d{4}-\d{2}$/.test(anoMes) || !base64) return { salvo: false }
   if (base64.length > MAX_BASE64) throw new Error('O arquivo original excede o limite de armazenamento do painel.')
+
+  await garantirTabelas(env)
 
   const chunks = []
   for (let index = 0; index < base64.length; index += CHUNK_SIZE) {
@@ -45,6 +74,7 @@ export async function salvarArquivoDesafioGigantes(env, payload) {
 }
 
 export async function obterArquivoDesafioGigantes(env, anoMes) {
+  await garantirTabelas(env)
   const info = await env.DB.prepare(`
     SELECT ano_mes,nome_arquivo,mime_type,tamanho_bytes,total_chunks,importado_em
       FROM desafio_gigantes_arquivos
