@@ -100,6 +100,10 @@ export default function UsefulLinksModule({ onBack }: { onBack: () => void }) {
     }
   }
 
+  function openLink(link: UsefulLink) {
+    window.open(link.url, '_blank', 'noopener,noreferrer')
+  }
+
   return <main className="content useful-links-page">
     <button className="back-button" type="button" onClick={onBack}>← Voltar ao painel</button>
 
@@ -145,22 +149,53 @@ export default function UsefulLinksModule({ onBack }: { onBack: () => void }) {
         <div>
           <span className="eyebrow">Submenu</span>
           <h2>Links cadastrados</h2>
-          <p>Clique no nome para abrir a página em uma nova aba.</p>
+          <p>Clique no card para abrir o link.</p>
         </div>
       </div>
 
-      <div className="useful-links-list">
+      <div className="useful-links-grid">
         {loading && <div className="useful-links-empty">Carregando links…</div>}
-        {!loading && links.map(link => <div className="useful-links-row" key={link.id}>
-          <a className="useful-links-open" href={link.url} target="_blank" rel="noreferrer noopener">
-            <span className="useful-links-icon">↗</span>
-            <span><strong>{link.nome}</strong><small>{link.url}</small></span>
-          </a>
-          <div className="useful-links-actions">
-            <button className="outline-button useful-links-compact" type="button" onClick={() => edit(link)}>Editar</button>
-            <button className="danger-button useful-links-compact" type="button" disabled={busy} onClick={() => void remove(link)}>Excluir</button>
+        {!loading && links.map(link => <article
+          className="useful-link-card"
+          key={link.id}
+          role="button"
+          tabIndex={0}
+          aria-label={`Abrir ${link.nome}`}
+          onClick={() => openLink(link)}
+          onKeyDown={event => {
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault()
+              openLink(link)
+            }
+          }}
+        >
+          <div className="useful-link-card-actions">
+            <button
+              className="useful-link-icon-button useful-link-edit"
+              type="button"
+              title="Editar"
+              aria-label={`Editar ${link.nome}`}
+              onClick={event => {
+                event.stopPropagation()
+                edit(link)
+              }}
+            >✎</button>
+            <button
+              className="useful-link-icon-button useful-link-delete"
+              type="button"
+              title="Excluir"
+              aria-label={`Excluir ${link.nome}`}
+              disabled={busy}
+              onClick={event => {
+                event.stopPropagation()
+                void remove(link)
+              }}
+            >×</button>
           </div>
-        </div>)}
+          <div className="useful-link-card-body">
+            <h3>{link.nome}</h3>
+          </div>
+        </article>)}
         {!loading && !links.length && <div className="useful-links-empty">Nenhum link cadastrado ainda.</div>}
       </div>
     </section>
