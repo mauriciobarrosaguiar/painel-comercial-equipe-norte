@@ -169,7 +169,10 @@ export default function UsefulLinksModule({ onBack }: { onBack: () => void }) {
             }
           }}
         >
-          <div className="useful-link-card-actions">
+          <div className="useful-link-card-body">
+            <h3>{link.nome}</h3>
+          </div>
+          <div className="useful-link-card-footer">
             <button
               className="useful-link-icon-button useful-link-edit"
               type="button"
@@ -191,9 +194,6 @@ export default function UsefulLinksModule({ onBack }: { onBack: () => void }) {
                 void remove(link)
               }}
             >×</button>
-          </div>
-          <div className="useful-link-card-body">
-            <h3>{link.nome}</h3>
           </div>
         </article>)}
         {!loading && !links.length && <div className="useful-links-empty">Nenhum link cadastrado ainda.</div>}
