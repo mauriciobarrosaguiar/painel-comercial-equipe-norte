@@ -4,9 +4,11 @@ import { createPortal } from 'react-dom'
 export default function DashboardSeparatorShortcut({
   onOpen,
   onCrossing,
+  onUsefulLinks,
 }: {
   onOpen: () => void
   onCrossing: () => void
+  onUsefulLinks: () => void
 }) {
   const [target, setTarget] = useState<Element | null>(null)
 
@@ -44,6 +46,18 @@ export default function DashboardSeparatorShortcut({
           <p>Envie a lista do cliente, identifique o genérico correto e cruze EAN, estoque, distribuidora e melhor preço.</p>
         </div>
         <span className="module-link">Abrir cotação <b>→</b></span>
+      </button>
+
+      <button className="module-card separator-dashboard-card" type="button" onClick={onUsefulLinks}>
+        <div className="module-card-top">
+          <span className="module-icon">↗</span>
+          <span className="module-status">Novo</span>
+        </div>
+        <div>
+          <h3>LINKs úteis</h3>
+          <p>Cadastre atalhos com o nome que desejar e abra rapidamente os sites e páginas usados no dia a dia.</p>
+        </div>
+        <span className="module-link">Abrir links <b>→</b></span>
       </button>
     </>,
     target,

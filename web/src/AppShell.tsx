@@ -14,6 +14,7 @@ import OrderSeparatorModule from './OrderSeparatorPdfBridgeV4'
 import { AppPage, readPageFromUrl, savePageInHistory } from './navigation'
 import OpportunitiesModule from './OpportunitiesModule'
 import SipsModule from './SipsModule'
+import UsefulLinksModule from './UsefulLinksModule'
 
 type InstallEvent = Event & {
   prompt: () => Promise<void>
@@ -111,6 +112,7 @@ export default function AppShell() {
           <DashboardSeparatorShortcut
             onOpen={() => go('separador')}
             onCrossing={() => go('cruzamento')}
+            onUsefulLinks={() => go('links-uteis')}
           />
         )}
       </>
@@ -129,6 +131,7 @@ export default function AppShell() {
   if (page === 'foco') module = <FocusModule onBack={back} />
   if (page === 'desafio') module = <DesafioGigantesPage onBack={back} />
   if (page === 'cnpj-anotacoes') module = <CnpjNotesModule onBack={back} />
+  if (page === 'links-uteis') module = <UsefulLinksModule onBack={back} />
   const exportType = page === 'clientes' ? 'clientes' : page === 'oportunidades' ? 'oportunidades' : ''
 
   return (
