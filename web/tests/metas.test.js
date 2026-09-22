@@ -15,7 +15,7 @@ async function importGoals(database, value) {
         tipo: 'metas',
         nome_arquivo: 'metas.xlsx',
         ano_mes: '2026-07',
-        rows: [{ consultor: 'Ana', ol_sem_combate: value, ol_prioritarios: 20, ol_lancamentos: 10, clientes_positivados: 5 }],
+        rows: [{ consultor: 'MAURICIO BARROS DE AGUIAR', setor: '18150301', ol_sem_combate: value, ol_prioritarios: 20, ol_lancamentos: 10, clientes_positivados: 5 }],
       }),
     }),
     env: { DB: database, PAINEL_ADMIN_KEY: ADMIN_KEY },
@@ -39,7 +39,7 @@ test('reimportação de metas preserva a versão anterior', async () => {
   assert.equal(imports.results[0].total, 2)
 })
 
-test('arquivo de metas respeita a linha do GD e não soma o GD novamente aos consultores', async () => {
+test('arquivo de metas mantém somente a linha pessoal de Maurício', async () => {
   const database = testDatabase()
   const response = await onRequestPost({
     request: new Request('https://painel.local/api/admin/bases', {
@@ -60,14 +60,14 @@ test('arquivo de metas respeita a linha do GD e não soma o GD novamente aos con
   })
   const result = await response.json()
   assert.equal(response.status, 200, JSON.stringify(result))
-  assert.equal(result.consultores, 2)
-  assert.equal(result.linhas_gd, 1)
+  assert.equal(result.consultores, 1)
+  assert.equal(result.linhas_gd, 0)
 
   const gerente = await database.prepare("SELECT ol_sem_combate,ol_prioritarios,ol_lancamentos,demanda_sem_combate FROM metas WHERE ano_mes='2026-08' AND escopo='gerente'").first()
   const consultores = await database.prepare("SELECT COUNT(*) total,SUM(ol_sem_combate) soma FROM metas WHERE ano_mes='2026-08' AND escopo='consultor'").first()
-  assert.deepEqual({ ...gerente }, { ol_sem_combate: 1000, ol_prioritarios: 500, ol_lancamentos: 200, demanda_sem_combate: 900 })
-  assert.equal(Number(consultores.total), 2)
-  assert.equal(Number(consultores.soma), 1000)
+  assert.deepEqual({ ...gerente }, { ol_sem_combate: 400, ol_prioritarios: 180, ol_lancamentos: 70, demanda_sem_combate: 350 })
+  assert.equal(Number(consultores.total), 1)
+  assert.equal(Number(consultores.soma), 400)
 })
 
 test('arquivo conjunto importa metas e classifica MIX pelo código SAP', async () => {
