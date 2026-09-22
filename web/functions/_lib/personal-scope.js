@@ -19,6 +19,21 @@ export async function enforcePersonalScope(env) {
          AND COALESCE(ativo,0)<>0
     `).bind(MAURICIO_ID),
     env.DB.prepare(`
+      UPDATE itens_pedido
+         SET ativo=0
+       WHERE COALESCE(ativo,0)<>0
+         AND pedido_id IN (
+           SELECT id FROM pedidos
+            WHERE COALESCE(consultor_id,'')<>?
+         )
+    `).bind(MAURICIO_ID),
+    env.DB.prepare(`
+      UPDATE pedidos
+         SET ativo=0
+       WHERE COALESCE(ativo,0)<>0
+         AND COALESCE(consultor_id,'')<>?
+    `).bind(MAURICIO_ID),
+    env.DB.prepare(`
       DELETE FROM metas
        WHERE consultor_id IS NOT NULL
          AND consultor_id<>?
