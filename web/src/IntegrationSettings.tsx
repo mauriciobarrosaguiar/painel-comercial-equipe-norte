@@ -3,6 +3,7 @@ import BaseManagement from './BaseManagement'
 import CalculationAudit from './CalculationAudit'
 import DesafioGigantesImport from './DesafioGigantesImport'
 import TemplatesSection from './TemplatesSection'
+import MarketFarmaCredentials from './MarketFarmaCredentials'
 
 type IntegrationStatus = {
   configurada: boolean
@@ -63,7 +64,7 @@ export default function IntegrationSettings({ onBack }: Props) {
       setStatus(await request('POST', { usuario: userId, segredo: accessSecret }))
       setUserId('')
       setAccessSecret('')
-      setMessage('Acesso da GD salvo e protegido com sucesso.')
+      setMessage('Seu acesso pessoal do Bússola foi salvo e protegido com sucesso.')
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason))
     } finally {
@@ -72,7 +73,7 @@ export default function IntegrationSettings({ onBack }: Props) {
   }
 
   async function remove() {
-    if (!window.confirm('Remover o acesso da GD salvo?')) return
+    if (!window.confirm('Remover seu acesso pessoal do Bússola?')) return
     setLoading(true)
     setError('')
     setMessage('')
@@ -82,10 +83,10 @@ export default function IntegrationSettings({ onBack }: Props) {
         configurada: false,
         usuario_mascarado: '',
         status: 'nao_configurada',
-        mensagem: 'Credencial da GD removida.',
+        mensagem: 'Credencial pessoal removida.',
         atualizado_em: null,
       })
-      setMessage('Acesso da GD removido.')
+      setMessage('Seu acesso pessoal do Bússola foi removido.')
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason))
     } finally {
@@ -110,41 +111,41 @@ export default function IntegrationSettings({ onBack }: Props) {
           <div className="integration-icon">B</div>
           <div>
             <h2>Bússola</h2>
-            <p>Credencial da GD usada somente pela extração automatizada.</p>
+            <p>Seu acesso pessoal usado somente pela extração automatizada.</p>
           </div>
           <span className="status-pill">
-            {status?.configurada ? 'GD configurada' : loading ? 'Carregando' : 'Aguardando acesso da GD'}
+            {status?.configurada ? 'Acesso pessoal configurado' : loading ? 'Carregando' : 'Aguardando seu acesso'}
           </span>
         </div>
 
         {status && <>
           <div className="integration-status-grid">
-            <div><span>Usuário da GD salvo</span><strong>{status.usuario_mascarado || 'Nenhum'}</strong></div>
+            <div><span>Seu usuário salvo</span><strong>{status.usuario_mascarado || 'Nenhum'}</strong></div>
             <div><span>Última alteração</span><strong>{formatDate(status.atualizado_em)}</strong></div>
             <div className="wide"><span>Situação</span><strong>{status.mensagem}</strong></div>
           </div>
 
           <form className="credentials-form" onSubmit={(event) => void save(event)}>
             <div className="form-heading">
-              <h3>{status.configurada ? 'Substituir acesso da GD' : 'Cadastrar acesso da GD'}</h3>
-              <p>O Bússola será extraído exclusivamente com este acesso. Não são usados logins dos consultores.</p>
+              <h3>{status.configurada ? 'Substituir meu acesso' : 'Cadastrar meu acesso'}</h3>
+              <p>O Bússola será extraído somente com seu acesso pessoal e os dados ficarão restritos à sua carteira.</p>
             </div>
             <label>
-              <span>Usuário do Bússola da GD</span>
+              <span>Meu usuário do Bússola</span>
               <input value={userId} onChange={(event) => setUserId(event.target.value)} required />
             </label>
             <label>
-              <span>Código de acesso do Bússola da GD</span>
+              <span>Meu código de acesso do Bússola</span>
               <input type="password" value={accessSecret} onChange={(event) => setAccessSecret(event.target.value)} required />
             </label>
             <div className="form-actions">
-              <button className="primary-action" disabled={loading}>Salvar acesso da GD</button>
+              <button className="primary-action" disabled={loading}>Salvar meu acesso</button>
               {status.configurada && <button
                 className="danger-button"
                 type="button"
                 onClick={() => void remove()}
                 disabled={loading}
-              >Remover acesso da GD</button>}
+              >Remover meu acesso</button>}
             </div>
           </form>
         </>}
@@ -153,9 +154,11 @@ export default function IntegrationSettings({ onBack }: Props) {
       <aside className="security-card">
         <span className="security-icon">✓</span>
         <h2>Acesso confirmado</h2>
-        <p>As extrações do Bússola usam somente a credencial da GD cadastrada e protegida no painel.</p>
+        <p>As extrações do Bússola usam somente sua credencial pessoal, protegida no painel.</p>
       </aside>
     </section>
+
+    <MarketFarmaCredentials />
 
     <BaseManagement adminKey="" enabled />
     <DesafioGigantesImport />
