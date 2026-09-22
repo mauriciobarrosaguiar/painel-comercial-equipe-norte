@@ -1,6 +1,6 @@
 import { authorized, encryptCredentials, json, maskUsername } from '../../_lib/credentials.js'
 
-const INTEGRATION = 'MERCADO_FARMA'
+const INTEGRATION = 'MERCADO_FARMA_MAURICIO'
 
 function secretReady(env) {
   return typeof env.PAINEL_ADMIN_KEY === 'string' && env.PAINEL_ADMIN_KEY.length >= 12
