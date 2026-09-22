@@ -246,7 +246,7 @@ async function importarMetas(env, rows, nome, anoMes) {
       gerentes.push(meta)
       continue
     }
-    const consultorId = await idEstavel('cons', nomeColaborador)
+    const consultorId = await idEstavel('cons', 'MAURICIO BARROS DE AGUIAR')
     consultores.push({
       ...meta,
       id: await idEstavel('meta', anoMes, 'consultor', consultorId),
