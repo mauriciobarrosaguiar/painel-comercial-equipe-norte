@@ -31,7 +31,7 @@ export async function onRequestGet({ request, env }) {
     configurada: Boolean(current),
     usuario_mascarado: current?.usuario_mascarado || '',
     status: current?.status || 'nao_configurada',
-    mensagem: current?.mensagem_status || 'Credencial da GD ainda não cadastrada.',
+    mensagem: current?.mensagem_status || 'Seu acesso pessoal do Bússola ainda não foi cadastrado.',
     testado_em: current?.testado_em || null,
     atualizado_em: current?.atualizado_em || null,
   })
@@ -73,7 +73,7 @@ export async function onRequestPost({ request, env }) {
     INTEGRATION,
     masked,
     encrypted,
-    'Credencial da GD salva com criptografia. Valide a configuração antes da próxima extração.',
+    'Seu acesso pessoal do Bússola foi salvo com criptografia.',
     now,
   ).run()
 
@@ -82,7 +82,7 @@ export async function onRequestPost({ request, env }) {
     configurada: true,
     usuario_mascarado: masked,
     status: 'configurada',
-    mensagem: 'Credencial da GD salva com segurança.',
+    mensagem: 'Acesso pessoal do Bússola salvo com segurança.',
     atualizado_em: now,
   })
 }
@@ -91,5 +91,5 @@ export async function onRequestDelete({ request, env }) {
   const denial = await requireAdmin(request, env)
   if (denial) return denial
   await env.DB.prepare('DELETE FROM integracao_credenciais WHERE integracao = ?').bind(INTEGRATION).run()
-  return json({ sucesso: true, mensagem: 'Credencial da GD removida.' })
+  return json({ sucesso: true, mensagem: 'Acesso pessoal do Bússola removido.' })
 }
