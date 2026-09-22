@@ -1,35 +1,11 @@
 import { createSessionToken, json, sessionCookie } from '../../_lib/credentials.js'
+import { enforcePersonalScope } from '../../_lib/personal-scope.js'
 
 const ACESSOS = {
-  a0002958: {
-    nome: 'ALESSANDRA FREITAS SA',
-    email: 'a0002958@ems.com.br',
-    consultor_id: 'cons-9de1223057e4e9526a953d7b1228',
-  },
-  d0047303: {
-    nome: 'DENYSE CRISTINA VIANA VELOSO ARAUJO',
-    email: 'd0047303@ems.com.br',
-    consultor_id: 'cons-772c771cb3d26d22ce3c697169e5',
-  },
-  j0050526: {
-    nome: 'JOAO DIEGO FERREIRA DE OLIVEIRA',
-    email: 'j0050526@ems.com.br',
-    consultor_id: 'cons-94c69626a2bd7b4f0181ba70662e',
-  },
-  r0041868: {
-    nome: 'RAIMUNDA MARTINS GOMES CARNEIRO',
-    email: 'r0041868@ems.com.br',
-    consultor_id: 'cons-8ded2f2f390c137233ddca4739b0',
-  },
   m0043497: {
     nome: 'MAURICIO BARROS DE AGUIAR',
     email: 'm0043497@ems.com.br',
     consultor_id: 'cons-1ee6626b98906f06c399a6ad350c',
-  },
-  f0059410: {
-    nome: 'FRANCISCO CORTEZ FILHO',
-    email: 'f0059410@ems.com.br',
-    consultor_id: 'cons-9cbca1ed3b527eb6e7c2cd75e0ee',
   },
 }
 
@@ -53,7 +29,7 @@ export async function onRequestPost({ request, env }) {
 
     const acesso = ACESSOS[login]
     if (!acesso) {
-      return json({ erro: 'Este código não está autorizado para acessar o Painel da Equipe Norte.' }, 401)
+      return json({ erro: 'Este painel é de uso pessoal do Maurício.' }, 401)
     }
 
     const usuario = {
@@ -63,6 +39,7 @@ export async function onRequestPost({ request, env }) {
       consultor_id: acesso.consultor_id,
     }
 
+    await enforcePersonalScope(env)
     const token = await createSessionToken(usuario, env.PAINEL_ADMIN_KEY)
     return json({ usuario }, 200, { 'set-cookie': sessionCookie(token) })
   } catch (error) {
