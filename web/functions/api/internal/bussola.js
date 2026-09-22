@@ -1,6 +1,6 @@
 import { authorized, decryptCredentials, json } from '../../_lib/credentials.js'
 
-const INTEGRATION = 'BUSSOLA'
+const INTEGRATION = 'BUSSOLA_MAURICIO'
 
 function extrairGd(credentials) {
   if (!credentials || typeof credentials !== 'object') return { usuario: '', segredo: '' }
