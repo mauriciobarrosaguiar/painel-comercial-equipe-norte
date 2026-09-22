@@ -4,6 +4,18 @@ import readWorkbook, { readSheet } from 'read-excel-file/browser'
 type ApiBaseType = 'painel' | 'metas' | 'produtos_mix' | 'produtos_mercado_farma'
 type CardType = ApiBaseType | 'metas_mix'
 type RowData = Record<string, unknown>
+
+const MAURICIO_NOME = 'MAURICIO BARROS DE AGUIAR'
+const MAURICIO_SETOR = '18150301'
+const nomeNormalizado = (value: unknown) => String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').trim().toUpperCase()
+const somenteDigitos = (value: unknown) => String(value ?? '').replace(/\D/g, '')
+function somenteMauricio(rows: RowData[]) {
+  return rows.filter((row) => {
+    const nome = nomeNormalizado(row.nome_rep ?? row.consultor ?? row.representante ?? row.colaborador)
+    const setor = somenteDigitos(row.setor_rep ?? row.setor)
+    return nome === MAURICIO_NOME || setor === MAURICIO_SETOR
+  })
+}
 type BaseStatus = {
   painel: number
   metas: number
@@ -284,18 +296,20 @@ export default function BaseManagement({ adminKey, enabled }: Props) {
       let expectedTotal = 0
       if (type === 'metas_mix') {
         const combined = await parseCombinedWorkbook(file)
-        validateRows('metas', combined.metas)
+        const minhasMetas = somenteMauricio(combined.metas)
+        validateRows('metas', minhasMetas)
         validateRows('produtos_mix', combined.produtosMix)
-        expectedTotal = combined.metas.length + combined.produtosMix.length
+        expectedTotal = minhasMetas.length + combined.produtosMix.length
         payload = {
           tipo: 'metas_mix',
-          rows: combined.metas,
+          rows: minhasMetas,
           mix_rows: combined.produtosMix,
           nome_arquivo: file.name,
           ano_mes: month,
         }
       } else {
-        const rows = await parseWorkbook(file, type)
+        const parsedRows = await parseWorkbook(file, type)
+        const rows = type === 'painel' || type === 'metas' ? somenteMauricio(parsedRows) : parsedRows
         validateRows(type, rows)
         expectedTotal = rows.length
         payload = { tipo: type, rows, nome_arquivo: file.name, ano_mes: month }
@@ -326,7 +340,7 @@ export default function BaseManagement({ adminKey, enabled }: Props) {
   return (
     <section className="bases-section">
       <div className="bases-heading">
-        <div><span className="eyebrow">Bases oficiais</span><h2>Importação e atualização</h2><p>O Bússola fornece pedidos e faturamento. Carteira, metas e produtos vêm das planilhas abaixo.</p></div>
+        <div><span className="eyebrow">Bases oficiais</span><h2>Importação e atualização</h2><p>O Bússola fornece seus pedidos e faturamento. Carteira e metas são filtradas automaticamente para Maurício; o MIX permanece completo.</p></div>
         <button className="outline-button" type="button" onClick={() => void requestStatus()}>Atualizar situação</button>
       </div>
       {generalError && <div className="alert alert-error">{generalError}</div>}
