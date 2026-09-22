@@ -4,12 +4,13 @@ import test from 'node:test'
 import { onRequestGet as dashboard } from '../functions/api/dashboard.js'
 import { onRequestGet as consultores } from '../functions/api/consultores.js'
 import { onRequestGet as consultorPedidos } from '../functions/api/consultor-pedidos.js'
-import { testDatabase } from './d1-fixture.js'
+import { personalDatabase, testDatabase } from './d1-fixture.js'
 
-test('dashboard separa total, sem combate, combate e não classificados', async () => {
+test('dashboard pessoal separa total, sem combate, combate e não classificados', async () => {
+  const DB = await personalDatabase()
   const response = await dashboard({
     request: new Request('https://painel.local/api/dashboard?periodo=todo-periodo'),
-    env: { DB: testDatabase() },
+    env: { DB },
   })
   assert.equal(response.status, 200)
   const body = await response.json()
@@ -23,7 +24,7 @@ test('dashboard separa total, sem combate, combate e não classificados', async 
   assert.equal(body.pedidos_nao_faturados, 3)
   assert.equal(body.valor_nao_faturado, 550)
   assert.equal(body.nao_faturados_por_consultor.length, 1)
-  assert.equal(body.nao_faturados_por_consultor[0].nome, 'Ana')
+  assert.equal(body.nao_faturados_por_consultor[0].nome, 'MAURICIO BARROS DE AGUIAR')
   assert.equal(body.nao_faturados_por_consultor[0].pedidos_nao_faturados, 3)
   assert.equal(body.nao_faturados_por_consultor[0].valor_nao_faturado, 550)
 })
