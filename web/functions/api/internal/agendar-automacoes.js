@@ -78,7 +78,7 @@ export async function onRequestPost({ request, env }) {
       const id = `cmd-${crypto.randomUUID()}`
       const parametrosSalvos = parametros(configuracao.parametros_json)
       if (tipo === 'MERCADO_FARMA' && !texto(parametrosSalvos.ufs)) {
-        parametrosSalvos.ufs = 'MA,MT,PA,PI,TO'
+        parametrosSalvos.ufs = 'TO'
       }
 
       const inserido = await env.DB.prepare(`
