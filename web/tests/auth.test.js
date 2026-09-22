@@ -7,12 +7,7 @@ import { testDatabase } from './d1-fixture.js'
 
 const key = 'chave-administrativa-teste'
 const acessos = [
-  ['a0002958', 'ALESSANDRA FREITAS SA'],
-  ['d0047303', 'DENYSE CRISTINA VIANA VELOSO ARAUJO'],
-  ['j0050526', 'JOAO DIEGO FERREIRA DE OLIVEIRA'],
-  ['r0041868', 'RAIMUNDA MARTINS GOMES CARNEIRO'],
   ['m0043497', 'MAURICIO BARROS DE AGUIAR'],
-  ['f0059410', 'FRANCISCO CORTEZ FILHO'],
 ]
 
 async function entrar(acesso, DB = testDatabase()) {
@@ -26,7 +21,7 @@ async function entrar(acesso, DB = testDatabase()) {
   })
 }
 
-test('os seis colaboradores entram com código ou e-mail EMS', async () => {
+test('somente Maurício entra com código ou e-mail EMS', async () => {
   for (const [codigo, nome] of acessos) {
     for (const acesso of [codigo, `${codigo}@ems.com.br`]) {
       const response = await entrar(acesso)
@@ -42,6 +37,11 @@ test('os seis colaboradores entram com código ou e-mail EMS', async () => {
 
 test('código não autorizado é recusado', async () => {
   const response = await entrar('x0000000')
+  assert.equal(response.status, 401)
+})
+
+test('acessos antigos da equipe são recusados', async () => {
+  const response = await entrar('a0002958')
   assert.equal(response.status, 401)
 })
 
