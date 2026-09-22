@@ -5,7 +5,7 @@ import { onRequestGet as listar, onRequestPost as criar } from '../functions/api
 import { onRequestGet as mercado } from '../functions/api/mercado-farma.js'
 import { onRequestPost as fechar } from '../functions/api/internal/fechamento-mensal.js'
 import { onRequestGet as historico } from '../functions/api/historico.js'
-import { testDatabase } from './d1-fixture.js'
+import { personalDatabase, testDatabase } from './d1-fixture.js'
 
 const key = 'chave-administrativa-teste'
 const req = (url, method = 'GET', body) => new Request(url, {
@@ -117,8 +117,8 @@ test('Mercado Farma calcula menor preço com estoque', async () => {
   assert.equal(body.resultados[0].melhor_preco, 10)
 })
 
-test('fechamento mensal grava fotografia consultável', async () => {
-  const DB = testDatabase()
+test('fechamento mensal pessoal grava fotografia consultável', async () => {
+  const DB = await personalDatabase()
   const env = { DB, PAINEL_ADMIN_KEY: key }
   const response = await fechar({ request: req('https://x/api/internal/fechamento-mensal', 'POST', { ano_mes: '2026-07' }), env })
   assert.equal(response.status, 200)
