@@ -117,7 +117,7 @@ export async function onRequestPost({ request, env }) {
       ? { ...parametrosAtuais, ...body.parametros }
       : parametrosAtuais
     if (tipo === 'MERCADO_FARMA' && !texto(novosParametros.ufs)) {
-      novosParametros.ufs = 'MA,MT,PA,PI,TO'
+      novosParametros.ufs = 'TO'
     }
 
     const agora = new Date()
