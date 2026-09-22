@@ -205,7 +205,7 @@ export default function MarketFarmaModule({ onBack, onAutomations }: { onBack: (
     setQueueing(true); setError(''); setStatus('Iniciando…')
     const inicio = Date.now()
     try {
-      const response = await fetch('/api/automacoes', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ tipo: 'MERCADO_FARMA', parametros: { ufs: effectiveUf || 'MA,MT,PA,PI,TO' }, solicitado_por: 'Mercado Farma' }) })
+      const response = await fetch('/api/automacoes', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ tipo: 'MERCADO_FARMA', parametros: { ufs: effectiveUf || 'TO' }, solicitado_por: 'Mercado Farma' }) })
       const json = await response.json()
       if (!response.ok && response.status !== 409) throw new Error(json.detalhe || json.erro || 'Não foi possível iniciar a atualização')
       setTrackingStart(inicio)
