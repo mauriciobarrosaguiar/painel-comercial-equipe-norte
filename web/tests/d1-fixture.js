@@ -93,3 +93,17 @@ export function testDatabase() {
     async batch(items) { return Promise.all(items.map((item) => item.all())) },
   }
 }
+
+
+export const MAURICIO_TEST_ID = 'cons-1ee6626b98906f06c399a6ad350c'
+
+export async function personalDatabase() {
+  const DB = testDatabase()
+  await DB.prepare("UPDATE consultores SET id=?,nome='MAURICIO BARROS DE AGUIAR' WHERE id='co1'").bind(MAURICIO_TEST_ID).run()
+  await DB.prepare("UPDATE clientes SET consultor_id=? WHERE consultor_id='co1'").bind(MAURICIO_TEST_ID).run()
+  await DB.prepare("UPDATE pedidos SET consultor_id=? WHERE consultor_id='co1'").bind(MAURICIO_TEST_ID).run()
+  await DB.prepare("UPDATE metas SET consultor_id=? WHERE consultor_id='co1'").bind(MAURICIO_TEST_ID).run()
+  await DB.prepare("UPDATE foco_consultores SET consultor_id=? WHERE consultor_id='co1'").bind(MAURICIO_TEST_ID).run()
+  await DB.prepare("UPDATE colaboradores_acesso SET consultor_id=?,nome='MAURICIO BARROS DE AGUIAR' WHERE consultor_id='co1'").bind(MAURICIO_TEST_ID).run()
+  return DB
+}
