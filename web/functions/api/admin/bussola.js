@@ -1,4 +1,5 @@
 import { authorized, encryptCredentials, json, maskUsername } from '../../_lib/credentials.js'
+import { enforcePersonalScope } from '../../_lib/personal-scope.js'
 
 const INTEGRATION = 'BUSSOLA'
 
@@ -26,6 +27,7 @@ async function getStatus(env) {
 export async function onRequestGet({ request, env }) {
   const denial = await requireAdmin(request, env)
   if (denial) return denial
+  await enforcePersonalScope(env)
   const current = await getStatus(env)
   return json({
     configurada: Boolean(current),
