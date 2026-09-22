@@ -1,6 +1,6 @@
 import { authorized, decryptCredentials, json } from '../../_lib/credentials.js'
 
-const INTEGRATION = 'MERCADO_FARMA'
+const INTEGRATION = 'MERCADO_FARMA_MAURICIO'
 
 export async function onRequestGet({ request, env }) {
   if (!env.PAINEL_ADMIN_KEY || !(await authorized(request, env.PAINEL_ADMIN_KEY))) {
