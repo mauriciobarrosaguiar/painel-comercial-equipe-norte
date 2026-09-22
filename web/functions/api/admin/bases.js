@@ -2,6 +2,7 @@ import { onRequestGet as obterBases, onRequestPost as importarBases } from './ba
 import { onRequestPost as fecharMes } from '../internal/fechamento-mensal.js'
 import { onRequestPost as dispararDesafioSap } from '../desafio-gigantes-disparar.js'
 import { salvarArquivoDesafioGigantes } from '../../_lib/desafio-gigantes-arquivo.js'
+import { enforcePersonalScope } from '../../_lib/personal-scope.js'
 
 const texto = (value) => String(value ?? '').trim()
 const digitos = (value) => texto(value).replace(/\D/g, '')
@@ -158,7 +159,10 @@ async function acionarSapAposImportacao(context) {
   return dispararDesafioSap({ request, env: context.env })
 }
 
-export const onRequestGet = obterBases
+export async function onRequestGet(context) {
+  await enforcePersonalScope(context.env)
+  return obterBases(context)
+}
 
 export async function onRequestPost(context) {
   let body = {}
