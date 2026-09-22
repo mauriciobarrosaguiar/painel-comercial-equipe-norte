@@ -1,7 +1,7 @@
 import { authorized, encryptCredentials, json, maskUsername } from '../../_lib/credentials.js'
 import { enforcePersonalScope } from '../../_lib/personal-scope.js'
 
-const INTEGRATION = 'BUSSOLA'
+const INTEGRATION = 'BUSSOLA_MAURICIO'
 
 function secretReady(env) {
   return typeof env.PAINEL_ADMIN_KEY === 'string' && env.PAINEL_ADMIN_KEY.length >= 12
