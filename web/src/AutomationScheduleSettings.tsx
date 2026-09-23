@@ -7,6 +7,7 @@ type Schedule = {
   descricao: string
   ativo: boolean
   intervalo_minutos: number
+  intervalo_minimo: number
   ultima_execucao_em: string | null
   proxima_execucao_em: string | null
   atualizado_por: string
@@ -98,7 +99,7 @@ export default function AutomationScheduleSettings() {
       <div>
         <span className="eyebrow">Agendamento automático</span>
         <h2>Intervalo de cada automação</h2>
-        <p>O verificador consulta os agendamentos a cada {verifierMinutes} minutos e inicia as rotinas vencidas sem sobrepor uma execução em andamento.</p>
+        <p>O verificador consulta os agendamentos a cada {verifierMinutes} minutos. No modo pessoal, Bússola roda no máximo 4–5 vezes ao dia e Mercado Farma até 2 vezes ao dia.</p>
       </div>
       <button className="outline-button" type="button" onClick={() => void load()} disabled={loading}>
         {loading ? 'Atualizando…' : 'Atualizar'}
@@ -135,7 +136,9 @@ export default function AutomationScheduleSettings() {
               {!options.includes(item.intervalo_minutos) && (
                 <option value={item.intervalo_minutos}>{intervalLabel(item.intervalo_minutos)}</option>
               )}
-              {options.map(value => <option value={value} key={value}>{intervalLabel(value)}</option>)}
+              {options
+                .filter(value => value >= (item.intervalo_minimo || 5))
+                .map(value => <option value={value} key={value}>{intervalLabel(value)}</option>)}
             </select>
           </label>
 
