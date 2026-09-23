@@ -1,0 +1,70 @@
+name: Diagnostico Turso automacoes
+
+on:
+  push:
+    branches:
+      - diagnostico-turso-automacoes
+    paths:
+      - ".github/workflows/diagnostico-turso-automacoes.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diagnosticar:
+    runs-on: ubuntu-latest
+    env:
+      TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+      TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+    steps:
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Instalar requests
+        run: python -m pip install --disable-pip-version-check "requests>=2.34,<3"
+
+      - name: Consultar somente schema das automacoes
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json, os, requests, sys
+
+          raw = (os.environ.get("TURSO_DATABASE_URL") or "").strip()
+          token = (os.environ.get("TURSO_AUTH_TOKEN") or "").strip()
+          if not raw or not token:
+              raise SystemExit("Credenciais Turso ausentes")
+          url = raw.replace("libsql://","https://").replace("turso://","https://").rstrip("/") + "/v2/pipeline"
+          headers = {"authorization": f"Bearer {token}", "content-type": "application/json"}
+
+          sqls = [
+              "SELECT name,sql FROM sqlite_master WHERE type='table' AND name IN ('comandos_automacao','configuracoes_automacao') ORDER BY name",
+              "PRAGMA table_info(comandos_automacao)",
+              "PRAGMA table_info(configuracoes_automacao)",
+              "SELECT COUNT(*) AS total FROM comandos_automacao",
+              "SELECT COUNT(*) AS total FROM configuracoes_automacao",
+          ]
+          payload = {"requests":[{"type":"execute","stmt":{"sql":sql}} for sql in sqls] + [{"type":"close"}]}
+          response = requests.post(url, headers=headers, json=payload, timeout=60)
+          print("HTTP", response.status_code)
+          data = response.json()
+          if not response.ok:
+              print(json.dumps(data, ensure_ascii=False, indent=2)[:12000])
+              raise SystemExit(2)
+
+          def decode(cell):
+              if not isinstance(cell,dict) or cell.get("type")=="null": return None
+              return cell.get("value")
+          for idx,item in enumerate(data.get("results",[])[:-1]):
+              print(f"--- QUERY {idx+1} ---")
+              if item.get("type")!="ok":
+                  print(json.dumps(item,ensure_ascii=False,indent=2))
+                  continue
+              result=(item.get("response") or {}).get("result") or {}
+              cols=[c.get("name") for c in result.get("cols") or []]
+              print("COLS", cols)
+              for row in result.get("rows") or []:
+                  print(dict(zip(cols,[decode(c) for c in row])))
+          PY
