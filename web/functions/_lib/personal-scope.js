@@ -38,5 +38,36 @@ export async function enforcePersonalScope(env) {
        WHERE consultor_id IS NOT NULL
          AND consultor_id<>?
     `).bind(MAURICIO_ID),
+    env.DB.prepare(`
+      UPDATE colaboradores_acesso
+         SET ativo=0,
+             atualizado_em=CURRENT_TIMESTAMP
+       WHERE LOWER(TRIM(COALESCE(login,'')))<>LOWER(?)
+         AND COALESCE(ativo,0)<>0
+    `).bind(MAURICIO_LOGIN),
+    env.DB.prepare(`
+      UPDATE configuracoes_automacao
+         SET intervalo_minutos=300,
+             parametros_json='{}',
+             atualizado_por='Modo pessoal Maurício',
+             atualizado_em=CURRENT_TIMESTAMP
+       WHERE tipo='BUSSOLA'
+         AND (
+           COALESCE(intervalo_minutos,0)<>300
+           OR COALESCE(parametros_json,'')<>'{}'
+         )
+    `),
+    env.DB.prepare(`
+      UPDATE configuracoes_automacao
+         SET intervalo_minutos=720,
+             parametros_json='{"ufs":"TO"}',
+             atualizado_por='Modo pessoal Maurício',
+             atualizado_em=CURRENT_TIMESTAMP
+       WHERE tipo='MERCADO_FARMA'
+         AND (
+           COALESCE(intervalo_minutos,0)<>720
+           OR COALESCE(parametros_json,'')<>'{"ufs":"TO"}'
+         )
+    `),
   ])
 }
