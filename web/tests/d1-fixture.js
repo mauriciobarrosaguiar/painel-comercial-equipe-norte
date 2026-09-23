@@ -31,6 +31,7 @@ export function testDatabase() {
     CREATE TABLE sip_redes(sip_id TEXT,rede_id TEXT,ativo INTEGER);
     CREATE TABLE sip_clientes(sip_id TEXT,cnpj TEXT,cliente_id TEXT,ativo INTEGER,objetivo_preco_liquido REAL DEFAULT 0,atualizado_em TEXT,UNIQUE(sip_id,cnpj));
     CREATE TABLE sip_recados(id TEXT PRIMARY KEY,sip_id TEXT,status TEXT,ativo INTEGER);
+    CREATE TABLE configuracoes_automacao(tipo TEXT PRIMARY KEY,ativo INTEGER NOT NULL DEFAULT 0,intervalo_minutos INTEGER NOT NULL DEFAULT 30,parametros_json TEXT NOT NULL DEFAULT '{}',ultima_execucao_em TEXT,proxima_execucao_em TEXT,atualizado_por TEXT,atualizado_em TEXT);
     CREATE TABLE comandos_automacao(id TEXT PRIMARY KEY,tipo TEXT,parametros_json TEXT,status TEXT NOT NULL DEFAULT 'aguardando' CHECK(status IN ('aguardando','executando','concluido','erro','cancelado')),solicitado_por TEXT,mensagem TEXT,erro TEXT,solicitado_em TEXT,iniciado_em TEXT,finalizado_em TEXT,atualizado_em TEXT);
     CREATE TABLE historico_mensal(id TEXT PRIMARY KEY,ano_mes TEXT,escopo TEXT,referencia_id TEXT,referencia_nome TEXT,versao INTEGER,versao_atual INTEGER,motivo_reprocessamento TEXT,resultado_json TEXT,fechado_em TEXT,criado_em TEXT DEFAULT CURRENT_TIMESTAMP,UNIQUE(ano_mes,escopo,referencia_id,versao));
     CREATE TABLE mercado_farma_precos(id TEXT PRIMARY KEY,uf TEXT,cnpj_referencia TEXT,produto_id TEXT,ean TEXT,produto TEXT,distribuidora TEXT,estoque REAL,desconto REAL,pf_distribuidora REAL,pf_fabrica REAL,preco_com_imposto REAL,preco_sem_imposto REAL,status TEXT,erro TEXT,atualizado_em TEXT);
@@ -86,6 +87,10 @@ export function testDatabase() {
       ('mf2','PA','111','linha','111','Linha','Distribuidora B',0,0,13,15,12,11,'OK','','2026-07-10T12:00:00Z');
     INSERT INTO foco_semanal VALUES('f1','2026-07-07','2026-07-13','linha','111','Linha',1,0,0,'Teste','Painel','2026-07-07','2026-07-07');
     INSERT INTO foco_consultores VALUES('f1','co1',1,2,0);
+    INSERT INTO configuracoes_automacao VALUES
+      ('BUSSOLA',1,30,'{}',NULL,NULL,'Teste','2026-07-01'),
+      ('MERCADO_FARMA',1,120,'{"ufs":"MA,MT,PA,PI,TO"}',NULL,NULL,'Teste','2026-07-01'),
+      ('AUDITORIA',0,1440,'{}',NULL,NULL,'Teste','2026-07-01');
     INSERT INTO colaboradores_acesso(id,login,email,nome,consultor_id,ativo) VALUES('ac-co1','m0043497','m0043497@ems.com.br','Ana','co1',1);
   `)
   return {
