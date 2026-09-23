@@ -43,7 +43,7 @@ test('Mercado Farma usa buybox, busca de PDV e Excel dinâmico por UF', () => {
   assert.match(download, /\?='' OR UPPER\(TRIM\(uf\)\)=\?/)
   assert.match(download, /todas-ufs/)
   assert.match(workflow, /mercadofarma_consolidado\.xlsx web\/public\/exports\/mercadofarma\.xlsx/)
-  assert.match(workflow, /Sincronizar somente produtos autorizados no Turso/)
+  assert.match(workflow, /Sincronizar somente produtos autorizados no D1/)
 })
 
 test('ranking usa código do setor em vez da UF do consultor', () => {
