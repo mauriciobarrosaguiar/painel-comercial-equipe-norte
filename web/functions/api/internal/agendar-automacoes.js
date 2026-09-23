@@ -6,6 +6,10 @@ const INTERVALOS_MINIMOS = new Map([
   ['MERCADO_FARMA', 720],
   ['AUDITORIA', 1440],
 ])
+const CREDENCIAIS_PESSOAIS = new Map([
+  ['BUSSOLA', 'BUSSOLA_MAURICIO'],
+  ['MERCADO_FARMA', 'MERCADO_FARMA_MAURICIO'],
+])
 const texto = value => String(value ?? '').trim()
 const numero = value => Number.isFinite(Number(value)) ? Number(value) : 0
 
@@ -75,12 +79,41 @@ export async function onRequestPost({ request, env }) {
       const minimo = INTERVALOS_MINIMOS.get(tipo) || 5
       const intervaloSolicitado = Math.trunc(numero(configuracao.intervalo_minutos) || minimo)
       const intervalo = Math.min(10080, Math.max(minimo, intervaloSolicitado))
-      const id = `cmd-${crypto.randomUUID()}`
       const parametrosSalvos = parametros(configuracao.parametros_json)
-      if (tipo === 'MERCADO_FARMA' && !texto(parametrosSalvos.ufs)) {
+      if (tipo === 'MERCADO_FARMA') {
         parametrosSalvos.ufs = 'TO'
       }
 
+      const integracaoPessoal = CREDENCIAIS_PESSOAIS.get(tipo)
+      if (integracaoPessoal) {
+        const credencial = await env.DB.prepare(`
+          SELECT 1 AS configurada
+            FROM integracao_credenciais
+           WHERE integracao=?
+             AND TRIM(COALESCE(credencial_cifrada,''))<>''
+           LIMIT 1
+        `).bind(integracaoPessoal).first()
+
+        if (!credencial?.configurada) {
+          const proxima = new Date(agora.getTime() + intervalo * 60_000).toISOString()
+          await env.DB.prepare(`
+            UPDATE configuracoes_automacao
+               SET intervalo_minutos=?,
+                   parametros_json=?,
+                   proxima_execucao_em=?,
+                   atualizado_em=?
+             WHERE tipo=?
+          `).bind(intervalo, JSON.stringify(parametrosSalvos), proxima, agoraIso, tipo).run()
+          ignorados.push({
+            tipo,
+            motivo: 'Acesso pessoal ainda não cadastrado.',
+            proxima_execucao_em: proxima,
+          })
+          continue
+        }
+      }
+
+      const id = `cmd-${crypto.randomUUID()}`
       const inserido = await env.DB.prepare(`
         INSERT INTO comandos_automacao(
           id,tipo,parametros_json,status,solicitado_por,mensagem,solicitado_em,atualizado_em
