@@ -5,16 +5,19 @@ const AGENDAVEIS = new Map([
     nome: 'Bússola',
     descricao: 'Atualiza pedidos, faturamento, clientes e indicadores comerciais.',
     padrao: 300,
+    minimo: 300,
   }],
   ['MERCADO_FARMA', {
     nome: 'Mercado Farma',
     descricao: 'Atualiza preços e estoques das UFs configuradas.',
     padrao: 720,
+    minimo: 720,
   }],
   ['AUDITORIA', {
     nome: 'Auditoria dos cálculos',
     descricao: 'Confere vínculos, EANs, datas, status e conciliação dos valores.',
     padrao: 1440,
+    minimo: 1440,
   }],
 ])
 
@@ -42,13 +45,14 @@ function parametros(value) {
 
 function apresentar(item) {
   const tipo = texto(item.tipo).toUpperCase()
-  const cadastro = AGENDAVEIS.get(tipo) || { nome: tipo, descricao: '', padrao: 30 }
+  const cadastro = AGENDAVEIS.get(tipo) || { nome: tipo, descricao: '', padrao: 30, minimo: 5 }
   return {
     tipo,
     nome: cadastro.nome,
     descricao: cadastro.descricao,
     ativo: Boolean(numero(item.ativo)),
-    intervalo_minutos: Math.max(5, numero(item.intervalo_minutos) || cadastro.padrao),
+    intervalo_minutos: Math.max(cadastro.minimo || 5, numero(item.intervalo_minutos) || cadastro.padrao),
+    intervalo_minimo: cadastro.minimo || 5,
     parametros: parametros(item.parametros_json),
     ultima_execucao_em: item.ultima_execucao_em || null,
     proxima_execucao_em: item.proxima_execucao_em || null,
@@ -104,8 +108,11 @@ export async function onRequestPost({ request, env }) {
     if (!cadastro) return json({ erro: 'Esta automação não aceita agendamento recorrente.' }, 400)
 
     const intervalo = Math.trunc(numero(body.intervalo_minutos))
-    if (intervalo < 5 || intervalo > 10080) {
-      return json({ erro: 'O intervalo deve ficar entre 5 minutos e 7 dias.' }, 400)
+    const minimo = cadastro.minimo || 5
+    if (intervalo < minimo || intervalo > 10080) {
+      return json({
+        erro: `Para ${cadastro.nome}, o intervalo deve ficar entre ${minimo} minutos e 7 dias.`,
+      }, 400)
     }
 
     const ativo = body.ativo === true || body.ativo === 1 || body.ativo === '1'
@@ -116,7 +123,7 @@ export async function onRequestPost({ request, env }) {
     const novosParametros = body.parametros && typeof body.parametros === 'object' && !Array.isArray(body.parametros)
       ? { ...parametrosAtuais, ...body.parametros }
       : parametrosAtuais
-    if (tipo === 'MERCADO_FARMA' && !texto(novosParametros.ufs)) {
+    if (tipo === 'MERCADO_FARMA') {
       novosParametros.ufs = 'TO'
     }
 
