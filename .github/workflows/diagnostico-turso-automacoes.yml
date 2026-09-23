@@ -26,6 +26,33 @@ jobs:
       - name: Instalar requests
         run: python -m pip install --disable-pip-version-check "requests>=2.34,<3"
 
+      - name: Testar endpoints internos de produção e mostrar erro
+        env:
+          PAINEL_ADMIN_KEY: ${{ secrets.PAINEL_ADMIN_KEY }}
+        shell: bash
+        run: |
+          set -u
+          for endpoint in agendar-automacoes automacoes; do
+            echo "=== $endpoint ==="
+            if [ "$endpoint" = "agendar-automacoes" ]; then
+              body='{}'
+            else
+              body='{"acao":"proxima"}'
+            fi
+            status=$(curl --silent --show-error \
+              --request POST "https://painel-equipe-norte.pages.dev/api/internal/$endpoint" \
+              --header "x-admin-key: ${PAINEL_ADMIN_KEY}" \
+              --header "content-type: application/json" \
+              --data "$body" \
+              --dump-header /tmp/headers.txt \
+              --output /tmp/body.txt \
+              --write-out "%{http_code}")
+            echo "HTTP $status"
+            grep -i '^x-db-backend:' /tmp/headers.txt || true
+            cat /tmp/body.txt
+            echo
+          done
+
       - name: Consultar somente schema das automacoes
         shell: bash
         run: |
