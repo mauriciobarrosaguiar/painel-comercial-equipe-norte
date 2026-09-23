@@ -1,4 +1,4 @@
-name: Extrair Bússola para Turso
+name: Extrair Bússola pessoal para D1
 
 on:
   workflow_dispatch:
@@ -12,7 +12,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: bussola-turso
+  group: bussola-pessoal-d1
   cancel-in-progress: false
 
 jobs:
@@ -39,24 +39,23 @@ jobs:
         run: |
           google-chrome --version || chromium --version || chromium-browser --version
 
-      - name: Extrair Bússola e sincronizar Turso
+      - name: Extrair Bússola pessoal e sincronizar D1
         env:
           PYTHONPATH: ${{ github.workspace }}
           PAINEL_BASE_URL: https://painel-equipe-norte.pages.dev
           PAINEL_ADMIN_KEY: ${{ secrets.PAINEL_ADMIN_KEY }}
-          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
-          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_API_TOKEN }}
           CLOUDFLARE_D1_DATABASE: painel-equipe-norte-db
-        run: python scripts/extrair_bussola_turso.py
+        run: python scripts/extrair_bussola_d1_corrigido.py
 
-      - name: Aplicar classificação MIX por código SAP no Turso
+      - name: Aplicar classificação MIX por código SAP no D1
         env:
           PYTHONPATH: ${{ github.workspace }}
-          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
-          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
-        run: python scripts/aplicar_mix_sap_turso.py
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_API_TOKEN }}
+          CLOUDFLARE_D1_DATABASE: painel-equipe-norte-db
+        run: python scripts/aplicar_mix_sap_d1.py
 
       - name: Fechar mês anterior e reconciliar histórico
         env:
@@ -133,7 +132,7 @@ jobs:
           set -euo pipefail
           if [ "$RESULTADO" = "success" ]; then
             STATUS="concluido"
-            MENSAGEM="Extração pessoal do Bússola concluída para Maurício, sincronizada no Turso, classificada pelo MIX, mês anterior fechado automaticamente e histórico reconciliado."
+            MENSAGEM="Extração pessoal do Bússola concluída para Maurício, sincronizada no D1, classificada pelo MIX, mês anterior fechado automaticamente e histórico reconciliado."
             ERRO=""
           else
             STATUS="erro"
