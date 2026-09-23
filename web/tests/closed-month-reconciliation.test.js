@@ -75,7 +75,7 @@ test('mês fechado pessoal recebe faturamento retroativo sem alterar as metas co
   assert.equal(history.geral[0].resultado.ol_sem_combate, 850)
   assert.equal(history.geral[0].resultado.meta_ol_sem_combate, 600)
 
-  const consultorAtualizado = history.itens.find((item) => item.escopo === 'CONSULTOR' && item.referencia_id === 'co1')
+  const consultorAtualizado = history.itens.find((item) => item.escopo === 'CONSULTOR' && item.referencia_id === MAURICIO_TEST_ID)
   assert.equal(consultorAtualizado.resultado.meta_ol_sem_combate, 600)
   assert.equal(consultorAtualizado.resultado.meta_ol_prioritarios, 180)
   assert.equal(consultorAtualizado.resultado.ol_sem_combate, 850)
