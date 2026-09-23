@@ -1,7 +1,14 @@
 import { repairPptxBytes } from '../_lib/pptx-repair.js'
 import { createTursoD1 } from '../_lib/turso-d1.js'
 
-function ativarTurso(context) {
+function backendPreferido(context) {
+  return String(context.env?.PAINEL_DB_BACKEND || 'd1').trim().toLowerCase()
+}
+
+function ativarBackend(context) {
+  const preferido = backendPreferido(context)
+  if (preferido !== 'turso') return 'd1'
+
   const url = String(context.env?.TURSO_DATABASE_URL || '').trim()
   const token = String(context.env?.TURSO_AUTH_TOKEN || '').trim()
   if (!url || !token) return 'd1'
@@ -32,7 +39,7 @@ export async function onRequest(context) {
   const url = new URL(context.request.url)
   let backend = 'd1'
   try {
-    backend = ativarTurso(context)
+    backend = ativarBackend(context)
   } catch (error) {
     return new Response(JSON.stringify({
       erro: error instanceof Error ? error.message : String(error),
