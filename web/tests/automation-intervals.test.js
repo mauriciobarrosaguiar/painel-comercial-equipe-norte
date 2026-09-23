@@ -37,6 +37,10 @@ function database() {
       atualizado_por TEXT,
       atualizado_em TEXT
     );
+    CREATE TABLE integracao_credenciais(
+      integracao TEXT PRIMARY KEY,
+      credencial_cifrada TEXT
+    );
     CREATE TABLE comandos_automacao(
       id TEXT PRIMARY KEY,
       tipo TEXT,
@@ -54,6 +58,9 @@ function database() {
       ('BUSSOLA',1,30,'{}',NULL,'2026-07-31T10:00:00.000Z','Teste','2026-07-31T10:00:00.000Z'),
       ('MERCADO_FARMA',1,30,'{"ufs":"MA,MT,PA,PI,TO"}',NULL,'2026-07-31T10:00:00.000Z','Teste','2026-07-31T10:00:00.000Z'),
       ('AUDITORIA',0,1440,'{}',NULL,NULL,'Teste','2026-07-31T10:00:00.000Z');
+    INSERT INTO integracao_credenciais VALUES
+      ('BUSSOLA_MAURICIO','cred-bussola'),
+      ('MERCADO_FARMA_MAURICIO','cred-mercado');
   `)
   return {
     raw: db,
@@ -66,7 +73,7 @@ const request = (url, options = {}) => new Request(url, {
   headers: { 'x-admin-key': ADMIN_KEY, ...(options.headers || {}) },
 })
 
-test('Mercado Farma nasce ativo a cada 30 minutos e o intervalo pode ser alterado', async () => {
+test('Mercado Farma respeita o mínimo pessoal de 720 minutos', async () => {
   const DB = database()
   const env = { DB, PAINEL_ADMIN_KEY: ADMIN_KEY }
 
@@ -78,9 +85,10 @@ test('Mercado Farma nasce ativo a cada 30 minutos e o intervalo pode ser alterad
   const body = await listed.json()
   const mercado = body.configuracoes.find(item => item.tipo === 'MERCADO_FARMA')
   assert.equal(mercado.ativo, true)
-  assert.equal(mercado.intervalo_minutos, 30)
+  assert.equal(mercado.intervalo_minutos, 720)
+  assert.equal(mercado.intervalo_minimo, 720)
 
-  const saved = await salvarConfiguracao({
+  const bloqueado = await salvarConfiguracao({
     request: request('https://painel.local/api/configuracoes-automacao', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -88,9 +96,20 @@ test('Mercado Farma nasce ativo a cada 30 minutos e o intervalo pode ser alterad
     }),
     env,
   })
+  assert.equal(bloqueado.status, 400)
+
+  const saved = await salvarConfiguracao({
+    request: request('https://painel.local/api/configuracoes-automacao', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ tipo: 'MERCADO_FARMA', ativo: true, intervalo_minutos: 720 }),
+    }),
+    env,
+  })
   assert.equal(saved.status, 200)
   const savedBody = await saved.json()
-  assert.equal(savedBody.configuracao.intervalo_minutos, 60)
+  assert.equal(savedBody.configuracao.intervalo_minutos, 720)
+  assert.equal(savedBody.configuracao.parametros.ufs, 'TO')
   assert.equal(savedBody.configuracao.ativo, true)
 })
 
