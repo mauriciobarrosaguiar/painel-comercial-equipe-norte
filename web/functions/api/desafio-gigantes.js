@@ -32,7 +32,7 @@ function parametros(request) {
   const anoMes = /^\d{4}-\d{2}$/.test(texto(search.get('ano_mes'))) ? texto(search.get('ano_mes')) : mesAtual()
   return {
     anoMes,
-    consultor: texto(search.get('consultor')).slice(0, 180),
+    consultor: 'cons-1ee6626b98906f06c399a6ad350c',
     uf: texto(search.get('uf')).toUpperCase().slice(0, 2),
     detalhes: search.get('detalhes') === '1',
     ...faixaMes(anoMes),

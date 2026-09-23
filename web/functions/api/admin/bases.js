@@ -2,6 +2,7 @@ import { onRequestGet as obterBases, onRequestPost as importarBases } from './ba
 import { onRequestPost as fecharMes } from '../internal/fechamento-mensal.js'
 import { onRequestPost as dispararDesafioSap } from '../desafio-gigantes-disparar.js'
 import { salvarArquivoDesafioGigantes } from '../../_lib/desafio-gigantes-arquivo.js'
+import { enforcePersonalScope } from '../../_lib/personal-scope.js'
 
 const texto = (value) => String(value ?? '').trim()
 const digitos = (value) => texto(value).replace(/\D/g, '')
@@ -30,81 +31,29 @@ async function filtrarMetasParaEquipe(env, body) {
   const rows = Array.isArray(body?.rows) ? body.rows : []
   if (!rows.length) return body
 
-  const consulta = await env.DB.prepare(`
-    SELECT DISTINCT
-      c.consultor_id,
-      COALESCE(co.nome,'') AS nome,
-      COALESCE(c.setor_rep,'') AS setor_rep,
-      COALESCE(c.nome_gd,'') AS nome_gd
-    FROM clientes c
-    LEFT JOIN consultores co ON co.id=c.consultor_id
-    WHERE c.carteira_importada=1
-      AND c.consultor_id IS NOT NULL
-      AND TRIM(c.consultor_id)<>''
-  `).all()
-  const equipe = consulta?.results || []
-  if (!equipe.length) {
-    throw new Error('Não foi possível identificar a equipe atual do Painel para filtrar a planilha nacional de metas.')
-  }
-
-  const consultorPorNome = new Map()
-  const consultorPorSetor = new Map()
-  const gdPorNome = new Map()
-  const setoresGd = new Set()
-
-  for (const membro of equipe) {
-    const nome = texto(membro.nome)
-    const setor = digitos(membro.setor_rep)
-    const nomeGd = texto(membro.nome_gd)
-    const cadastro = { id: texto(membro.consultor_id), nome }
-    if (nome) consultorPorNome.set(alto(nome), cadastro)
-    if (setor) {
-      consultorPorSetor.set(setor, cadastro)
-      if (setor.length >= 2) setoresGd.add(`${setor.slice(0, -2)}00`)
-    }
-    if (nomeGd) gdPorNome.set(alto(nomeGd), nomeGd)
-  }
-
-  const filtradas = []
-  for (const row of rows) {
-    const nomePlanilha = texto(row?.consultor || row?.colaborador)
-    const setorPlanilha = digitos(row?.setor)
-
-    if (ehGerente(row)) {
-      const nomeCanonico = gdPorNome.get(alto(nomePlanilha)) || (setoresGd.has(setorPlanilha) ? nomePlanilha : '')
-      if (!nomeCanonico) continue
-      filtradas.push({
-        ...row,
-        consultor: nomeCanonico,
-        colaborador: nomeCanonico,
-        escopo: 'gerente',
-      })
-      continue
-    }
-
-    const membro = consultorPorSetor.get(setorPlanilha) || consultorPorNome.get(alto(nomePlanilha))
-    if (!membro?.nome) continue
-    filtradas.push({
-      ...row,
-      consultor: membro.nome,
-      colaborador: membro.nome,
-      escopo: 'consultor',
+  const filtradas = rows
+    .filter((row) => {
+      if (ehGerente(row)) return false
+      const nome = alto(row?.consultor || row?.colaborador)
+      const setor = digitos(row?.setor)
+      return nome === 'MAURICIO BARROS DE AGUIAR' || setor === '18150301'
     })
-  }
+    .map((row) => ({
+      ...row,
+      consultor: 'MAURICIO BARROS DE AGUIAR',
+      colaborador: 'MAURICIO BARROS DE AGUIAR',
+      escopo: 'consultor',
+    }))
 
-  const consultores = filtradas.filter((row) => !ehGerente(row))
-  const gerentes = filtradas.filter(ehGerente)
-  if (!consultores.length) {
-    throw new Error('A planilha não contém metas dos consultores que pertencem à equipe atual do Painel.')
-  }
-  if (!gerentes.length) {
-    throw new Error('A planilha não contém a linha do GD responsável pela equipe atual do Painel.')
+  if (!filtradas.length) {
+    throw new Error('A planilha não contém a meta de MAURICIO BARROS DE AGUIAR / setor 18150301.')
   }
 
   return {
     ...body,
     rows: filtradas,
     filtro_equipe: {
+      modo: 'pessoal',
       linhas_recebidas: rows.length,
       linhas_importadas: filtradas.length,
       linhas_ignoradas: Math.max(0, rows.length - filtradas.length),
@@ -210,7 +159,10 @@ async function acionarSapAposImportacao(context) {
   return dispararDesafioSap({ request, env: context.env })
 }
 
-export const onRequestGet = obterBases
+export async function onRequestGet(context) {
+  await enforcePersonalScope(context.env)
+  return obterBases(context)
+}
 
 export async function onRequestPost(context) {
   let body = {}

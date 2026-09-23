@@ -47,7 +47,8 @@ test('importar metas do mês seguinte fecha o resultado anterior antes de trocar
             ol_lancamentos: 250,
           },
           {
-            colaborador: 'Ana',
+            colaborador: 'MAURICIO BARROS DE AGUIAR',
+            setor: '18150301',
             cargo: 'CONSULTOR VENDAS',
             escopo: 'consultor',
             ol_sem_combate: 1200,

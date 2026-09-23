@@ -71,8 +71,10 @@ async function importarPainel(env, rows, nome) {
     const cnpj = bruto.slice(-14).padStart(14, '0')
     if (/^0+$/.test(cnpj)) continue
     const nomeRep = texto(row.nome_rep || row.consultor || row.representante)
-    const consultorId = nomeRep ? await idEstavel('cons', nomeRep) : null
-    if (consultorId) consultores.set(consultorId, { id: consultorId, nome: nomeRep })
+    const setorRep = digitos(row.setor_rep || row.setor)
+    if (alto(nomeRep) !== 'MAURICIO BARROS DE AGUIAR' && setorRep !== '18150301') continue
+    const consultorId = await idEstavel('cons', 'MAURICIO BARROS DE AGUIAR')
+    if (consultorId) consultores.set(consultorId, { id: consultorId, nome: 'MAURICIO BARROS DE AGUIAR' })
     clientes.push({
       id: await idEstavel('cli', cnpj),
       cnpj,
@@ -229,9 +231,11 @@ async function importarMetas(env, rows, nome, anoMes) {
   for (const row of rows) {
     const nomeColaborador = texto(row.consultor || row.colaborador)
     if (!nomeColaborador) continue
-    const escopoInformado = alto(row.escopo || row.cargo)
+    const setorColaborador = digitos(row.setor)
+    if (alto(nomeColaborador) !== 'MAURICIO BARROS DE AGUIAR' && setorColaborador !== '18150301') continue
+    const escopoInformado = 'CONSULTOR'
     const meta = {
-      nome: nomeColaborador,
+      nome: 'MAURICIO BARROS DE AGUIAR',
       ol_sem_combate: numero(row.ol_sem_combate),
       ol_prioritarios: numero(row.ol_prioritarios),
       ol_lancamentos: numero(row.ol_lancamentos),
@@ -242,7 +246,7 @@ async function importarMetas(env, rows, nome, anoMes) {
       gerentes.push(meta)
       continue
     }
-    const consultorId = await idEstavel('cons', nomeColaborador)
+    const consultorId = await idEstavel('cons', 'MAURICIO BARROS DE AGUIAR')
     consultores.push({
       ...meta,
       id: await idEstavel('meta', anoMes, 'consultor', consultorId),

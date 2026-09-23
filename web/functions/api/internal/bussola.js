@@ -1,6 +1,6 @@
 import { authorized, decryptCredentials, json } from '../../_lib/credentials.js'
 
-const INTEGRATION = 'BUSSOLA'
+const INTEGRATION = 'BUSSOLA_MAURICIO'
 
 function extrairGd(credentials) {
   if (!credentials || typeof credentials !== 'object') return { usuario: '', segredo: '' }
@@ -30,7 +30,7 @@ export async function onRequestGet({ request, env }) {
   ).bind(INTEGRATION).first()
 
   if (!current?.credencial_cifrada) {
-    return json({ erro: 'Credencial da GD do Bússola ainda não cadastrada.' }, 404)
+    return json({ erro: 'Acesso pessoal do Bússola ainda não cadastrado.' }, 404)
   }
 
   try {
@@ -41,7 +41,7 @@ export async function onRequestGet({ request, env }) {
     const gd = extrairGd(credentials)
 
     if (!gd.usuario || !gd.segredo) {
-      return json({ erro: 'A credencial da GD do Bússola está incompleta.' }, 404)
+      return json({ erro: 'A credencial pessoal do Bússola está incompleta.' }, 404)
     }
 
     return json({
@@ -51,7 +51,7 @@ export async function onRequestGet({ request, env }) {
   } catch (error) {
     return json(
       {
-        erro: 'Não foi possível decifrar a credencial da GD salva.',
+        erro: 'Não foi possível decifrar a credencial pessoal do Bússola.',
         detalhe: error instanceof Error ? error.message : String(error),
       },
       500,

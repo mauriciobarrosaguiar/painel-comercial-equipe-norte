@@ -42,7 +42,7 @@ function periodo(params) {
 
 function filtros(params) {
   const faixa = periodo(params)
-  const consultor = String(params.get('consultor') || '').trim().slice(0, 180)
+  const consultor = 'cons-1ee6626b98906f06c399a6ad350c'
   const uf = String(params.get('uf') || '').trim().toUpperCase().slice(0, 2)
   const cond = [ITEM_FATURADO]
   const valores = []
@@ -208,7 +208,7 @@ export async function onRequestGet({ request, env }) {
       stmt(env, "SELECT id,nome FROM consultores WHERE ativo=1 AND origem='PAINEL_EQUIPE' AND TRIM(nome)<>'' ORDER BY nome COLLATE NOCASE"),
       stmt(env, "SELECT DISTINCT UPPER(TRIM(uf)) uf FROM clientes WHERE carteira_importada=1 AND ativo=1 AND LENGTH(TRIM(COALESCE(uf,'')))=2 ORDER BY uf"),
       stmt(env, "SELECT (SELECT COUNT(*) FROM clientes WHERE carteira_importada=1) clientes_carteira,(SELECT COUNT(*) FROM produtos WHERE UPPER(COALESCE(tipo_mix,''))<>'SEM CLASSIFICACAO') produtos_mix,(SELECT COUNT(*) FROM produtos WHERE mercado_farma_ativo=1) produtos_mercado_farma,(SELECT COUNT(*) FROM metas WHERE escopo='consultor') metas"),
-      stmt(env, `SELECT COUNT(DISTINCT pe.id) pedidos,COUNT(ip.id) itens,COALESCE(SUM(ip.valor_faturado),0) valor_total,MIN(COALESCE(pe.data_faturamento,pe.data_pedido)) data_min,MAX(COALESCE(pe.data_faturamento,pe.data_pedido)) data_max ${JOINS} WHERE ${ITEM_FATURADO}`),
+      stmt(env, `SELECT COUNT(DISTINCT pe.id) pedidos,COUNT(ip.id) itens,COALESCE(SUM(ip.valor_faturado),0) valor_total,MIN(COALESCE(pe.data_faturamento,pe.data_pedido)) data_min,MAX(COALESCE(pe.data_faturamento,pe.data_pedido)) data_max ${JOINS} WHERE ${filtro.where}`, filtro.valores),
       stmt(env, `SELECT COALESCE(SUM(ip.valor_faturado),0) total ${JOINS} WHERE ${filtro.where} AND UPPER(TRIM(COALESCE(pr.tipo_mix,'')))='COMBATE'`, filtro.valores),
       stmt(env, `SELECT COUNT(DISTINCT pe.id) total ${JOINS} WHERE ${filtro.where}`, filtro.valores),
       stmt(env, "SELECT finalizado_em FROM extracoes WHERE tipo='BUSSOLA' AND status='concluido' AND finalizado_em IS NOT NULL ORDER BY finalizado_em DESC LIMIT 1"),

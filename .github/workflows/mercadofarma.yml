@@ -11,7 +11,7 @@ on:
       ufs:
         description: "UFs separadas por virgula. Vazio executa todas."
         required: false
-        default: "MA,MT,PA,PI,TO"
+        default: "TO"
       uf:
         description: "Compatibilidade: UF ou UFs separadas por virgula."
         required: false
@@ -29,11 +29,11 @@ on:
         required: false
         default: "true"
       mercadofarma_usuario:
-        description: "Usuario GD Mercado Farma enviado pelo painel"
+        description: "Compatibilidade legada; o painel usa a credencial pessoal cadastrada"
         required: false
         default: ""
       mercadofarma_senha:
-        description: "Senha GD Mercado Farma enviada pelo painel"
+        description: "Compatibilidade legada; o painel usa a credencial pessoal cadastrada"
         required: false
         default: ""
       persistence_key:
@@ -58,9 +58,9 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
-      max-parallel: 5
+      max-parallel: 1
       matrix:
-        uf: [MA, MT, PA, PI, TO]
+        uf: [TO]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -82,6 +82,25 @@ jobs:
           which chromedriver || true
           chromedriver --version || true
 
+      - name: Carregar acesso pessoal do Mercado Farma
+        env:
+          PAINEL_URL: https://painel-equipe-norte.pages.dev
+          PAINEL_ADMIN_KEY: ${{ secrets.PAINEL_ADMIN_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail-with-body --silent --show-error \
+            --header "x-admin-key: ${PAINEL_ADMIN_KEY}" \
+            "${PAINEL_URL}/api/internal/mercado-farma-credencial" > /tmp/mercadofarma-credencial.json
+          USUARIO=$(jq -r '.usuario // empty' /tmp/mercadofarma-credencial.json)
+          SENHA=$(jq -r '.segredo // empty' /tmp/mercadofarma-credencial.json)
+          test -n "$USUARIO"
+          test -n "$SENHA"
+          echo "::add-mask::$USUARIO"
+          echo "::add-mask::$SENHA"
+          echo "MERCADOFARMA_USUARIO=$USUARIO" >> "$GITHUB_ENV"
+          echo "MERCADOFARMA_SENHA=$SENHA" >> "$GITHUB_ENV"
+
       - name: Extrair UF ${{ matrix.uf }}
         if: ${{ (inputs.ufs == '' && inputs.uf == '') || contains(inputs.ufs, matrix.uf) || contains(inputs.uf, matrix.uf) }}
         env:
@@ -91,8 +110,6 @@ jobs:
           GITHUB_BRANCH: ${{ github.ref_name }}
           GITHUB_STORAGE_BRANCH: app-storage
           PERSISTENCE_KEY: ${{ secrets.PERSISTENCE_KEY || inputs.persistence_key }}
-          MERCADOFARMA_USUARIO: ${{ secrets.MERCADOFARMA_USUARIO || inputs.mercadofarma_usuario }}
-          MERCADOFARMA_SENHA: ${{ secrets.MERCADOFARMA_SENHA || inputs.mercadofarma_senha }}
           TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
           TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_API_TOKEN }}

@@ -17,6 +17,37 @@ numero = legacy.numero
 data_iso = legacy.data_iso
 id_estavel = legacy.id_estavel
 
+MAURICIO_NOME = "MAURICIO BARROS DE AGUIAR"
+
+
+def somente_mauricio(base: pd.DataFrame) -> pd.DataFrame:
+    if base is None or base.empty:
+        return base
+    colunas = [coluna for coluna in ("representante", "consultor_extracao") if coluna in base.columns]
+    if not colunas:
+        return base
+    mascara = pd.Series(False, index=base.index)
+    encontrou_nome = False
+    for coluna in colunas:
+        valores = (
+            base[coluna]
+            .fillna("")
+            .astype(str)
+            .str.normalize("NFKD")
+            .str.encode("ascii", errors="ignore")
+            .str.decode("ascii")
+            .str.replace(r"\s+", " ", regex=True)
+            .str.strip()
+            .str.upper()
+        )
+        encontrou_nome = encontrou_nome or bool(valores.ne("").any())
+        mascara |= valores.eq(MAURICIO_NOME)
+    if mascara.any():
+        return base.loc[mascara].copy()
+    if encontrou_nome:
+        raise RuntimeError("O acesso do Bússola não retornou registros de MAURICIO BARROS DE AGUIAR.")
+    return base
+
 
 def sincronizar() -> None:
     usuario, segredo = legacy.obter_credenciais()
@@ -44,7 +75,7 @@ def sincronizar() -> None:
     )
 
     try:
-        base_extraida = legacy.extrair_base(usuario, segredo)
+        base_extraida = somente_mauricio(legacy.extrair_base(usuario, segredo))
         total_extraido = len(base_extraida)
         base = deduplicar_exportacao_bussola(base_extraida)
         duplicatas_ignoradas = total_extraido - len(base)

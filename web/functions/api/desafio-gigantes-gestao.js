@@ -19,7 +19,7 @@ export async function onRequestGet({ request, env }) {
     const valor = texto(new URL(request.url).searchParams.get('ano_mes'))
     const anoMes = /^\d{4}-\d{2}$/.test(valor) ? valor : mesAtual()
     const periodo = faixaMes(anoMes)
-    const consultores = await env.DB.prepare("SELECT DISTINCT consultor_id,nome_colaborador,setor FROM desafio_gigantes_metas WHERE ano_mes=? AND escopo='consultor' AND TRIM(COALESCE(consultor_id,''))<>'' ORDER BY setor,nome_colaborador").bind(anoMes).all()
+    const consultores = await env.DB.prepare("SELECT DISTINCT consultor_id,nome_colaborador,setor FROM desafio_gigantes_metas WHERE ano_mes=? AND escopo='consultor' AND consultor_id=? ORDER BY setor,nome_colaborador").bind(anoMes, 'cons-1ee6626b98906f06c399a6ad350c').all()
     const identificacao = await env.DB.prepare("SELECT COUNT(*) total,SUM(CASE WHEN status='IDENTIFICADO' THEN 1 ELSE 0 END) identificados,SUM(CASE WHEN status='PENDENTE' THEN 1 ELSE 0 END) pendentes,SUM(CASE WHEN status='AMBIGUO' THEN 1 ELSE 0 END) ambiguos,SUM(CASE WHEN status='NAO_ENCONTRADO' THEN 1 ELSE 0 END) nao_encontrados,SUM(CASE WHEN status='ERRO' THEN 1 ELSE 0 END) erros,MAX(ultima_consulta_em) ultima_consulta_em FROM desafio_gigantes_produtos WHERE sku IN (SELECT DISTINCT sku FROM desafio_gigantes_metas WHERE ano_mes=?)").bind(anoMes).first()
     const duplicados = await env.DB.prepare("SELECT TRIM(ean) ean,GROUP_CONCAT(DISTINCT sku) saps,COUNT(DISTINCT sku) qtd_saps FROM desafio_gigantes_metas WHERE ano_mes=? AND TRIM(COALESCE(ean,''))<>'' GROUP BY TRIM(ean) HAVING COUNT(DISTINCT sku)>1 ORDER BY TRIM(ean)").bind(anoMes).all()
     const problemas = await env.DB.prepare(`

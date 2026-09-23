@@ -146,7 +146,7 @@ def carregar_credenciais_mercadofarma(login: dict | None = None, *, exigir: bool
     configurado = not faltantes
     if exigir and not configurado:
         raise RuntimeError(
-            "Configure o acesso GD do Mercado Farma. Secrets ausentes: " + ", ".join(faltantes)
+            "Configure seu acesso pessoal do Mercado Farma no painel. Dados ausentes: " + ", ".join(faltantes)
         )
     return {
         "usuario": usuario,
@@ -602,7 +602,7 @@ def alvos_mercadofarma_por_uf(
             continue
         alvos.append(
             {
-                "consultor": "GD",
+                "consultor": "MAURICIO BARROS DE AGUIAR",
                 "uf": str(uf),
                 "cnpj": cnpjs[0],
                 "cnpjs_candidatos": cnpjs,

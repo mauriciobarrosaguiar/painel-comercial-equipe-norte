@@ -97,6 +97,7 @@ def _carregar_bases_d1() -> tuple[pd.DataFrame, pd.DataFrame]:
         LEFT JOIN consultores co ON co.id=c.consultor_id
         WHERE c.carteira_importada=1
           AND c.ativo=1
+          AND c.consultor_id='cons-1ee6626b98906f06c399a6ad350c'
           AND LENGTH(TRIM(COALESCE(c.cnpj,'')))=14
         ORDER BY c.uf,c.nome_fantasia,c.cnpj
         """,
@@ -120,7 +121,7 @@ def _carregar_bases_d1() -> tuple[pd.DataFrame, pd.DataFrame]:
 def _validar_bases_carregadas(clientes: pd.DataFrame, produtos_mercado: pd.DataFrame) -> None:
     faltantes = []
     if clientes is None or clientes.empty:
-        faltantes.append("PAINEL EQUIPE NORTE no D1")
+        faltantes.append("CARTEIRA DO MAURICIO no D1")
     if produtos_mercado is None or produtos_mercado.empty:
         faltantes.append("Produtos do Mercado Farma no D1")
     if faltantes:
@@ -147,7 +148,7 @@ def main() -> int:
     status = {
         "uf": uf,
         "status": "erro",
-        "consultor_usado": "GD",
+        "consultor_usado": "MAURICIO BARROS DE AGUIAR",
         "cnpj_referencia": "",
         "usuario_mascarado": "",
         "total_eans": 0,
@@ -166,7 +167,7 @@ def main() -> int:
         if csv_path.exists():
             csv_path.unlink()
 
-        status["etapa"] = "carregar_acesso_gd"
+        status["etapa"] = "carregar_acesso_pessoal"
         login = carregar_login_bussola()
         credencial_gd = carregar_credenciais_mercadofarma(login, exigir=True)
         usuario_gd = str(credencial_gd.get("usuario", ""))
@@ -184,7 +185,7 @@ def main() -> int:
         status["etapa"] = "montar_alvos"
         alvos = [alvo for alvo in alvos_mercadofarma_por_uf(clientes, usuario_gd, senha_gd) if alvo.get("uf") == uf]
         if not alvos:
-            raise RuntimeError(f"Não encontrei CNPJ de cliente ativo no Painel Equipe Norte para a UF {uf}.")
+            raise RuntimeError(f"Não encontrei CNPJ ativo da carteira do Maurício para a UF {uf}.")
         alvo = alvos[0]
         status["consultor_usado"] = alvo.get("consultor", "")
         status["cnpj_referencia"] = alvo.get("cnpj", "")

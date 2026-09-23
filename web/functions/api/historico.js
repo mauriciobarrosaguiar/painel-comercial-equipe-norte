@@ -142,21 +142,13 @@ export async function onRequestGet({ request, env }) {
   try {
     const params = new URL(request.url).searchParams
     const mes = texto(params.get('ano_mes')).slice(0, 7)
-    const escopo = texto(params.get('escopo')).toUpperCase().slice(0, 20)
-    const referencia = texto(params.get('referencia')).slice(0, 180)
-    const cond = ['versao_atual=1']
-    const binds = []
+    const escopo = ''
+    const referencia = ''
+    const cond = ["versao_atual=1", "escopo='CONSULTOR'", 'referencia_id=?']
+    const binds = ['cons-1ee6626b98906f06c399a6ad350c']
     if (mes) {
       cond.push('ano_mes=?')
       binds.push(mes)
-    }
-    if (escopo) {
-      cond.push('escopo=?')
-      binds.push(escopo)
-    }
-    if (referencia) {
-      cond.push('(referencia_id=? OR UPPER(referencia_nome) LIKE UPPER(?))')
-      binds.push(referencia, `%${referencia}%`)
     }
 
     const [
@@ -173,8 +165,8 @@ export async function onRequestGet({ request, env }) {
         )
         .bind(...binds),
       env.DB.prepare(
-        'SELECT ano_mes,MAX(fechado_em) fechado_em,MAX(versao) versao FROM historico_mensal WHERE versao_atual=1 GROUP BY ano_mes ORDER BY ano_mes DESC',
-      ),
+        "SELECT ano_mes,MAX(fechado_em) fechado_em,MAX(versao) versao FROM historico_mensal WHERE versao_atual=1 AND escopo='CONSULTOR' AND referencia_id=? GROUP BY ano_mes ORDER BY ano_mes DESC",
+      ).bind('cons-1ee6626b98906f06c399a6ad350c'),
       env.DB.prepare(
         'SELECT ano_mes,cnpj,cliente_id,faturamento,pedidos,produtos,quantidade,importado_em FROM historico_clientes_importado ORDER BY ano_mes DESC,cnpj',
       ),
@@ -187,13 +179,23 @@ export async function onRequestGet({ request, env }) {
       ),
     ])
 
-    const fechados = (linhasResult.results || []).map((item) => {
+    const fechadosPessoais = (linhasResult.results || []).map((item) => {
       let resultado = {}
       try {
         resultado = JSON.parse(String(item.resultado_json || '{}'))
       } catch {}
       return { ...item, origem: 'FECHAMENTO', resultado }
     })
+    const fechados = [
+      ...fechadosPessoais,
+      ...fechadosPessoais.map((item) => ({
+        ...item,
+        id: `${item.id}-geral-pessoal`,
+        escopo: 'GERAL',
+        referencia_id: '',
+        referencia_nome: 'Maurício',
+      })),
+    ]
     const importados = montarImportados(
       importadosResult.results || [],
       clientesResult.results || [],
