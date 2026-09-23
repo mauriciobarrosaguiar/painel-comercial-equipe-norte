@@ -75,6 +75,9 @@ jobs:
           q=f"{base}/{dbid}/query"
           tests=[
             ("READ","SELECT COUNT(*) total FROM comandos_automacao",[]),
+            ("CREDENTIAL_NAMES","SELECT integracao,status,usuario_mascarado,atualizado_em FROM integracao_credenciais WHERE integracao IN ('BUSSOLA_MAURICIO','MERCADO_FARMA_MAURICIO') ORDER BY integracao",[]),
+            ("AUTOMATION_CONFIG","SELECT tipo,ativo,intervalo_minutos,parametros_json FROM configuracoes_automacao ORDER BY tipo",[]),
+            ("PERSONAL_COUNTS","SELECT (SELECT COUNT(*) FROM consultores WHERE ativo=1) consultores_ativos,(SELECT COUNT(*) FROM colaboradores_acesso WHERE ativo=1) acessos_ativos,(SELECT COUNT(*) FROM clientes WHERE ativo=1 AND carteira_importada=1) clientes_ativos",[]),
             ("WRITE_ZERO","UPDATE configuracoes_automacao SET atualizado_em=atualizado_em WHERE tipo='__DIAGNOSTICO_INEXISTENTE__'",[]),
           ]
           for label,sql,params in tests:
@@ -103,6 +106,9 @@ jobs:
               "PRAGMA table_info(configuracoes_automacao)",
               "SELECT COUNT(*) AS total FROM comandos_automacao",
               "SELECT COUNT(*) AS total FROM configuracoes_automacao",
+              "SELECT integracao,status,usuario_mascarado,atualizado_em FROM integracao_credenciais WHERE integracao IN ('BUSSOLA_MAURICIO','MERCADO_FARMA_MAURICIO') ORDER BY integracao",
+              "SELECT tipo,ativo,intervalo_minutos,parametros_json FROM configuracoes_automacao ORDER BY tipo",
+              "SELECT (SELECT COUNT(*) FROM consultores WHERE ativo=1) consultores_ativos,(SELECT COUNT(*) FROM colaboradores_acesso WHERE ativo=1) acessos_ativos,(SELECT COUNT(*) FROM clientes WHERE ativo=1 AND carteira_importada=1) clientes_ativos",
           ]
           payload = {"requests":[{"type":"execute","stmt":{"sql":sql}} for sql in sqls] + [{"type":"close"}]}
           response = requests.post(url, headers=headers, json=payload, timeout=60)
