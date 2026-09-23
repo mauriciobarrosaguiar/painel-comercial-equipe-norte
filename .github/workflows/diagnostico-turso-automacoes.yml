@@ -53,6 +53,37 @@ jobs:
             echo
           done
 
+      - name: Testar leitura e escrita inofensiva no D1
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_API_TOKEN }}
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json, os, requests
+          account=(os.environ.get("CLOUDFLARE_ACCOUNT_ID") or "").strip()
+          token=(os.environ.get("CLOUDFLARE_API_TOKEN") or "").strip()
+          headers={"authorization":f"Bearer {token}","content-type":"application/json"}
+          base=f"https://api.cloudflare.com/client/v4/accounts/{account}/d1/database"
+          r=requests.get(base,headers=headers,params={"per_page":100},timeout=60)
+          print("LIST HTTP",r.status_code)
+          data=r.json()
+          if not r.ok: raise SystemExit(json.dumps(data)[:4000])
+          db=next((x for x in data.get("result") or [] if x.get("name")=="painel-equipe-norte-db"),None)
+          if not db: raise SystemExit("D1 painel-equipe-norte-db não encontrado")
+          dbid=db.get("uuid") or db.get("id")
+          q=f"{base}/{dbid}/query"
+          tests=[
+            ("READ","SELECT COUNT(*) total FROM comandos_automacao",[]),
+            ("WRITE_ZERO","UPDATE configuracoes_automacao SET atualizado_em=atualizado_em WHERE tipo='__DIAGNOSTICO_INEXISTENTE__'",[]),
+          ]
+          for label,sql,params in tests:
+              rr=requests.post(q,headers=headers,json={"sql":sql,"params":params},timeout=60)
+              print(label,"HTTP",rr.status_code)
+              body=rr.json()
+              print(json.dumps(body,ensure_ascii=False)[:5000])
+          PY
+
       - name: Consultar somente schema das automacoes
         shell: bash
         run: |
