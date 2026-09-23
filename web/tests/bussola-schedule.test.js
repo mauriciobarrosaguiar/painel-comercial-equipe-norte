@@ -34,6 +34,10 @@ function database() {
       atualizado_por TEXT,
       atualizado_em TEXT
     );
+    CREATE TABLE integracao_credenciais(
+      integracao TEXT PRIMARY KEY,
+      credencial_cifrada TEXT
+    );
     CREATE TABLE comandos_automacao(
       id TEXT PRIMARY KEY,
       tipo TEXT,
@@ -49,6 +53,7 @@ function database() {
     );
     INSERT INTO configuracoes_automacao VALUES
       ('BUSSOLA',1,30,'{}',NULL,'2020-01-01T00:00:00.000Z','Teste','2020-01-01T00:00:00.000Z');
+    INSERT INTO integracao_credenciais VALUES('BUSSOLA_MAURICIO','credencial-teste');
     INSERT INTO comandos_automacao(
       id,tipo,parametros_json,status,solicitado_por,mensagem,solicitado_em,iniciado_em,atualizado_em
     ) VALUES(
@@ -66,12 +71,12 @@ test('Bússola pessoal usa o agendador central configurável a cada 5 minutos', 
   assert.match(workflow, /workflow_dispatch:/)
   assert.match(processor, /schedule:\s*\n\s*- cron: ["']\*\/5 \* \* \* \*["']/)
   assert.match(processor, /api\/internal\/agendar-automacoes/)
-  assert.match(workflow, /concurrency:\s*\n\s*group: bussola-turso\s*\n\s*cancel-in-progress: false/)
+  assert.match(workflow, /concurrency:\s*\n\s*group: bussola-pessoal-d1\s*\n\s*cancel-in-progress: false/)
 })
 
-test('extração usa somente o fluxo pessoal no Turso', () => {
+test('extração usa somente o fluxo pessoal no D1', () => {
   assert.match(workflow, /timeout-minutes: 60/)
-  assert.match(workflow, /python scripts\/extrair_bussola_turso\.py/)
+  assert.match(workflow, /python scripts\/extrair_bussola_d1_corrigido\.py/)
   assert.doesNotMatch(workflow, /extrair_bussola_contingencia/)
 })
 
