@@ -71,24 +71,13 @@ async function erroGitHub(response, acao) {
   return new Error(`${orientacao} (${acao}; HTTP ${status || 'desconhecido'}).${complemento}`)
 }
 
-async function workflowEmAndamento(env, workflow) {
-  const response = await fetch(`https://api.github.com/repos/${REPOSITORIO}/actions/workflows/${workflow}/runs?per_page=10`, {
-    headers: githubHeaders(env),
-  })
-  if (!response.ok) throw await erroGitHub(response, 'consultar workflow')
-  const body = await response.json().catch(() => ({}))
-  const ativos = new Set(['queued', 'in_progress', 'pending', 'waiting', 'requested'])
-  return Array.isArray(body.workflow_runs) && body.workflow_runs.some(run => ativos.has(String(run?.status || '').toLowerCase()))
-}
-
 async function dispararWorkflow(env, tipo, id, parametros) {
   const configuracao = DISPAROS[tipo]
   if (!configuracao || !tokenDisponivel(env)) return { imediato: false }
 
-  if (await workflowEmAndamento(env, configuracao.workflow)) {
-    return { imediato: false, ocupado: true }
-  }
-
+  // Não consulte a lista de runs antes do disparo. Alguns tokens conseguem
+  // executar workflow_dispatch, mas falham na leitura de runs. A duplicidade
+  // já é bloqueada no D1 e a concorrência também é protegida no workflow.
   const response = await fetch(`https://api.github.com/repos/${REPOSITORIO}/actions/workflows/${configuracao.workflow}/dispatches`, {
     method: 'POST',
     headers: githubHeaders(env),
@@ -98,8 +87,32 @@ async function dispararWorkflow(env, tipo, id, parametros) {
   return { imediato: true }
 }
 
+async function limparExecucoesOrfas(env) {
+  const agora = new Date().toISOString()
+  await env.DB.batch([
+    env.DB.prepare(
+      `UPDATE comandos_automacao
+          SET status='erro',
+              erro=CASE WHEN TRIM(COALESCE(erro,''))='' THEN 'Execução encerrada automaticamente por tempo excedido.' ELSE erro END,
+              finalizado_em=?,
+              atualizado_em=?
+        WHERE status='executando'
+          AND julianday(COALESCE(iniciado_em,solicitado_em)) < julianday('now','-2 hours')`,
+    ).bind(agora, agora),
+    env.DB.prepare(
+      `UPDATE extracoes
+          SET status='erro',
+              erro=CASE WHEN TRIM(COALESCE(erro,''))='' THEN 'Extração encerrada automaticamente por tempo excedido.' ELSE erro END,
+              finalizado_em=?
+        WHERE status='executando'
+          AND julianday(COALESCE(iniciado_em,criado_em)) < julianday('now','-2 hours')`,
+    ).bind(agora),
+  ])
+}
+
 export async function onRequestGet({ env }) {
   try {
+    await limparExecucoesOrfas(env)
     const [comandos, extracoes, importacoes] = await env.DB.batch([
       env.DB.prepare('SELECT id,tipo,status,parametros_json,solicitado_por,mensagem,erro,solicitado_em,iniciado_em,finalizado_em,atualizado_em FROM comandos_automacao ORDER BY solicitado_em DESC LIMIT 40'),
       env.DB.prepare('SELECT id,tipo,status,total_registros,mensagem,erro,iniciado_em,finalizado_em,criado_em FROM extracoes ORDER BY criado_em DESC LIMIT 40'),
@@ -134,6 +147,7 @@ export async function onRequestPost({ request, env }) {
   if (negado) return negado
 
   try {
+    await limparExecucoesOrfas(env)
     const body = await request.json()
     const tipo = texto(body.tipo).toUpperCase()
     if (!TIPOS.has(tipo)) return json({ erro: 'Tipo de automação inválido.' }, 400)
@@ -196,11 +210,7 @@ export async function onRequestPost({ request, env }) {
     }
 
     try {
-      const resultado = await dispararWorkflow(env, tipo, id, parametros)
-      if (resultado.ocupado) {
-        await env.DB.prepare('DELETE FROM comandos_automacao WHERE id=? AND status=?').bind(id, 'aguardando').run()
-        return json({ erro: 'Este processo já está em execução no GitHub Actions.', status: 'executando' }, 409)
-      }
+      await dispararWorkflow(env, tipo, id, parametros)
       const iniciado = new Date().toISOString()
       await env.DB.prepare(
         "UPDATE comandos_automacao SET status='executando',mensagem='Enviado ao GitHub Actions. Aguardando conclusão.',erro='',iniciado_em=?,atualizado_em=? WHERE id=? AND status='aguardando'",
