@@ -146,10 +146,10 @@ export async function onRequestPost({ request, env }) {
     }
 
     const configuracao = DISPAROS[tipo]
-    if (configuracao && tokenDisponivel(env) && await workflowEmAndamento(env, configuracao.workflow)) {
-      return json({ erro: 'Este processo já está em execução no GitHub Actions.', status: 'executando' }, 409)
-    }
 
+    // Registre primeiro a solicitação no D1. A validação do GitHub acontece depois,
+    // dentro de dispararWorkflow(), para que token expirado, permissão insuficiente
+    // ou indisponibilidade temporária nunca faça o clique do usuário ser perdido.
     const id = `cmd-${crypto.randomUUID()}`
     const agora = new Date().toISOString()
     const parametros = body.parametros && typeof body.parametros === 'object' ? body.parametros : {}
