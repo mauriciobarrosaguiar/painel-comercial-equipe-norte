@@ -83,6 +83,31 @@ test('mantém a solicitação na contingência e mostra orientação quando o to
   }
 })
 
+test('mantém o clique salvo na contingência quando o token falha já na consulta do workflow', async () => {
+  const DB = testDatabase()
+  const env = { DB, PAINEL_ADMIN_KEY: key, GITHUB_ACTIONS_TOKEN: 'github_pat_token_de_teste_com_tamanho_valido' }
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async url => {
+    if (String(url).includes('/runs?')) {
+      return new Response(JSON.stringify({ message: 'Bad credentials' }), { status: 401, headers: { 'content-type': 'application/json' } })
+    }
+    throw new Error(`URL inesperada: ${url}`)
+  }
+  try {
+    const response = await criar({ request: req('https://x/api/automacoes', 'POST', { tipo: 'BUSSOLA' }), env })
+    assert.equal(response.status, 202)
+    const body = await response.json()
+    assert.equal(body.imediato, false)
+    assert.equal(body.status, 'aguardando')
+    assert.match(body.detalhe, /inválido ou expirou/i)
+    const stored = await DB.prepare("SELECT status,erro FROM comandos_automacao WHERE tipo='BUSSOLA'").first()
+    assert.equal(stored.status, 'aguardando')
+    assert.match(stored.erro, /HTTP 401/)
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
 test('não cria novo comando quando o mesmo workflow já está rodando no GitHub', async () => {
   const DB = testDatabase()
   const env = { DB, PAINEL_ADMIN_KEY: key, GITHUB_ACTIONS_TOKEN: 'github_pat_token_de_teste_com_tamanho_valido' }
