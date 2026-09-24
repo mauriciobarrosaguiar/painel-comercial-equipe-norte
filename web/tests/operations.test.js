@@ -31,9 +31,6 @@ test('dispara Bússola imediatamente no GitHub e mantém comando executando até
   const calls = []
   globalThis.fetch = async (url, options = {}) => {
     calls.push({ url: String(url), options })
-    if (String(url).includes('/runs?')) {
-      return new Response(JSON.stringify({ workflow_runs: [] }), { status: 200, headers: { 'content-type': 'application/json' } })
-    }
     if (String(url).endsWith('/dispatches')) return new Response(null, { status: 204 })
     throw new Error(`URL inesperada: ${url}`)
   }
@@ -56,14 +53,7 @@ test('mantém a solicitação na contingência e mostra orientação quando o to
   const DB = testDatabase()
   const env = { DB, PAINEL_ADMIN_KEY: key, GITHUB_ACTIONS_TOKEN: 'github_pat_token_de_teste_com_tamanho_valido' }
   const originalFetch = globalThis.fetch
-  let consultas = 0
   globalThis.fetch = async url => {
-    if (String(url).includes('/runs?')) {
-      consultas += 1
-      return consultas === 1
-        ? new Response(JSON.stringify({ workflow_runs: [] }), { status: 200, headers: { 'content-type': 'application/json' } })
-        : new Response(JSON.stringify({ workflow_runs: [] }), { status: 200, headers: { 'content-type': 'application/json' } })
-    }
     if (String(url).endsWith('/dispatches')) {
       return new Response(JSON.stringify({ message: 'Not Found' }), { status: 404, headers: { 'content-type': 'application/json' } })
     }
@@ -83,49 +73,16 @@ test('mantém a solicitação na contingência e mostra orientação quando o to
   }
 })
 
-test('mantém o clique salvo na contingência quando o token falha já na consulta do workflow', async () => {
+test('limpa execuções órfãs antigas e não mantém contador travado', async () => {
   const DB = testDatabase()
-  const env = { DB, PAINEL_ADMIN_KEY: key, GITHUB_ACTIONS_TOKEN: 'github_pat_token_de_teste_com_tamanho_valido' }
-  const originalFetch = globalThis.fetch
-  globalThis.fetch = async url => {
-    if (String(url).includes('/runs?')) {
-      return new Response(JSON.stringify({ message: 'Bad credentials' }), { status: 401, headers: { 'content-type': 'application/json' } })
-    }
-    throw new Error(`URL inesperada: ${url}`)
-  }
-  try {
-    const response = await criar({ request: req('https://x/api/automacoes', 'POST', { tipo: 'BUSSOLA' }), env })
-    assert.equal(response.status, 202)
-    const body = await response.json()
-    assert.equal(body.imediato, false)
-    assert.equal(body.status, 'aguardando')
-    assert.match(body.detalhe, /inválido ou expirou/i)
-    const stored = await DB.prepare("SELECT status,erro FROM comandos_automacao WHERE tipo='BUSSOLA'").first()
-    assert.equal(stored.status, 'aguardando')
-    assert.match(stored.erro, /HTTP 401/)
-  } finally {
-    globalThis.fetch = originalFetch
-  }
-})
-
-test('não cria novo comando quando o mesmo workflow já está rodando no GitHub', async () => {
-  const DB = testDatabase()
-  const env = { DB, PAINEL_ADMIN_KEY: key, GITHUB_ACTIONS_TOKEN: 'github_pat_token_de_teste_com_tamanho_valido' }
-  const originalFetch = globalThis.fetch
-  globalThis.fetch = async url => {
-    if (String(url).includes('/runs?')) {
-      return new Response(JSON.stringify({ workflow_runs: [{ status: 'in_progress' }] }), { status: 200, headers: { 'content-type': 'application/json' } })
-    }
-    throw new Error(`URL inesperada: ${url}`)
-  }
-  try {
-    const response = await criar({ request: req('https://x/api/automacoes', 'POST', { tipo: 'BUSSOLA' }), env })
-    assert.equal(response.status, 409)
-    const row = await DB.prepare("SELECT COUNT(*) total FROM comandos_automacao WHERE tipo='BUSSOLA'").first()
-    assert.equal(Number(row.total), 0)
-  } finally {
-    globalThis.fetch = originalFetch
-  }
+  await DB.prepare(
+    "INSERT INTO extracoes(id,tipo,status,total_registros,mensagem,erro,iniciado_em,finalizado_em,criado_em) VALUES('ext-antiga','BUSSOLA','executando',0,'','', '2020-01-01T00:00:00.000Z',NULL,'2020-01-01T00:00:00.000Z')",
+  ).run()
+  const body = await (await listar({ env: { DB } })).json()
+  const antiga = body.extracoes.find(item => item.id === 'ext-antiga')
+  assert.equal(antiga.status, 'erro')
+  assert.match(antiga.erro, /tempo excedido/i)
+  assert.equal(body.em_execucao, 0)
 })
 
 test('tela desabilita cada processo de forma independente', () => {
