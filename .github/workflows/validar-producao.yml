@@ -25,15 +25,16 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          MAX_ATTEMPTS=3
           pronto=0
-          for tentativa in $(seq 1 48); do
+          for tentativa in $(seq 1 "$MAX_ATTEMPTS"); do
             codigo=$(curl --silent --show-error --output session.json --write-out '%{http_code}' "${PAINEL_URL}/api/auth/session" || true)
             if [ "$codigo" = "401" ] && grep -q 'autenticado' session.json; then
               pronto=1
               break
             fi
-            echo "Publicação ainda não disponível (${tentativa}/48, HTTP ${codigo})."
-            sleep 10
+            echo "Publicação ainda não disponível (${tentativa}/${MAX_ATTEMPTS}, HTTP ${codigo})."
+            if [ "$tentativa" -lt "$MAX_ATTEMPTS" ]; then sleep 20; fi
           done
           if [ "$pronto" != "1" ]; then
             echo "A nova versão não ficou disponível no tempo esperado."
@@ -53,8 +54,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          MAX_ATTEMPTS=3
           pronto=0
-          for tentativa in $(seq 1 36); do
+          for tentativa in $(seq 1 "$MAX_ATTEMPTS"); do
             codigo=$(curl --silent --show-error \
               --cookie-jar cookies-m0043497.txt \
               --output login-mauricio.json \
@@ -67,8 +69,8 @@ jobs:
               pronto=1
               break
             fi
-            echo "Aguardando acesso pessoal do Maurício (${tentativa}/36, HTTP ${codigo})."
-            sleep 10
+            echo "Aguardando acesso pessoal do Maurício (${tentativa}/${MAX_ATTEMPTS}, HTTP ${codigo})."
+            if [ "$tentativa" -lt "$MAX_ATTEMPTS" ]; then sleep 20; fi
           done
 
           if [ "$pronto" != "1" ]; then
@@ -93,8 +95,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          MAX_ATTEMPTS=3
           pronto=0
-          for tentativa in $(seq 1 36); do
+          for tentativa in $(seq 1 "$MAX_ATTEMPTS"); do
             codigo=$(curl --silent --show-error \
               --cookie cookies-m0043497.txt \
               --dump-header dashboard.headers \
@@ -107,8 +110,8 @@ jobs:
               pronto=1
               break
             fi
-            echo "Aguardando dashboard pessoal no D1 (${tentativa}/36, HTTP ${codigo}, backend=${backend:-ausente})."
-            sleep 10
+            echo "Aguardando dashboard pessoal no D1 (${tentativa}/${MAX_ATTEMPTS}, HTTP ${codigo}, backend=${backend:-ausente})."
+            if [ "$tentativa" -lt "$MAX_ATTEMPTS" ]; then sleep 20; fi
           done
 
           if [ "$pronto" != "1" ]; then
