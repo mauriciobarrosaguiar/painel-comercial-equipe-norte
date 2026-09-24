@@ -1,20 +1,6 @@
-name: Validar cutover Turso
+name: Validar cutover Turso (contingência manual)
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - "scripts/turso_backend.py"
-      - "scripts/extrair_bussola_turso.py"
-      - "scripts/aplicar_mix_sap_turso.py"
-      - "scripts/importar_mercadofarma_turso_filtrado.py"
-      - "scripts/identificar_desafio_gigantes_turso.py"
-      - "automacoes/mercadofarma_turso_atualizado.py"
-      - "web/functions/_lib/turso-d1.js"
-      - "web/functions/api/_middleware.js"
-      - "web/functions/api/turso-health.js"
-      - ".github/workflows/validar-cutover-turso.yml"
   workflow_dispatch:
 
 permissions:

@@ -2,11 +2,6 @@ name: Validar Turso em produção
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
-    paths:
-      - ".github/workflows/validar-turso-producao.yml"
 
 permissions:
   contents: read
@@ -28,7 +23,8 @@ jobs:
             echo "::error::PAINEL_ADMIN_KEY ausente."
             exit 1
           fi
-          for tentativa in 1 2 3 4 5 6; do
+          MAX_ATTEMPTS=3
+          for tentativa in $(seq 1 "$MAX_ATTEMPTS"); do
             STATUS=$(curl --silent --show-error \
               --header "x-admin-key: ${PAINEL_ADMIN_KEY}" \
               --output resposta.json \
@@ -50,7 +46,7 @@ jobs:
               jq . resposta.json
               exit 0
             fi
-            sleep 10
+            if [ "$tentativa" -lt "$MAX_ATTEMPTS" ]; then sleep 20; fi
           done
           echo "::error::O Turso ainda não recebeu os pedidos e itens necessários para assumir a produção."
           exit 1
