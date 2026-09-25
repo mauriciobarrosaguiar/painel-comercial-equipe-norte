@@ -3,7 +3,7 @@ name: Processar comandos do painel
 on:
   workflow_dispatch:
   schedule:
-    - cron: "*/5 * * * *"
+    - cron: "3,18,33,48 * * * *"
 
 permissions:
   contents: read
@@ -34,7 +34,9 @@ jobs:
             --data '{}' > agendamentos.json; then
             cat agendamentos.json
           else
-            echo "::warning::Não foi possível consultar os intervalos agora. A fila existente continuará sendo processada e a próxima verificação ocorrerá em até 5 minutos."
+            echo "::warning::Não foi possível consultar os intervalos agora. A fila existente continuará sendo processada e a próxima verificação ocorrerá em até 15 minutos."
+            echo "Resposta recebida do painel:"
+            cat agendamentos.json || true
           fi
 
       - name: Processar fila do painel
