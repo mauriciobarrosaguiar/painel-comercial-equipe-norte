@@ -24,6 +24,14 @@ jobs:
       - name: Baixar repositório
         uses: actions/checkout@v4
 
+      - name: Bloquear D1 após cutover Turso
+        shell: bash
+        run: |
+          if [ -f "config/turso-cutover-active.txt" ]; then
+            echo "::error::O Turso já é o banco principal. Esta rotina legada de D1 foi bloqueada para evitar gravações no banco antigo."
+            exit 1
+          fi
+
       - name: Configurar Node.js
         uses: actions/setup-node@v4
         with:
