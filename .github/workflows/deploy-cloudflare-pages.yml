@@ -7,6 +7,7 @@ on:
       - main
     paths:
       - "web/**"
+      - "config/turso-cutover-active.txt"
       - ".github/workflows/deploy-cloudflare-pages.yml"
 
 permissions:
@@ -78,13 +79,17 @@ jobs:
           console.log('D1 confirmado como binding principal do painel pessoal.')
           NODE
 
-      - name: Preservar cota do D1
+      - name: Identificar backend principal
         shell: bash
         run: |
           set -euo pipefail
-          echo "D1 é o banco principal temporário do painel pessoal."
-          echo "Migrações automáticas continuam desativadas para evitar gravações desnecessárias."
-          echo "As rotinas foram reduzidas ao escopo do Maurício e às frequências pessoais."
+          if [ -f "../config/turso-cutover-active.txt" ]; then
+            echo "PAINEL_BACKEND_ALVO=turso" >> "$GITHUB_ENV"
+            echo "Cutover Turso ativo."
+          else
+            echo "PAINEL_BACKEND_ALVO=d1" >> "$GITHUB_ENV"
+            echo "Cutover Turso ainda não ativado; D1 permanece temporariamente."
+          fi
 
       - name: Definir main como branch de produção
         env:
@@ -127,14 +132,26 @@ jobs:
             echo "Chave administrativa configurada no Cloudflare Pages."
           fi
 
-      - name: Fixar D1 como backend do painel pessoal
+      - name: Configurar backend principal do painel
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
         shell: bash
         run: |
-          printf '%s' 'd1' | npx wrangler@4.112.0 pages secret put PAINEL_DB_BACKEND --project-name painel-equipe-norte
-          echo "Backend principal configurado como D1."
+          set -euo pipefail
+          if [ "${PAINEL_BACKEND_ALVO}" = "turso" ]; then
+            test -n "${TURSO_DATABASE_URL:-}"
+            test -n "${TURSO_AUTH_TOKEN:-}"
+            printf '%s' "$TURSO_DATABASE_URL" | npx wrangler@4.112.0 pages secret put TURSO_DATABASE_URL --project-name painel-equipe-norte
+            printf '%s' "$TURSO_AUTH_TOKEN" | npx wrangler@4.112.0 pages secret put TURSO_AUTH_TOKEN --project-name painel-equipe-norte
+            printf '%s' 'turso' | npx wrangler@4.112.0 pages secret put PAINEL_DB_BACKEND --project-name painel-equipe-norte
+            echo "Backend principal configurado como Turso."
+          else
+            printf '%s' 'd1' | npx wrangler@4.112.0 pages secret put PAINEL_DB_BACKEND --project-name painel-equipe-norte
+            echo "Backend principal mantido no D1."
+          fi
 
       - name: Configurar disparo imediato do GitHub Actions
         env:
@@ -150,21 +167,10 @@ jobs:
             echo "Token de disparo imediato configurado no Cloudflare Pages."
           fi
 
-      - name: Manter Turso apenas como contingência de leitura
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
-          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+      - name: Confirmar configuração de banco
         shell: bash
         run: |
-          if [ -z "${TURSO_DATABASE_URL:-}" ] || [ -z "${TURSO_AUTH_TOKEN:-}" ]; then
-            echo "::warning::Turso não configurado. O painel continuará normalmente no D1."
-          else
-            printf '%s' "$TURSO_DATABASE_URL" | npx wrangler@4.112.0 pages secret put TURSO_DATABASE_URL --project-name painel-equipe-norte
-            printf '%s' "$TURSO_AUTH_TOKEN" | npx wrangler@4.112.0 pages secret put TURSO_AUTH_TOKEN --project-name painel-equipe-norte
-            echo "Turso mantido somente para contingência; não é o backend ativo."
-          fi
+          echo "Backend alvo desta publicação: ${PAINEL_BACKEND_ALVO}"
 
       - name: Publicar versão no ambiente de produção
         env:
