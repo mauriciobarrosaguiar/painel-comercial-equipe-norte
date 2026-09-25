@@ -2,6 +2,7 @@ import { authorized, json } from '../_lib/credentials.js'
 
 const TIPOS = new Set(['BUSSOLA', 'MERCADO_FARMA', 'AUDITORIA', 'FECHAMENTO_MENSAL', 'MIGRAR_BASES'])
 const REPOSITORIO = 'mauriciobarrosaguiar/painel-comercial-equipe-norte'
+const PROCESSADOR_WORKFLOW = 'processar-comandos-painel.yml'
 const ATIVOS = new Set(['aguardando', 'executando'])
 const TENTATIVAS_CONFIRMACAO = 4
 const ESPERA_CONFIRMACAO_MS = 700
@@ -122,6 +123,20 @@ async function dispararWorkflow(env, tipo, id, parametros) {
     confirmado: confirmacao.confirmado,
     detalhe: confirmacao.detalhe,
   }
+}
+
+async function dispararProcessadorFila(env, id) {
+  if (!tokenDisponivel(env)) return { confirmado: false, detalhe: 'Token de disparo imediato indisponível.' }
+
+  const iniciadoEm = new Date().toISOString()
+  const response = await fetch(`https://api.github.com/repos/${REPOSITORIO}/actions/workflows/${PROCESSADOR_WORKFLOW}/dispatches`, {
+    method: 'POST',
+    headers: githubHeaders(env),
+    body: JSON.stringify({ ref: 'main', inputs: { command_id_hint: id } }),
+  })
+  if (response.status !== 204) throw await erroGitHub(response, 'acionar processador da fila')
+
+  return confirmarWorkflowRun(env, PROCESSADOR_WORKFLOW, id, iniciadoEm)
 }
 
 async function limparExecucoesOrfas(env) {
@@ -267,18 +282,31 @@ export async function onRequestPost({ request, env }) {
     try {
       const resultado = await dispararWorkflow(env, tipo, id, parametros)
       if (!resultado.confirmado) {
+        let contingencia = { confirmado: false, detalhe: '' }
+        try {
+          contingencia = await dispararProcessadorFila(env, id)
+        } catch (error) {
+          contingencia = { confirmado: false, detalhe: error instanceof Error ? error.message : String(error) }
+        }
+
         const atualizado = new Date().toISOString()
+        const mensagemFila = contingencia.confirmado
+          ? 'Disparo principal não apareceu; processador da fila acionado imediatamente.'
+          : 'Disparo imediato não confirmado. Solicitação preservada na fila automática.'
         await env.DB.prepare(
-          "UPDATE comandos_automacao SET status='aguardando',mensagem='Disparo imediato não confirmado. A fila automática assumirá o processo.',erro='',iniciado_em=NULL,atualizado_em=? WHERE id=?",
-        ).bind(atualizado, id).run()
+          "UPDATE comandos_automacao SET status='aguardando',mensagem=?,erro='',iniciado_em=NULL,atualizado_em=? WHERE id=?",
+        ).bind(mensagemFila, atualizado, id).run()
         return json({
           sucesso: true,
           id,
           tipo,
           status: 'aguardando',
           imediato: false,
-          mensagem: 'O clique foi salvo. Como o GitHub não confirmou a nova execução, a fila automática assumirá o processo.',
-          detalhe: resultado.detalhe || '',
+          contingencia_imediata: contingencia.confirmado,
+          mensagem: contingencia.confirmado
+            ? 'O processo principal não apareceu no GitHub, então o processador da fila foi acionado imediatamente.'
+            : 'O clique foi salvo e a fila automática assumirá o processo.',
+          detalhe: contingencia.confirmado ? '' : (contingencia.detalhe || resultado.detalhe || ''),
         }, 202)
       }
 
