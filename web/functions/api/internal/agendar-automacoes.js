@@ -57,14 +57,29 @@ export async function onRequestPost({ request, env }) {
   try {
     const agora = new Date()
     const agoraIso = agora.toISOString()
-    const execucoesExpiradas = await liberarExecucoesTravadas(env, agoraIso)
-    const vencidas = await env.DB.prepare(`
+    let execucoesExpiradas = 0
+    let avisoLimpeza = ''
+    try {
+      execucoesExpiradas = await liberarExecucoesTravadas(env, agoraIso)
+    } catch (error) {
+      avisoLimpeza = `A limpeza preventiva falhou, mas o agendamento continuará: ${error instanceof Error ? error.message : String(error)}`
+    }
+
+    const consultarVencidas = () => env.DB.prepare(`
       SELECT tipo,intervalo_minutos,parametros_json,proxima_execucao_em
         FROM configuracoes_automacao
        WHERE ativo=1
          AND (proxima_execucao_em IS NULL OR datetime(proxima_execucao_em)<=datetime(?))
        ORDER BY COALESCE(proxima_execucao_em,'') ASC
     `).bind(agoraIso).all()
+
+    let vencidas
+    try {
+      vencidas = await consultarVencidas()
+    } catch {
+      await new Promise(resolve => setTimeout(resolve, 250))
+      vencidas = await consultarVencidas()
+    }
 
     const agendados = []
     const ignorados = []
@@ -154,6 +169,7 @@ export async function onRequestPost({ request, env }) {
       ignorados,
       total_agendados: agendados.length,
       execucoes_expiradas: execucoesExpiradas,
+      aviso: avisoLimpeza,
       verificado_em: agoraIso,
     })
   } catch (error) {
