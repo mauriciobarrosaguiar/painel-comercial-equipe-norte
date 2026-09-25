@@ -1,4 +1,4 @@
-name: Extrair Bússola pessoal para D1
+name: Extrair Bússola pessoal
 run-name: Bússola / ${{ inputs.command_id || 'automático' }}
 
 on:
@@ -13,7 +13,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: bussola-pessoal-d1
+  group: bussola-pessoal
   cancel-in-progress: false
 
 jobs:
@@ -40,7 +40,7 @@ jobs:
         run: |
           google-chrome --version || chromium --version || chromium-browser --version
 
-      - name: Extrair Bússola pessoal e sincronizar D1
+      - name: Extrair Bússola pessoal e sincronizar banco principal
         env:
           PYTHONPATH: ${{ github.workspace }}
           PAINEL_BASE_URL: https://painel-equipe-norte.pages.dev
@@ -48,16 +48,38 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_API_TOKEN }}
           CLOUDFLARE_D1_DATABASE: painel-equipe-norte-db
-        run: python scripts/extrair_bussola_d1_corrigido.py
+          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -f "config/turso-cutover-active.txt" ]; then
+            test -n "${TURSO_DATABASE_URL:-}"
+            test -n "${TURSO_AUTH_TOKEN:-}"
+            echo "Sincronizando Bússola no Turso."
+            python scripts/extrair_bussola_turso.py
+          else
+            echo "Cutover Turso ainda não ativo; sincronizando Bússola no D1."
+            python scripts/extrair_bussola_d1_corrigido.py
+          fi
 
-      - name: Aplicar classificação MIX por código SAP no D1
+      - name: Aplicar classificação MIX por código SAP
         env:
           PYTHONPATH: ${{ github.workspace }}
           PAINEL_ADMIN_KEY: ${{ secrets.PAINEL_ADMIN_KEY }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_API_TOKEN }}
           CLOUDFLARE_D1_DATABASE: painel-equipe-norte-db
-        run: python scripts/aplicar_mix_sap_d1.py
+          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -f "config/turso-cutover-active.txt" ]; then
+            python scripts/aplicar_mix_sap_turso.py
+          else
+            python scripts/aplicar_mix_sap_d1.py
+          fi
 
       - name: Fechar mês anterior e reconciliar histórico
         env:
@@ -134,7 +156,7 @@ jobs:
           set -euo pipefail
           if [ "$RESULTADO" = "success" ]; then
             STATUS="concluido"
-            MENSAGEM="Extração pessoal do Bússola concluída para Maurício, sincronizada no D1, classificada pelo MIX, mês anterior fechado automaticamente e histórico reconciliado."
+            MENSAGEM="Extração pessoal do Bússola concluída para Maurício, sincronizada no banco principal, classificada pelo MIX, mês anterior fechado automaticamente e histórico reconciliado."
             ERRO=""
           else
             STATUS="erro"
