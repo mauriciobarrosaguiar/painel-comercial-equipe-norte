@@ -40,7 +40,7 @@ const intervalLabel = (minutes: number) => {
 
 export default function AutomationScheduleSettings() {
   const [settings, setSettings] = useState<Schedule[]>([])
-  const [verifierMinutes, setVerifierMinutes] = useState(5)
+  const [verifierMinutes, setVerifierMinutes] = useState(15)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState('')
   const [error, setError] = useState('')
@@ -52,7 +52,7 @@ export default function AutomationScheduleSettings() {
       const result: Payload & { erro?: string; detalhe?: string } = await response.json()
       if (!response.ok) throw new Error(result.detalhe || result.erro || 'Falha ao carregar os intervalos.')
       setSettings(result.configuracoes || [])
-      setVerifierMinutes(result.verificador_minutos || 5)
+      setVerifierMinutes(result.verificador_minutos || 15)
       setError('')
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason))
