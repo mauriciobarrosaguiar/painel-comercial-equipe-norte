@@ -106,7 +106,9 @@ export default function AutomationsModule({ onBack }: { onBack: () => void }) {
       const result = await response.json()
       if (!response.ok) throw new Error(result.detalhe || result.erro || 'Falha ao solicitar automação')
       if (result.imediato === false) {
-        setMessage(`${result.mensagem || 'Solicitação registrada.'} A fila automática continuará o processamento em até 5 minutos.`)
+        setMessage(result.contingencia_imediata
+          ? (result.mensagem || 'Processador da fila acionado imediatamente.')
+          : `${result.mensagem || 'Solicitação registrada.'} A fila automática verificará novamente em até 15 minutos.`)
       } else {
         setMessage(result.mensagem || 'Solicitação registrada.')
       }
