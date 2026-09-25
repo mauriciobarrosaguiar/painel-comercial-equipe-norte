@@ -1,0 +1,54 @@
+name: Diagnosticar escrita Turso agora
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/turso-write-probe.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+      TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+    steps:
+      - name: Baixar repositório
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Instalar cliente HTTP
+        run: python -m pip install --disable-pip-version-check "requests>=2.34,<3"
+
+      - name: Testar escrita real no Turso
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from scripts import turso_backend as turso
+
+          if not turso.configured():
+              raise SystemExit("TURSO_NAO_CONFIGURADO")
+
+          db = turso.database_id()
+          turso.executar(db, "CREATE TABLE IF NOT EXISTS __probe_escrita_turso (id TEXT PRIMARY KEY, criado_em TEXT)")
+          turso.executar(db, "INSERT OR REPLACE INTO __probe_escrita_turso(id,criado_em) VALUES(?,CURRENT_TIMESTAMP)", ["probe-atual"])
+          dados = turso.executar(db, "SELECT COUNT(*) AS total FROM __probe_escrita_turso WHERE id=?", ["probe-atual"])
+          total = int((turso.linhas(dados)[0] or {}).get("total") or 0)
+          if total != 1:
+              raise SystemExit("TURSO_ESCRITA_NAO_CONFIRMADA")
+          turso.executar(db, "DELETE FROM __probe_escrita_turso WHERE id=?", ["probe-atual"])
+          print("TURSO_WRITE_OK")
+          PY
