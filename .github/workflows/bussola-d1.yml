@@ -1,4 +1,5 @@
 name: Extrair Bússola pessoal para D1
+run-name: Bússola / ${{ inputs.command_id || 'automático' }}
 
 on:
   workflow_dispatch:
