@@ -1,15 +1,20 @@
-name: Migrar D1 para Turso (somente contingência)
+name: Migrar D1 para Turso e ativar cutover
 
 on:
   workflow_dispatch:
     inputs:
       confirmacao:
-        description: "Digite MIGRAR_D1_PARA_TURSO para sobrescrever/atualizar o Turso a partir do backup D1"
+        description: "Digite MIGRAR_D1_PARA_TURSO para executar o cutover"
         required: true
         default: ""
+  push:
+    branches:
+      - main
+    paths:
+      - "config/turso-cutover-trigger.txt"
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: migracao-d1-turso
@@ -17,9 +22,9 @@ concurrency:
 
 jobs:
   migrar:
-    if: ${{ inputs.confirmacao == 'MIGRAR_D1_PARA_TURSO' }}
+    if: ${{ github.event_name == 'push' || inputs.confirmacao == 'MIGRAR_D1_PARA_TURSO' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     env:
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_API_TOKEN }}
@@ -28,13 +33,11 @@ jobs:
       TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
 
     steps:
-      - name: Confirmar operação de contingência
-        run: |
-          echo "ATENÇÃO: esta rotina existe apenas para contingência."
-          echo "O Turso é o banco principal; o D1 não deve ser usado como fonte normal depois do cutover."
-
       - name: Baixar repositório
         uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
 
       - name: Configurar Python
         uses: actions/setup-python@v5
@@ -55,8 +58,78 @@ jobs:
             fi
           done
 
-      - name: Validar sintaxe do migrador
-        run: python -m py_compile scripts/migrar_d1_turso.py scripts/migrar_d1_turso_v2.py
+      - name: Confirmar que o Turso aceita escrita real
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from scripts import turso_backend as turso
 
-      - name: Copiar schema e dados do D1 para o Turso
+          db = turso.database_id()
+          turso.executar(db, "CREATE TABLE IF NOT EXISTS __cutover_probe (id TEXT PRIMARY KEY, criado_em TEXT)")
+          turso.executar(db, "INSERT OR REPLACE INTO __cutover_probe(id,criado_em) VALUES(?,CURRENT_TIMESTAMP)", ["cutover"])
+          dados = turso.executar(db, "SELECT COUNT(*) AS total FROM __cutover_probe WHERE id=?", ["cutover"])
+          total = int((turso.linhas(dados)[0] or {}).get("total") or 0)
+          if total != 1:
+              raise SystemExit("TURSO_WRITE_NOT_CONFIRMED")
+          turso.executar(db, "DELETE FROM __cutover_probe WHERE id=?", ["cutover"])
+          print("TURSO_WRITE_OK")
+          PY
+
+      - name: Validar sintaxe do migrador
+        run: python -m py_compile scripts/migrar_d1_turso.py scripts/migrar_d1_turso_v2.py scripts/turso_backend.py
+
+      - name: Copiar schema e dados atuais do D1 para o Turso
         run: python scripts/migrar_d1_turso_v2.py
+
+      - name: Validar tabelas essenciais no Turso
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from scripts import turso_backend as turso
+
+          db = turso.database_id()
+          essenciais = [
+              "clientes",
+              "consultores",
+              "acessos",
+              "produtos",
+              "pedidos",
+              "itens_pedido",
+              "metas",
+              "sips",
+              "configuracoes_automacao",
+              "comandos_automacao",
+          ]
+          for tabela in essenciais:
+              dados = turso.executar(db, f'SELECT COUNT(*) AS total FROM "{tabela}"')
+              total = int((turso.linhas(dados)[0] or {}).get("total") or 0)
+              print(f"{tabela}: {total}")
+          print("TURSO_CORE_TABLES_OK")
+          PY
+
+      - name: Ativar marcador de cutover
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p config
+          printf 'turso\n' > config/turso-cutover-active.txt
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add config/turso-cutover-active.txt
+          if git diff --cached --quiet; then
+            echo "Marcador de cutover já estava ativo."
+          else
+            git commit -m "cutover: ativar Turso como banco principal"
+            git pull --rebase origin main
+            git push origin main
+          fi
+
+      - name: Resultado
+        run: |
+          echo "Migração validada. O marcador foi ativado e o deploy do painel fará a troca do backend para Turso."
