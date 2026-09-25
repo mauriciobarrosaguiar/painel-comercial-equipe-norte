@@ -27,6 +27,8 @@ test('parser separa os dois blocos de prioritários e lançamentos', () => {
 test('classificação por SAP é reaplicada depois de cada extração do Bússola', () => {
   assert.match(workflow, /Aplicar classificação MIX por código SAP/)
   assert.match(workflow, /scripts\/aplicar_mix_sap_d1\.py/)
+  const mixStep = workflow.split('Aplicar classificação MIX por código SAP')[1]?.split('Fechar mês anterior')[0] || ''
+  assert.match(mixStep, /PAINEL_ADMIN_KEY:\s*\$\{\{ secrets\.PAINEL_ADMIN_KEY \}\}/)
   assert.match(helper, /produtos_mix_sap/)
   assert.match(helper, /TRIM\(mapa\.sku\)=TRIM\(COALESCE\(produtos\.sku,''\)\)/)
 })
