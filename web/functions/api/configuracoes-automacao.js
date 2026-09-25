@@ -82,7 +82,7 @@ export async function onRequestGet({ request, env }) {
   try {
     return json({
       configuracoes: await listar(env),
-      verificador_minutos: 5,
+      verificador_minutos: 15,
       atualizado_em: new Date().toISOString(),
     })
   } catch (error) {
