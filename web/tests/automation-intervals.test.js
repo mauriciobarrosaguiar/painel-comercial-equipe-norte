@@ -155,7 +155,7 @@ test('painel e workflows usam o agendador central configurável', () => {
   assert.match(module, /<AutomationScheduleSettings \/>/)
   assert.match(migration, /'MERCADO_FARMA',1,30/)
   assert.match(migration, /'BUSSOLA',1,30/)
-  assert.match(processor, /cron: "\*\/5 \* \* \* \*"/)
+  assert.match(processor, /cron: "3,18,33,48 \* \* \* \*"/)
   assert.match(processor, /\/api\/internal\/agendar-automacoes/)
   assert.doesNotMatch(bussola, /schedule:/)
   assert.doesNotMatch(bussola, /\*\/30/)
