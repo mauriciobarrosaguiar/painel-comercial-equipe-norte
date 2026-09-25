@@ -1,5 +1,5 @@
 name: Mercado Farma por UF
-run-name: Mercado Farma / ${{ inputs.acao || 'atualizar_mercadofarma_paralelo' }} / ${{ inputs.ufs || inputs.uf || 'todas' }}
+run-name: Mercado Farma / ${{ inputs.command_id || 'automático' }} / ${{ inputs.acao || 'atualizar_mercadofarma_paralelo' }} / ${{ inputs.ufs || inputs.uf || 'todas' }}
 
 on:
   workflow_dispatch:
