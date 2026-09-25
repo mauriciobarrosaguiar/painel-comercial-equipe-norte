@@ -24,6 +24,20 @@ jobs:
     env:
       PAINEL_URL: https://painel-equipe-norte.pages.dev
     steps:
+      - name: Baixar configuração atual
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Identificar backend esperado
+        shell: bash
+        run: |
+          if [ -f "config/turso-cutover-active.txt" ]; then
+            echo "EXPECTED_BACKEND=turso" >> "$GITHUB_ENV"
+          else
+            echo "EXPECTED_BACKEND=d1" >> "$GITHUB_ENV"
+          fi
+
       - name: Aguardar publicação do Cloudflare
         shell: bash
         run: |
@@ -94,7 +108,7 @@ jobs:
             exit 1
           fi
 
-      - name: Confirmar dashboard pessoal usando D1
+      - name: Confirmar dashboard pessoal no backend ativo
         shell: bash
         run: |
           set -euo pipefail
@@ -109,29 +123,29 @@ jobs:
               "${PAINEL_URL}/api/dashboard?periodo=mes-atual" || true)
 
             backend=$(awk 'BEGIN{IGNORECASE=1} /^x-db-backend:/ {gsub("\r", "", $2); print tolower($2)}' dashboard.headers | tail -n 1)
-            if [ "$codigo" = "200" ] && [ "$backend" = "d1" ]; then
+            if [ "$codigo" = "200" ] && [ "$backend" = "$EXPECTED_BACKEND" ]; then
               pronto=1
               break
             fi
-            echo "Aguardando dashboard pessoal no D1 (${tentativa}/${MAX_ATTEMPTS}, HTTP ${codigo}, backend=${backend:-ausente})."
+            echo "Aguardando dashboard no backend ${EXPECTED_BACKEND} (${tentativa}/${MAX_ATTEMPTS}, HTTP ${codigo}, backend=${backend:-ausente})."
             if [ "$tentativa" -lt "$MAX_ATTEMPTS" ]; then sleep 20; fi
           done
 
           if [ "$pronto" != "1" ]; then
-            echo "Dashboard não confirmou o D1 como banco do painel pessoal."
+            echo "Dashboard não confirmou o backend esperado: ${EXPECTED_BACKEND}."
             cat dashboard.json || true
             exit 1
           fi
 
           python - <<'PY'
-          import json
+          import json, os
           with open('dashboard.json', encoding='utf-8') as arquivo:
               dados = json.load(arquivo)
           obrigatorios = ['ol_total_faturado', 'ol_sem_combate', 'clientes_ativos', 'filtros']
           ausentes = [campo for campo in obrigatorios if campo not in dados]
           if ausentes:
               raise SystemExit(f'Campos ausentes no dashboard: {ausentes}')
-          print('Produção validada com acesso exclusivo do Maurício, D1 e dashboard ativos.')
+          print(f"Produção validada com acesso exclusivo do Maurício, backend {os.environ.get('EXPECTED_BACKEND')} e dashboard ativos.")
           PY
 
       - name: Publicar resultado da produção
@@ -145,7 +159,7 @@ jobs:
           descricao="Validação da produção falhou"
           if [ "$RESULTADO_JOB" = "success" ]; then
             estado=success
-            descricao="Maurício, D1, dashboard e instalação validados"
+            descricao="Maurício, ${EXPECTED_BACKEND}, dashboard e instalação validados"
           fi
           gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" \
             -f state="$estado" \
