@@ -66,17 +66,19 @@ function database() {
   }
 }
 
-test('Bússola pessoal usa o agendador central configurável a cada 5 minutos', () => {
+test('Bússola pessoal usa o agendador central configurável a cada 15 minutos', () => {
   assert.doesNotMatch(workflow, /schedule:/)
   assert.match(workflow, /workflow_dispatch:/)
-  assert.match(processor, /schedule:\s*\n\s*- cron: ["']\*\/5 \* \* \* \*["']/)
+  assert.match(processor, /schedule:\s*\n\s*- cron: ["']3,18,33,48 \* \* \* \*["']/)
   assert.match(processor, /api\/internal\/agendar-automacoes/)
-  assert.match(workflow, /concurrency:\s*\n\s*group: bussola-pessoal-d1\s*\n\s*cancel-in-progress: false/)
+  assert.match(workflow, /concurrency:\s*\n\s*group: bussola-pessoal\s*\n\s*cancel-in-progress: false/)
 })
 
-test('extração usa somente o fluxo pessoal no D1', () => {
+test('extração pessoal alterna de D1 para Turso somente após o marcador de cutover', () => {
   assert.match(workflow, /timeout-minutes: 60/)
+  assert.match(workflow, /config\/turso-cutover-active\.txt/)
   assert.match(workflow, /python scripts\/extrair_bussola_d1_corrigido\.py/)
+  assert.match(workflow, /python scripts\/extrair_bussola_turso\.py/)
   assert.doesNotMatch(workflow, /extrair_bussola_contingencia/)
 })
 
