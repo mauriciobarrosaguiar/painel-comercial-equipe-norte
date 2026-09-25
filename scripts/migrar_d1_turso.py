@@ -282,6 +282,23 @@ def main() -> None:
         and str(obj.get("tbl_name") or "") not in SKIP_TABLES
     ]
 
+    # O destino precisa refletir exatamente o snapshot atual do D1. Isso evita
+    # que dados antigos de equipe permaneçam no Turso após o cutover pessoal.
+    table_names = [str(obj["name"]) for obj in tables]
+    ordered_tables = order_tables(table_names)
+
+    for obj in later:
+        if obj.get("type") == "view":
+            turso_pipeline([(f'DROP VIEW IF EXISTS {quote_ident(str(obj["name"]))}', [])])
+
+    for table in reversed(ordered_tables):
+        turso_pipeline([
+            ("PRAGMA foreign_keys=OFF", []),
+            (f"DROP TABLE IF EXISTS {quote_ident(table)}", []),
+            ("PRAGMA foreign_keys=ON", []),
+        ])
+
+    print("Destino Turso limpo para receber o snapshot atual do D1.")
     print(f"Tabelas encontradas: {len(tables)}")
     for obj in tables:
         sql = str(obj.get("sql") or "").strip()
@@ -296,8 +313,6 @@ def main() -> None:
             )
         turso_pipeline([(sql, [])])
 
-    table_names = [str(obj["name"]) for obj in tables]
-    ordered_tables = order_tables(table_names)
     print("Ordem de cópia calculada por chaves estrangeiras.")
 
     copied: dict[str, int] = {}
