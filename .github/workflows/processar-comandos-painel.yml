@@ -1,7 +1,13 @@
 name: Processar comandos do painel
+run-name: Processar fila / ${{ inputs.command_id_hint || 'agendamento' }}
 
 on:
   workflow_dispatch:
+    inputs:
+      command_id_hint:
+        description: "Comando que motivou o processamento imediato"
+        required: false
+        default: ""
   schedule:
     - cron: "3,18,33,48 * * * *"
 
