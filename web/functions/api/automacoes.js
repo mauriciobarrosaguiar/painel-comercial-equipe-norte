@@ -3,7 +3,10 @@ import { authorized, json } from '../_lib/credentials.js'
 const TIPOS = new Set(['BUSSOLA', 'MERCADO_FARMA', 'AUDITORIA', 'FECHAMENTO_MENSAL', 'MIGRAR_BASES'])
 const REPOSITORIO = 'mauriciobarrosaguiar/painel-comercial-equipe-norte'
 const ATIVOS = new Set(['aguardando', 'executando'])
+const TENTATIVAS_CONFIRMACAO = 4
+const ESPERA_CONFIRMACAO_MS = 700
 const texto = value => String(value ?? '').trim()
+const dormir = ms => new Promise(resolve => setTimeout(resolve, ms))
 
 const DISPAROS = {
   BUSSOLA: {
@@ -71,25 +74,77 @@ async function erroGitHub(response, acao) {
   return new Error(`${orientacao} (${acao}; HTTP ${status || 'desconhecido'}).${complemento}`)
 }
 
+async function confirmarWorkflowRun(env, workflow, id, iniciadoEm) {
+  const limite = new Date(new Date(iniciadoEm).getTime() - 30_000).getTime()
+  let ultimoDetalhe = ''
+
+  for (let tentativa = 1; tentativa <= TENTATIVAS_CONFIRMACAO; tentativa += 1) {
+    await dormir(ESPERA_CONFIRMACAO_MS)
+    const response = await fetch(
+      `https://api.github.com/repos/${REPOSITORIO}/actions/workflows/${workflow}/runs?event=workflow_dispatch&per_page=10`,
+      { headers: githubHeaders(env), cache: 'no-store' },
+    )
+    if (!response.ok) {
+      ultimoDetalhe = (await erroGitHub(response, 'confirmar início do workflow')).message
+      break
+    }
+
+    const body = await response.json().catch(() => ({}))
+    const encontrado = Array.isArray(body.workflow_runs) && body.workflow_runs.some(run => {
+      const criadoEm = new Date(run?.created_at || 0).getTime()
+      const titulo = texto(run?.display_title || run?.name)
+      return criadoEm >= limite && titulo.includes(id)
+    })
+    if (encontrado) return { confirmado: true, detalhe: '' }
+  }
+
+  return {
+    confirmado: false,
+    detalhe: ultimoDetalhe || 'O GitHub aceitou o disparo, mas não confirmou a criação da execução.',
+  }
+}
+
 async function dispararWorkflow(env, tipo, id, parametros) {
   const configuracao = DISPAROS[tipo]
-  if (!configuracao || !tokenDisponivel(env)) return { imediato: false }
+  if (!configuracao || !tokenDisponivel(env)) return { imediato: false, confirmado: false }
 
-  // Não consulte a lista de runs antes do disparo. Alguns tokens conseguem
-  // executar workflow_dispatch, mas falham na leitura de runs. A duplicidade
-  // já é bloqueada no D1 e a concorrência também é protegida no workflow.
+  const iniciadoEm = new Date().toISOString()
   const response = await fetch(`https://api.github.com/repos/${REPOSITORIO}/actions/workflows/${configuracao.workflow}/dispatches`, {
     method: 'POST',
     headers: githubHeaders(env),
     body: JSON.stringify({ ref: 'main', inputs: configuracao.inputs(id, parametros) }),
   })
   if (response.status !== 204) throw await erroGitHub(response, 'iniciar workflow')
-  return { imediato: true }
+
+  const confirmacao = await confirmarWorkflowRun(env, configuracao.workflow, id, iniciadoEm)
+  return {
+    imediato: confirmacao.confirmado,
+    confirmado: confirmacao.confirmado,
+    detalhe: confirmacao.detalhe,
+  }
 }
 
 async function limparExecucoesOrfas(env) {
   const agora = new Date().toISOString()
   await env.DB.batch([
+    env.DB.prepare(
+      `UPDATE comandos_automacao
+          SET status='aguardando',
+              mensagem='O disparo anterior não foi confirmado. Solicitação devolvida à fila automática.',
+              erro='',
+              iniciado_em=NULL,
+              atualizado_em=?
+        WHERE tipo='BUSSOLA'
+          AND status='executando'
+          AND mensagem='Enviado ao GitHub Actions. Aguardando conclusão.'
+          AND datetime(COALESCE(iniciado_em,solicitado_em)) < datetime('now','-8 minutes')
+          AND NOT EXISTS (
+            SELECT 1
+              FROM extracoes e
+             WHERE e.tipo='BUSSOLA'
+               AND datetime(COALESCE(e.iniciado_em,e.criado_em)) >= datetime(COALESCE(comandos_automacao.iniciado_em,comandos_automacao.solicitado_em),'-1 minute')
+          )`,
+    ).bind(agora),
     env.DB.prepare(
       `UPDATE comandos_automacao
           SET status='erro',
@@ -210,7 +265,23 @@ export async function onRequestPost({ request, env }) {
     }
 
     try {
-      await dispararWorkflow(env, tipo, id, parametros)
+      const resultado = await dispararWorkflow(env, tipo, id, parametros)
+      if (!resultado.confirmado) {
+        const atualizado = new Date().toISOString()
+        await env.DB.prepare(
+          "UPDATE comandos_automacao SET status='aguardando',mensagem='Disparo imediato não confirmado. A fila automática assumirá o processo.',erro='',iniciado_em=NULL,atualizado_em=? WHERE id=?",
+        ).bind(atualizado, id).run()
+        return json({
+          sucesso: true,
+          id,
+          tipo,
+          status: 'aguardando',
+          imediato: false,
+          mensagem: 'O clique foi salvo. Como o GitHub não confirmou a nova execução, a fila automática assumirá o processo.',
+          detalhe: resultado.detalhe || '',
+        }, 202)
+      }
+
       const iniciado = new Date().toISOString()
       await env.DB.prepare(
         "UPDATE comandos_automacao SET status='executando',mensagem='Enviado ao GitHub Actions. Aguardando conclusão.',erro='',iniciado_em=?,atualizado_em=? WHERE id=? AND status='aguardando'",
@@ -221,7 +292,7 @@ export async function onRequestPost({ request, env }) {
         tipo,
         status: 'executando',
         imediato: true,
-        mensagem: 'Processo enviado imediatamente ao GitHub Actions.',
+        mensagem: 'Processo confirmado no GitHub Actions.',
       }, 202)
     } catch (error) {
       const detalhe = error instanceof Error ? error.message : String(error)
