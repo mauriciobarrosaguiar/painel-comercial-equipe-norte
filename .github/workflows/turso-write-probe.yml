@@ -1,4 +1,5 @@
 name: Diagnosticar escrita Turso agora
+# Novo banco Turso configurado: teste solicitado após atualização dos secrets.
 
 on:
   push:
