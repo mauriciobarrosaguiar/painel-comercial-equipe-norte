@@ -23,6 +23,9 @@ jobs:
       GITHUB_STORAGE_BRANCH: app-storage
       TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
       TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_API_TOKEN }}
+      CLOUDFLARE_D1_DATABASE: painel-equipe-norte-db
 
     steps:
       - uses: actions/checkout@v4
