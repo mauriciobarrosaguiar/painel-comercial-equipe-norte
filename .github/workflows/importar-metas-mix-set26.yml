@@ -34,10 +34,8 @@ jobs:
           test "$(jq '[.mix_rows[] | select(.tipo_mix == "PRIORITARIO")] | length' data/metas_mix_set26.json)" -eq 96
           test "$(jq '[.mix_rows[] | select(.tipo_mix == "LANCAMENTO")] | length' data/metas_mix_set26.json)" -eq 52
           test "$(jq '[.mix_rows[] | select(.tipo_mix == "COMBATE")] | length' data/metas_mix_set26.json)" -eq 24
-          echo "Arquivo conferido: 5 consultores + 1 GD; 96 prioritários, 52 lançamentos e 24 combate."
+          echo "Arquivo conferido: fonte oficial SET/26 preservada; a API pessoal filtrará somente Maurício."
 
-      - name: Aguardar publicação da proteção de filtro
-        run: sleep 45
 
       - name: Importar metas e MIX no painel
         env:
@@ -90,8 +88,8 @@ jobs:
           metas = rows("SELECT escopo, COUNT(*) AS total FROM metas WHERE ano_mes=? GROUP BY escopo ORDER BY escopo", ["2026-09"])
           contagem_metas = {str(r.get("escopo")): int(r.get("total") or 0) for r in metas}
           print("Metas SET/26:", contagem_metas)
-          if contagem_metas.get("consultor") != 5 or contagem_metas.get("gerente") != 1:
-              raise SystemExit(f"Quantidade inesperada de metas: {contagem_metas}")
+          if contagem_metas.get("consultor") != 1 or contagem_metas.get("gerente") != 1:
+              raise SystemExit(f"Quantidade inesperada de metas pessoais: {contagem_metas}")
 
           mauricio = rows("""
               SELECT m.ol_sem_combate, m.ol_prioritarios, m.ol_lancamentos, m.demanda_sem_combate
@@ -121,5 +119,11 @@ jobs:
           if int(p.get("total") or 0) <= 0 or int(p.get("sem_mix") or 0) != 0:
               raise SystemExit("Ainda existem produtos ativos sem classificação após a importação.")
 
-          print("IMPORTACAO_METAS_MIX_SET26_OK")
+          painel = rows("SELECT COUNT(*) AS total FROM clientes WHERE carteira_importada=1 AND consultor_id='cons-1ee6626b98906f06c399a6ad350c'")
+          painel_total = int((painel[0] or {}).get("total") or 0)
+          print("Painel pessoal:", painel_total)
+          if painel_total != 79:
+              raise SystemExit(f"Carteira pessoal divergente no Turso: {painel_total}; esperado 79.")
+
+          print("IMPORTACAO_METAS_MIX_SET26_PESSOAL_OK")
           PY
