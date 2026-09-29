@@ -179,8 +179,25 @@ def login_mercadofarma(driver: WebDriver, usuario: str, senha: str, log_fn: Opti
     clear_and_type(pwd, senha)
 
     click_first(driver, [(By.ID, "submitButton")], timeout=20, desc="entrar")
+
+    def resultado_login(d):
+        atual = str(d.current_url or "").lower()
+        if "mercadofarma.com.br" in atual and "adfs" not in atual:
+            return "ok"
+        texto = _normalize_label(_texto_pagina(d))
+        erros_credencial = [
+            "incorrect user id or password",
+            "usuario ou senha incorreto",
+            "usuario e senha incorretos",
+            "senha incorreta",
+            "credenciais invalidas",
+        ]
+        if any(erro in texto for erro in erros_credencial):
+            return "credencial_invalida"
+        return False
+
     try:
-        wait(driver, 90).until(lambda d: "mercadofarma.com.br" in d.current_url.lower() and "adfs" not in d.current_url.lower())
+        resultado = wait(driver, 90).until(resultado_login)
     except TimeoutException as exc:
         atual = urlsplit(str(driver.current_url or ""))
         local = f"{atual.scheme}://{atual.netloc}{atual.path}" if atual.netloc else atual.path
@@ -191,6 +208,13 @@ def login_mercadofarma(driver: WebDriver, usuario: str, senha: str, log_fn: Opti
             f"ADFS nao retornou ao Mercado Farma. Pagina atual: {local or 'desconhecida'}. "
             f"Mensagem visivel: {tela or 'nenhuma'}"
         ) from exc
+
+    if resultado == "credencial_invalida":
+        raise RuntimeError(
+            "O Mercado Farma recusou o usuario ou a senha. Atualize o acesso pessoal em "
+            "Administracao > Acesso pessoal do Mercado Farma e execute novamente."
+        )
+
     _emit(log_fn, "Login concluido.")
 
 
