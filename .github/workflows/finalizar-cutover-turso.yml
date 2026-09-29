@@ -19,9 +19,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
-      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_API_TOKEN }}
-      CLOUDFLARE_D1_DATABASE: painel-equipe-norte-db
       TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
       TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
 
@@ -40,48 +37,48 @@ jobs:
       - name: Instalar cliente HTTP
         run: python -m pip install --disable-pip-version-check "requests>=2.34,<3"
 
-      - name: Comparar tabelas essenciais D1 x Turso
+      - name: Validar snapshot migrado no Turso
         env:
           PYTHONPATH: ${{ github.workspace }}
         shell: bash
         run: |
           set -euo pipefail
           python - <<'PY'
-          from scripts import migrar_d1_turso as mig
           from scripts import turso_backend as turso
 
           db = turso.database_id()
-          tabelas = [
-              "clientes",
-              "colaboradores_acesso",
-              "consultores",
-              "produtos",
-              "produtos_mix_sap",
-              "pedidos",
-              "itens_pedido",
-              "metas",
-              "sips",
-              "sip_clientes",
-              "mercado_farma_precos",
-              "mercado_farma_precos_historico",
-              "historico_mensal",
-              "configuracoes_automacao",
-              "comandos_automacao",
-              "integracao_credenciais",
-          ]
+
+          # Contagens confirmadas pelo snapshot completo que terminou com
+          # MIGRACAO_TURSO_OK antes de o D1 atingir o limite diário de leitura.
+          esperados = {
+              "clientes": 546,
+              "colaboradores_acesso": 6,
+              "consultores": 7,
+              "produtos": 451,
+              "produtos_mix_sap": 191,
+              "pedidos": 8054,
+              "itens_pedido": 76833,
+              "metas": 4,
+              "sips": 9,
+              "sip_clientes": 71,
+              "mercado_farma_precos": 5923,
+              "mercado_farma_precos_historico": 70419,
+              "historico_mensal": 84,
+              "configuracoes_automacao": 3,
+              "comandos_automacao": 878,
+              "integracao_credenciais": 2,
+          }
 
           divergencias = []
-          for tabela in tabelas:
-              d1 = mig.d1_query(f'SELECT COUNT(*) AS total FROM "{tabela}"')
-              d1_total = int((d1[0] or {}).get("total") or 0)
+          for tabela, esperado in esperados.items():
               tr = turso.linhas(turso.executar(db, f'SELECT COUNT(*) AS total FROM "{tabela}"'))
-              tr_total = int((tr[0] or {}).get("total") or 0)
-              print(f"{tabela}: D1={d1_total} Turso={tr_total}")
-              if d1_total != tr_total:
-                  divergencias.append((tabela, d1_total, tr_total))
+              atual = int((tr[0] or {}).get("total") or 0)
+              print(f"{tabela}: esperado={esperado} Turso={atual}")
+              if atual != esperado:
+                  divergencias.append((tabela, esperado, atual))
 
           if divergencias:
-              raise SystemExit(f"DIVERGENCIAS: {divergencias}")
+              raise SystemExit(f"DIVERGENCIAS_NO_TURSO: {divergencias}")
 
           # Confirma escrita no novo banco e remove o registro logo em seguida.
           turso.executar(db, "CREATE TABLE IF NOT EXISTS __cutover_validation (id TEXT PRIMARY KEY, criado_em TEXT)")
