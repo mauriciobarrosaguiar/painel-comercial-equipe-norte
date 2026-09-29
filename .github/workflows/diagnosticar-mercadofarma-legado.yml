@@ -1,0 +1,47 @@
+name: Diagnosticar acesso Mercado Farma legado
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/diagnosticar-mercadofarma-legado.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diagnostico:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      PYTHONPATH: ${{ github.workspace }}
+      PERSISTENCE_KEY: ${{ secrets.PERSISTENCE_KEY }}
+      GITHUB_TOKEN: ${{ github.token }}
+      GITHUB_REPO: ${{ github.repository }}
+      GITHUB_BRANCH: main
+      GITHUB_STORAGE_BRANCH: app-storage
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install --disable-pip-version-check -r requirements.txt
+      - name: Verificar acesso legado sem expor segredo
+        run: |
+          python - <<'PY'
+          from src.configuracoes import carregar_login_bussola
+          from src.mercado_farma import carregar_credenciais_mercadofarma
+          login = carregar_login_bussola()
+          cred = carregar_credenciais_mercadofarma(login, exigir=False)
+          print({
+              "configurado": bool(cred.get("configurado")),
+              "usuario_mascarado": cred.get("usuario_mascarado") or "",
+              "fonte": cred.get("fonte") or "",
+              "faltantes": cred.get("faltantes") or [],
+          })
+          if not cred.get("configurado"):
+              raise SystemExit("ACESSO_MERCADO_FARMA_LEGADO_AUSENTE")
+          print("ACESSO_MERCADO_FARMA_LEGADO_OK")
+          PY
