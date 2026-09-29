@@ -21,6 +21,8 @@ jobs:
       GITHUB_REPO: ${{ github.repository }}
       GITHUB_BRANCH: main
       GITHUB_STORAGE_BRANCH: app-storage
+      TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+      TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
 
     steps:
       - uses: actions/checkout@v4
@@ -45,3 +47,14 @@ jobs:
               raise SystemExit("ACESSO_MERCADO_FARMA_LEGADO_AUSENTE")
           print("ACESSO_MERCADO_FARMA_LEGADO_OK")
           PY
+
+      - name: Testar 1 EAN no Mercado Farma usando Turso
+        run: python automacoes/mercadofarma_turso_atualizado.py --uf TO --limite-eans 1
+
+      - name: Confirmar teste
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f data/mercadofarma/status/mercadofarma_TO.json
+          grep -q '"status": "sucesso"' data/mercadofarma/status/mercadofarma_TO.json
+          echo "MERCADO_FARMA_TURSO_LEGADO_OK"
