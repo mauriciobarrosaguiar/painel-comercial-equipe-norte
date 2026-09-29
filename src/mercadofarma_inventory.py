@@ -4,6 +4,7 @@ import re
 import time
 import unicodedata
 from datetime import datetime
+from urllib.parse import urlsplit
 from typing import Callable, Iterable, Optional
 
 from selenium.common.exceptions import TimeoutException
@@ -178,7 +179,18 @@ def login_mercadofarma(driver: WebDriver, usuario: str, senha: str, log_fn: Opti
     clear_and_type(pwd, senha)
 
     click_first(driver, [(By.ID, "submitButton")], timeout=20, desc="entrar")
-    wait(driver, 90).until(lambda d: "mercadofarma.com.br" in d.current_url.lower() and "adfs" not in d.current_url.lower())
+    try:
+        wait(driver, 90).until(lambda d: "mercadofarma.com.br" in d.current_url.lower() and "adfs" not in d.current_url.lower())
+    except TimeoutException as exc:
+        atual = urlsplit(str(driver.current_url or ""))
+        local = f"{atual.scheme}://{atual.netloc}{atual.path}" if atual.netloc else atual.path
+        tela = _texto_pagina(driver)
+        tela = re.sub(r"[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}", "***@***", tela, flags=re.I)
+        tela = re.sub(r"\s+", " ", tela).strip()[:1200]
+        raise TimeoutException(
+            f"ADFS nao retornou ao Mercado Farma. Pagina atual: {local or 'desconhecida'}. "
+            f"Mensagem visivel: {tela or 'nenhuma'}"
+        ) from exc
     _emit(log_fn, "Login concluido.")
 
 
