@@ -86,16 +86,35 @@ jobs:
         env:
           PAINEL_URL: https://painel-equipe-norte.pages.dev
           PAINEL_ADMIN_KEY: ${{ secrets.PAINEL_ADMIN_KEY }}
+          MERCADOFARMA_USUARIO_SECRET: ${{ secrets.MERCADOFARMA_USUARIO }}
+          MERCADOFARMA_SENHA_SECRET: ${{ secrets.MERCADOFARMA_SENHA }}
         shell: bash
         run: |
           set -euo pipefail
-          curl --fail-with-body --silent --show-error \
+
+          USUARIO=""
+          SENHA=""
+          HTTP=$(curl --silent --show-error \
+            --output /tmp/mercadofarma-credencial.json \
+            --write-out '%{http_code}' \
             --header "x-admin-key: ${PAINEL_ADMIN_KEY}" \
-            "${PAINEL_URL}/api/internal/mercado-farma-credencial" > /tmp/mercadofarma-credencial.json
-          USUARIO=$(jq -r '.usuario // empty' /tmp/mercadofarma-credencial.json)
-          SENHA=$(jq -r '.segredo // empty' /tmp/mercadofarma-credencial.json)
-          test -n "$USUARIO"
-          test -n "$SENHA"
+            "${PAINEL_URL}/api/internal/mercado-farma-credencial" || true)
+
+          if [ "$HTTP" = "200" ]; then
+            USUARIO=$(jq -r '.usuario // empty' /tmp/mercadofarma-credencial.json)
+            SENHA=$(jq -r '.segredo // empty' /tmp/mercadofarma-credencial.json)
+            echo "Credencial pessoal carregada do Turso."
+          else
+            echo "::warning::Credencial pessoal não encontrada no Turso (HTTP ${HTTP}). Tentando Secrets do GitHub."
+            USUARIO="${MERCADOFARMA_USUARIO_SECRET:-}"
+            SENHA="${MERCADOFARMA_SENHA_SECRET:-}"
+          fi
+
+          if [ -z "$USUARIO" ] || [ -z "$SENHA" ]; then
+            echo "::error::Acesso do Mercado Farma não está disponível nem no Turso nem nos Secrets do GitHub."
+            exit 1
+          fi
+
           echo "::add-mask::$USUARIO"
           echo "::add-mask::$SENHA"
           echo "MERCADOFARMA_USUARIO=$USUARIO" >> "$GITHUB_ENV"
