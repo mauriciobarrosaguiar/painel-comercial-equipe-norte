@@ -1,15 +1,29 @@
-name: Validar cutover Turso (contingência manual)
+name: Validar cutover Turso
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "config/turso-cutover-active.txt"
 
 permissions:
   contents: read
+
+concurrency:
+  group: validar-cutover-turso
+  cancel-in-progress: true
 
 jobs:
   validar:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      PAINEL_URL: https://painel-equipe-norte.pages.dev
+      TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+      TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -18,6 +32,9 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+
+      - name: Instalar cliente HTTP
+        run: python -m pip install --disable-pip-version-check "requests>=2.34,<3"
 
       - name: Validar Python Turso
         run: |
@@ -28,6 +45,49 @@ jobs:
             scripts/importar_mercadofarma_turso_filtrado.py \
             scripts/identificar_desafio_gigantes_turso.py \
             automacoes/mercadofarma_turso_atualizado.py
+
+      - name: Validar banco Turso e escrita
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from scripts import turso_backend as turso
+
+          db = turso.database_id()
+          essenciais = [
+              "clientes",
+              "consultores",
+              "produtos",
+              "pedidos",
+              "itens_pedido",
+              "metas",
+              "sips",
+              "configuracoes_automacao",
+              "comandos_automacao",
+          ]
+          for tabela in essenciais:
+              linhas = turso.linhas(turso.executar(db, f'SELECT COUNT(*) AS total FROM "{tabela}"'))
+              total = int((linhas[0] or {}).get("total") or 0)
+              print(f"{tabela}: {total}")
+
+          # Escrita mínima e reversível para comprovar que o banco novo está operacional.
+          turso.executar(db, "CREATE TABLE IF NOT EXISTS __cutover_validation (id TEXT PRIMARY KEY, criado_em TEXT)")
+          turso.executar(db, "INSERT OR REPLACE INTO __cutover_validation(id,criado_em) VALUES(?,CURRENT_TIMESTAMP)", ["ok"])
+          linhas = turso.linhas(turso.executar(db, "SELECT COUNT(*) AS total FROM __cutover_validation WHERE id='ok'"))
+          if int((linhas[0] or {}).get("total") or 0) != 1:
+              raise SystemExit("Falha na escrita de validação do Turso.")
+          turso.executar(db, "DELETE FROM __cutover_validation WHERE id='ok'")
+
+          clientes = turso.linhas(turso.executar(db, "SELECT COUNT(*) AS total FROM clientes WHERE ativo=1"))
+          produtos = turso.linhas(turso.executar(db, "SELECT COUNT(*) AS total FROM produtos WHERE ativo=1"))
+          if int((clientes[0] or {}).get("total") or 0) <= 0:
+              raise SystemExit("Nenhum cliente ativo encontrado após o cutover.")
+          if int((produtos[0] or {}).get("total") or 0) <= 0:
+              raise SystemExit("Nenhum produto ativo encontrado após o cutover.")
+          print("TURSO_DATA_OK")
+          PY
 
       - name: Configurar Node
         uses: actions/setup-node@v4
@@ -45,3 +105,53 @@ jobs:
         run: |
           npm ci --ignore-scripts
           npm run build
+
+      - name: Aguardar produção usar Turso
+        shell: bash
+        run: |
+          set -euo pipefail
+          pronto=0
+          for tentativa in $(seq 1 12); do
+            codigo=$(curl --silent --show-error \
+              --cookie-jar cookies.txt \
+              --output login.json \
+              --write-out '%{http_code}' \
+              --request POST "${PAINEL_URL}/api/auth/login" \
+              --header 'content-type: application/json' \
+              --data '{"login":"m0043497"}' || true)
+
+            if [ "$codigo" = "200" ]; then
+              dashboard_codigo=$(curl --silent --show-error \
+                --cookie cookies.txt \
+                --dump-header dashboard.headers \
+                --output dashboard.json \
+                --write-out '%{http_code}' \
+                "${PAINEL_URL}/api/dashboard?periodo=mes-atual" || true)
+              backend=$(awk 'BEGIN{IGNORECASE=1} /^x-db-backend:/ {gsub("\r", "", $2); print tolower($2)}' dashboard.headers | tail -n 1)
+              if [ "$dashboard_codigo" = "200" ] && [ "$backend" = "turso" ]; then
+                pronto=1
+                break
+              fi
+              echo "Tentativa ${tentativa}: dashboard HTTP ${dashboard_codigo}, backend=${backend:-ausente}."
+            else
+              echo "Tentativa ${tentativa}: login HTTP ${codigo}."
+            fi
+            sleep 15
+          done
+
+          if [ "$pronto" != "1" ]; then
+            echo "::error::Produção não confirmou Turso como backend."
+            cat dashboard.json 2>/dev/null || true
+            exit 1
+          fi
+
+          python - <<'PY'
+          import json
+          with open("dashboard.json", encoding="utf-8") as f:
+              dados=json.load(f)
+          obrigatorios=["ol_total_faturado","ol_sem_combate","clientes_ativos","filtros"]
+          faltando=[x for x in obrigatorios if x not in dados]
+          if faltando:
+              raise SystemExit(f"Campos ausentes: {faltando}")
+          print("CUTOVER_TURSO_PRODUCAO_OK")
+          PY
