@@ -97,7 +97,7 @@ jobs:
           essenciais = [
               "clientes",
               "consultores",
-              "acessos",
+              "colaboradores_acesso",
               "produtos",
               "pedidos",
               "itens_pedido",
