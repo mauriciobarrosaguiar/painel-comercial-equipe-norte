@@ -1,0 +1,66 @@
+name: Testar Mercado Farma no Turso
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/testar-mercadofarma-turso.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  teste:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PYTHONPATH: ${{ github.workspace }}
+      TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+      TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+      MERCADOFARMA_USUARIO: ${{ secrets.MERCADOFARMA_USUARIO }}
+      MERCADOFARMA_SENHA: ${{ secrets.MERCADOFARMA_SENHA }}
+      PERSISTENCE_KEY: ${{ secrets.PERSISTENCE_KEY }}
+      GITHUB_STORAGE_BRANCH: app-storage
+      GITHUB_REPO: ${{ github.repository }}
+      GITHUB_BRANCH: main
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Validar secrets do Mercado Farma
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${MERCADOFARMA_USUARIO:-}" || { echo "::error::MERCADOFARMA_USUARIO ausente"; exit 1; }
+          test -n "${MERCADOFARMA_SENHA:-}" || { echo "::error::MERCADOFARMA_SENHA ausente"; exit 1; }
+          echo "::add-mask::${MERCADOFARMA_USUARIO}"
+          echo "::add-mask::${MERCADOFARMA_SENHA}"
+          echo "Credenciais do Mercado Farma disponíveis nos Secrets."
+
+      - name: Instalar dependências
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Diagnosticar navegador
+        run: |
+          which google-chrome || true
+          google-chrome --version || true
+          which chromedriver || true
+          chromedriver --version || true
+
+      - name: Testar 1 EAN usando o novo Turso
+        run: python automacoes/mercadofarma_turso_atualizado.py --uf TO --limite-eans 1
+
+      - name: Confirmar resultado
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f data/mercadofarma/status/mercadofarma_TO.json
+          cat data/mercadofarma/status/mercadofarma_TO.json
+          echo "MERCADO_FARMA_TURSO_TESTE_OK"
