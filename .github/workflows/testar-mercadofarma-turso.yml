@@ -18,9 +18,8 @@ jobs:
       PYTHONPATH: ${{ github.workspace }}
       TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
       TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
-      MERCADOFARMA_USUARIO: ${{ secrets.MERCADOFARMA_USUARIO }}
-      MERCADOFARMA_SENHA: ${{ secrets.MERCADOFARMA_SENHA }}
       PERSISTENCE_KEY: ${{ secrets.PERSISTENCE_KEY }}
+      GITHUB_TOKEN: ${{ github.token }}
       GITHUB_STORAGE_BRANCH: app-storage
       GITHUB_REPO: ${{ github.repository }}
       GITHUB_BRANCH: main
@@ -32,15 +31,12 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Validar secrets do Mercado Farma
+      - name: Confirmar persistência legada
         shell: bash
         run: |
           set -euo pipefail
-          test -n "${MERCADOFARMA_USUARIO:-}" || { echo "::error::MERCADOFARMA_USUARIO ausente"; exit 1; }
-          test -n "${MERCADOFARMA_SENHA:-}" || { echo "::error::MERCADOFARMA_SENHA ausente"; exit 1; }
-          echo "::add-mask::${MERCADOFARMA_USUARIO}"
-          echo "::add-mask::${MERCADOFARMA_SENHA}"
-          echo "Credenciais do Mercado Farma disponíveis nos Secrets."
+          test -n "${PERSISTENCE_KEY:-}" || { echo "::error::PERSISTENCE_KEY ausente"; exit 1; }
+          echo "Persistência legada disponível."
 
       - name: Instalar dependências
         run: |
