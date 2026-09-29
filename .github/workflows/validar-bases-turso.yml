@@ -1,0 +1,92 @@
+name: Validar Painel e Metas no Turso
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/validar-bases-turso.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+      TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: python -m pip install --disable-pip-version-check "requests>=2.34,<3"
+
+      - name: Conferir Painel Equipe Norte e Metas no Turso
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from scripts import turso_backend as turso
+
+          db = turso.database_id()
+
+          def rows(sql, params=None):
+              return turso.linhas(turso.executar(db, sql, params or []))
+
+          painel = rows("""
+              SELECT COUNT(*) AS total
+                FROM clientes
+               WHERE carteira_importada=1
+                 AND (
+                   UPPER(TRIM(COALESCE(setor_rep,''))) IN ('18150301','M0043497')
+                   OR consultor_id='cons-1ee6626b98906f06c399a6ad350c'
+                 )
+          """)
+          painel_total = int((painel[0] or {}).get("total") or 0)
+
+          metas = rows("""
+              SELECT ano_mes, escopo, COUNT(*) AS total,
+                     SUM(CASE WHEN consultor_id='cons-1ee6626b98906f06c399a6ad350c' THEN 1 ELSE 0 END) AS mauricio
+                FROM metas
+               GROUP BY ano_mes, escopo
+               ORDER BY ano_mes, escopo
+          """)
+
+          mix = rows("""
+              SELECT COUNT(*) AS total
+                FROM produtos_mix_sap
+               WHERE ativo=1
+          """)
+          mix_total = int((mix[0] or {}).get("total") or 0)
+
+          produtos = rows("""
+              SELECT COUNT(*) AS total
+                FROM produtos
+               WHERE ativo=1
+          """)
+          produtos_total = int((produtos[0] or {}).get("total") or 0)
+
+          print(f"PAINEL_CLIENTES_MAURICIO={painel_total}")
+          print(f"PRODUTOS_ATIVOS={produtos_total}")
+          print(f"MIX_ATIVO={mix_total}")
+          print("METAS:")
+          for item in metas:
+              print(item)
+
+          if painel_total <= 0:
+              raise SystemExit("Painel pessoal do Mauricio não encontrado no Turso.")
+          if not metas:
+              raise SystemExit("Metas não encontradas no Turso.")
+          if mix_total <= 0:
+              raise SystemExit("MIX não encontrado no Turso.")
+
+          print("PAINEL_METAS_TURSO_OK")
+          PY
