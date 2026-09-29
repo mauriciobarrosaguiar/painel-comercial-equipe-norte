@@ -1,16 +1,16 @@
 {
   "uf": "TO",
-  "status": "erro",
+  "status": "sucesso",
   "consultor_usado": "MAURICIO BARROS DE AGUIAR",
   "cnpj_referencia": "34558660000104",
   "usuario_mascarado": "m0***97",
-  "total_eans": 434,
-  "total_produtos": 0,
-  "erro": "login: O Mercado Farma recusou o usuario ou a senha. Atualize o acesso pessoal em Administracao > Acesso pessoal do Mercado Farma e execute novamente.",
-  "etapa": "extracao_mercado_farma",
-  "traceback": "Traceback (most recent call last):\n  File \"/home/runner/work/painel-comercial-equipe-norte/painel-comercial-equipe-norte/src/mercado_farma.py\", line 870, in _extrair_alvo\n    login_mercadofarma(driver, usuario, senha, log_fn=log_fn)\n  File \"/home/runner/work/painel-comercial-equipe-norte/painel-comercial-equipe-norte/src/mercadofarma_inventory.py\", line 213, in login_mercadofarma\n    raise RuntimeError(\nRuntimeError: O Mercado Farma recusou o usuario ou a senha. Atualize o acesso pessoal em Administracao > Acesso pessoal do Mercado Farma e execute novamente.\n\nThe above exception was the direct cause of the following exception:\n\nTraceback (most recent call last):\n  File \"/home/runner/work/painel-comercial-equipe-norte/painel-comercial-equipe-norte/automacoes/mercadofarma.py\", line 210, in main\n    _extrair_alvo(alvo, eans, headless=not args.visivel, resultados=resultados, log_fn=_log, debug_dir=debug_dir)\n  File \"/home/runner/work/painel-comercial-equipe-norte/painel-comercial-equipe-norte/src/mercado_farma.py\", line 936, in _extrair_alvo\n    raise RuntimeError(f\"{etapa}: {exc}\") from exc\nRuntimeError: login: O Mercado Farma recusou o usuario ou a senha. Atualize o acesso pessoal em Administracao > Acesso pessoal do Mercado Farma e execute novamente.\n",
-  "iniciado_em": "2026-09-29T10:45:55.645948-03:00",
-  "finalizado_em": "2026-09-29T10:46:15.770847-03:00",
+  "total_eans": 441,
+  "total_produtos": 441,
+  "erro": "",
+  "etapa": "concluido",
+  "traceback": "",
+  "iniciado_em": "2026-09-29T13:56:54.753452-03:00",
+  "finalizado_em": "2026-09-29T14:33:55.995816-03:00",
   "fonte_clientes": "D1 / PAINEL EQUIPE NORTE",
   "fonte_produtos": "D1 / PRODUTOS MERCADO FARMA",
   "cnpjs_candidatos": [
@@ -87,5 +87,6 @@
     "53862338000119",
     "36106802000128",
     "13851516000191"
-  ]
+  ],
+  "arquivo": "data/mercadofarma/parciais/mercadofarma_TO.csv"
 }
