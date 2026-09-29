@@ -1,0 +1,51 @@
+name: Diagnosticar metas Turso
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/diagnosticar-metas-turso.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diagnostico:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+      TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install --disable-pip-version-check "requests>=2.34,<3"
+      - name: Ler metas, históricos e consultores
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          python - <<'PY'
+          from scripts import turso_backend as turso
+          db=turso.database_id()
+          def rows(sql, params=None):
+              return turso.linhas(turso.executar(db, sql, params or []))
+
+          print("CONSULTORES")
+          for r in rows("SELECT id,nome,origem,ativo FROM consultores ORDER BY nome"):
+              print(r)
+
+          print("METAS")
+          for r in rows("SELECT id,ano_mes,escopo,consultor_id,ol_sem_combate,ol_prioritarios,ol_lancamentos,clientes_positivados,demanda_sem_combate,importacao_id,atualizado_em FROM metas ORDER BY ano_mes,escopo"):
+              print(r)
+
+          print("METAS_HISTORICO")
+          for r in rows("SELECT meta_id,ano_mes,escopo,consultor_id,ol_sem_combate,ol_prioritarios,ol_lancamentos,clientes_positivados,demanda_sem_combate,nova_importacao_id,substituida_em FROM metas_historico ORDER BY substituida_em DESC LIMIT 30"):
+              print(r)
+
+          print("IMPORTACOES_METAS")
+          for r in rows("SELECT id,tipo,nome_arquivo,total_registros,status,criado_em FROM importacoes WHERE UPPER(tipo) LIKE '%META%' ORDER BY criado_em DESC LIMIT 30"):
+              print(r)
+          PY
