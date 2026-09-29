@@ -110,15 +110,14 @@ jobs:
             SENHA="${MERCADOFARMA_SENHA_SECRET:-}"
           fi
 
-          if [ -z "$USUARIO" ] || [ -z "$SENHA" ]; then
-            echo "::error::Acesso do Mercado Farma não está disponível nem no Turso nem nos Secrets do GitHub."
-            exit 1
+          if [ -n "$USUARIO" ] && [ -n "$SENHA" ]; then
+            echo "::add-mask::$USUARIO"
+            echo "::add-mask::$SENHA"
+            echo "MERCADOFARMA_USUARIO=$USUARIO" >> "$GITHUB_ENV"
+            echo "MERCADOFARMA_SENHA=$SENHA" >> "$GITHUB_ENV"
+          else
+            echo "::warning::Credencial não está no Turso/Secrets; a extração usará o acesso legado criptografado do app-storage."
           fi
-
-          echo "::add-mask::$USUARIO"
-          echo "::add-mask::$SENHA"
-          echo "MERCADOFARMA_USUARIO=$USUARIO" >> "$GITHUB_ENV"
-          echo "MERCADOFARMA_SENHA=$SENHA" >> "$GITHUB_ENV"
 
       - name: Extrair UF ${{ matrix.uf }}
         if: ${{ (inputs.ufs == '' && inputs.uf == '') || contains(inputs.ufs, matrix.uf) || contains(inputs.uf, matrix.uf) }}
