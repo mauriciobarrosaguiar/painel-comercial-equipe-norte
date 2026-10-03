@@ -1,5 +1,5 @@
 {
-  "gerado_em": "2026-10-02T19:44:23.387061-03:00",
+  "gerado_em": "2026-10-03T09:29:46.478014-03:00",
   "arquivo": "data/mercadofarma/mercadofarma_consolidado.csv",
   "arquivo_excel": "data/mercadofarma/mercadofarma_consolidado.xlsx",
   "ufs_atualizadas": [
@@ -528,8 +528,8 @@
       "erro": "",
       "etapa": "concluido",
       "traceback": "",
-      "iniciado_em": "2026-10-02T19:35:29.032690-03:00",
-      "finalizado_em": "2026-10-02T19:43:55.593310-03:00",
+      "iniciado_em": "2026-10-03T09:20:43.354887-03:00",
+      "finalizado_em": "2026-10-03T09:29:15.536818-03:00",
       "fonte_clientes": "D1 / PAINEL EQUIPE NORTE",
       "fonte_produtos": "D1 / PRODUTOS MERCADO FARMA",
       "cnpjs_candidatos": [
