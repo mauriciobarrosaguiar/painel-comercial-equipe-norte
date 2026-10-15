@@ -86,7 +86,7 @@ def _mensagem_sem_vinculo(driver: WebDriver) -> str:
 
 
 def extrair_valor_numerico(texto: str, tipo: str = "valor"):
-    if not texto:
+    if texto is None:
         return 0.0 if tipo != "estoque" else 0
 
     texto_limpo = str(texto).replace("R$", "").replace("\xa0", " ").strip()
@@ -96,21 +96,80 @@ def extrair_valor_numerico(texto: str, tipo: str = "valor"):
         return int(nums[0]) if nums else 0
 
     if tipo == "desconto":
-        val_temp = texto_limpo.replace("%", "").strip()
+        valor = re.sub(r"[^0-9,.-]", "", texto_limpo)
+        if not valor:
+            return 0.0
         try:
-            return float(val_temp.replace(",", ".")) / 100.0
-        except Exception:
+            return float(valor.replace(",", ".")) / 100.0
+        except ValueError:
             return 0.0
 
     match = re.search(r"\d[\d\.,]*", texto_limpo)
     if not match:
         return 0.0
 
+    valor_sujo = match.group(0)
     try:
-        return float(match.group(0).replace(".", "").replace(",", "."))
-    except Exception:
+        if "," in valor_sujo and "." in valor_sujo:
+            valor_sujo = valor_sujo.replace(".", "").replace(",", ".")
+        elif "," in valor_sujo:
+            valor_sujo = valor_sujo.replace(",", ".")
+        elif valor_sujo.count(".") > 1:
+            partes = valor_sujo.split(".")
+            valor_sujo = "".join(partes[:-1]) + "." + partes[-1]
+        return float(valor_sujo)
+    except ValueError:
         return 0.0
 
+
+def _obter_texto(elemento) -> str:
+    try:
+        return (elemento.text or "").replace("\xa0", " ").strip()
+    except Exception:
+        return ""
+
+
+def _primeiro_elemento_visivel(elementos):
+    for elemento in elementos:
+        try:
+            if elemento.is_displayed():
+                return elemento
+        except Exception:
+            continue
+    return None
+
+
+def _achar_elemento_visivel(container, selectors_css=None, xpaths=None):
+    selectors_css = selectors_css or []
+    xpaths = xpaths or []
+
+    for seletor in selectors_css:
+        try:
+            elemento = _primeiro_elemento_visivel(container.find_elements(By.CSS_SELECTOR, seletor))
+            if elemento:
+                return elemento
+        except Exception:
+            pass
+
+    for xpath in xpaths:
+        try:
+            elemento = _primeiro_elemento_visivel(container.find_elements(By.XPATH, xpath))
+            if elemento:
+                return elemento
+        except Exception:
+            pass
+
+    return None
+
+
+def _extrair_percentual_do_elemento(elemento) -> float:
+    if not elemento:
+        return 0.0
+    texto = _obter_texto(elemento)
+    match = re.search(r"(\d+(?:[\.,]\d+)?)\s*%", texto)
+    if not match:
+        return 0.0
+    return extrair_valor_numerico(match.group(1) + "%", "desconto")
 
 def _normalize_label(texto: str) -> str:
     sem_acento = unicodedata.normalize("NFKD", str(texto or "").lower())
@@ -306,92 +365,200 @@ def buscar_ean_catalogo(driver: WebDriver, ean: str) -> None:
 
 
 def localizar_card_produto_por_ean(driver: WebDriver, ean: str):
-    xpath_card = (
-        f"//div[starts-with(@data-testid, 'produtoCard-') and "
-        f".//span[normalize-space()='{ean}']]"
-    )
-    try:
-        return wait(driver, 12).until(EC.presence_of_element_located((By.XPATH, xpath_card)))
-    except Exception:
-        fallback_xpath = (
-            "//div[starts-with(@data-testid, 'produtoCard-') and .//small[@role='button' or self::small]]"
-        )
-        cards = wait(driver, 12).until(lambda d: [el for el in d.find_elements(By.XPATH, fallback_xpath) if el.is_displayed()])
-        if len(cards) == 1:
-            return cards[0]
-        raise
+    """
+    O Mercado Farma novo expõe a descrição em
+    div[data-testid^='produtoCard-descricao-']. A busca já foi feita pelo EAN,
+    então o primeiro card visível é um fallback seguro quando o EAN não aparece
+    no texto do card.
+    """
+    ean_limpo = re.sub(r"\D", "", str(ean or ""))
 
+    def localizar(d):
+        elementos = d.find_elements(By.CSS_SELECTOR, "div[data-testid^='produtoCard-descricao-']")
+        visiveis = [el for el in elementos if el.is_displayed()]
+        if not visiveis:
+            return False
 
-def abrir_lista_distribuidoras(driver: WebDriver, card_produto):
-    trigger = wait(driver, 10).until(
-        lambda _d: next(
-            (
-                el
-                for el in card_produto.find_elements(By.CSS_SELECTOR, "[data-slot='popover-trigger']")
-                if el.is_displayed()
-            ),
-            None,
-        )
-    )
-    if trigger is None:
-        raise TimeoutException("Nao encontrei o trigger das distribuidoras no card do produto.")
+        for el in visiveis:
+            try:
+                bloco = el.find_element(By.XPATH, "ancestor::div[1]")
+                texto = (_obter_texto(el) + " " + _obter_texto(bloco)).replace(" ", "")
+                if ean_limpo and ean_limpo in re.sub(r"\D", "", texto):
+                    return el
+            except Exception:
+                pass
 
-    driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", trigger)
-    driver.execute_script("arguments[0].click();", trigger)
+        return visiveis[0]
 
-    popover_id = trigger.get_attribute("aria-controls")
-    if popover_id:
-        xpath_popover = f"//*[@id='{popover_id}' and @data-state='open']"
-        return wait(driver, 8).until(EC.visibility_of_element_located((By.XPATH, xpath_popover)))
-
-    return wait(driver, 8).until(
-        EC.visibility_of_element_located((By.CSS_SELECTOR, "[data-slot='popover-content'][data-state='open']"))
-    )
+    return wait(driver, 12).until(localizar)
 
 
 def extrair_nome_produto(card_produto) -> str:
-    seletores = [
-        "[data-testid*='produtoCard-descricao'] small",
-        "[data-testid*='produtoCard-descricao']",
-        "small.font-open-sans.font-semibold",
-        "small[role='button']",
-        "h5",
-    ]
-    for seletor in seletores:
+    elemento = _achar_elemento_visivel(
+        card_produto,
+        selectors_css=[
+            "p[data-state='closed']",
+            "[data-testid^='produtoCard-descricao-'] p",
+            "p",
+        ],
+    )
+    if elemento:
+        return _obter_texto(elemento)
+    return _obter_texto(card_produto)
+
+
+def _localizar_trigger_distribuidora(driver: WebDriver, card_produto):
+    candidatos = []
+
+    try:
+        candidatos.extend(
+            card_produto.find_elements(
+                By.CSS_SELECTOR,
+                "[data-slot='popover-trigger'][aria-haspopup='dialog'], "
+                "[data-slot='popover-trigger'][aria-controls]",
+            )
+        )
+    except Exception:
+        pass
+
+    try:
+        container = card_produto.find_element(
+            By.XPATH,
+            "ancestor::*[.//*[@data-slot='popover-trigger']][1]",
+        )
+        candidatos.extend(
+            container.find_elements(
+                By.CSS_SELECTOR,
+                "[data-slot='popover-trigger'][aria-haspopup='dialog'], "
+                "[data-slot='popover-trigger'][aria-controls]",
+            )
+        )
+    except Exception:
+        pass
+
+    vistos = set()
+    for elemento in candidatos:
         try:
-            texto = card_produto.find_element(By.CSS_SELECTOR, seletor).text.strip()
-            if texto:
-                return texto
+            if not elemento.is_displayed():
+                continue
+            chave = getattr(elemento, "id", "") or str(id(elemento))
+            if chave in vistos:
+                continue
+            vistos.add(chave)
+            return elemento
         except Exception:
             continue
-    return ""
+
+    try:
+        container = card_produto.find_element(
+            By.XPATH,
+            "ancestor::*[.//*[@aria-haspopup='dialog' and @aria-controls]][1]",
+        )
+        for elemento in container.find_elements(
+            By.CSS_SELECTOR,
+            "[aria-haspopup='dialog'][aria-controls]",
+        ):
+            if elemento.is_displayed():
+                return elemento
+    except Exception:
+        pass
+
+    raise TimeoutException("Nao encontrei o botao da distribuidora no card do produto.")
+
+
+def abrir_lista_distribuidoras(driver: WebDriver, card_produto):
+    trigger = _localizar_trigger_distribuidora(driver, card_produto)
+
+    driver.execute_script(
+        "arguments[0].scrollIntoView({block:'center', inline:'nearest'});",
+        trigger,
+    )
+    time.sleep(0.25)
+
+    try:
+        aberto = (trigger.get_attribute("aria-expanded") or "").lower() == "true"
+    except Exception:
+        aberto = False
+
+    if not aberto:
+        safe_click(driver, trigger)
+
+    try:
+        wait(driver, 5).until(
+            lambda _d: (
+                (trigger.get_attribute("aria-expanded") or "").lower() == "true"
+                or (trigger.get_attribute("data-state") or "").lower() == "open"
+            )
+        )
+    except Exception:
+        pass
+
+    popover = None
+    try:
+        popover_id = trigger.get_attribute("aria-controls")
+        if popover_id:
+            popover = wait(driver, 8).until(
+                EC.visibility_of_element_located(
+                    (By.XPATH, f"//*[@id={repr(popover_id)} and @data-state='open']")
+                )
+            )
+    except Exception:
+        popover = None
+
+    if popover is None:
+        popover = wait(driver, 8).until(
+            EC.visibility_of_element_located(
+                (
+                    By.CSS_SELECTOR,
+                    "[data-slot='popover-content'][data-state='open'][role='dialog'], "
+                    "[data-slot='popover-content'][data-state='open']",
+                )
+            )
+        )
+    return popover
 
 
 def fechar_popover(driver: WebDriver) -> None:
     try:
         ActionChains(driver).send_keys(Keys.ESCAPE).perform()
-        time.sleep(0.4)
     except Exception:
         pass
+    time.sleep(0.3)
 
 
 def rows_buybox(popover) -> list:
-    selectors = [
-        (By.CSS_SELECTOR, "[data-test-id='buybox-item']"),
-        (By.CSS_SELECTOR, "[data-testid='buybox-item']"),
-    ]
-    for by, sel in selectors:
-        rows = [e for e in popover.find_elements(by, sel) if e.is_displayed()]
-        if rows:
-            return rows
-    return []
+    try:
+        itens = popover.find_elements(By.CSS_SELECTOR, "[data-test-id='buybox-item']")
+        itens = [item for item in itens if item.is_displayed()]
+        if itens:
+            return itens
+    except Exception:
+        pass
+
+    try:
+        itens = popover.find_elements(By.CSS_SELECTOR, "[data-testid='buybox-item']")
+        itens = [item for item in itens if item.is_displayed()]
+        if itens:
+            return itens
+    except Exception:
+        pass
+
+    try:
+        itens = popover.find_elements(
+            By.XPATH,
+            ".//div[.//small[contains(normalize-space(.), 'un. disponíveis') or "
+            "contains(normalize-space(.), 'un. disponiveis')] and (.//h4 or .//h5) and .//p]",
+        )
+        return [item for item in itens if item.is_displayed()]
+    except Exception:
+        return []
 
 
 def safe_text(root, selectors: Iterable[tuple]) -> str:
     for by, sel in selectors:
         try:
             el = root.find_element(by, sel)
-            text = (el.text or "").strip()
+            text = _obter_texto(el)
             if text:
                 return text
         except Exception:
@@ -399,46 +566,126 @@ def safe_text(root, selectors: Iterable[tuple]) -> str:
     return ""
 
 
+def _extrair_nome_distribuidora(item) -> str:
+    try:
+        textos = []
+        for p in item.find_elements(By.CSS_SELECTOR, "p"):
+            if p.is_displayed():
+                txt = _obter_texto(p)
+                if txt:
+                    textos.append(txt)
+        return textos[0] if textos else ""
+    except Exception:
+        return ""
+
+
+def _extrair_estoque(item) -> int:
+    elemento = _achar_elemento_visivel(
+        item,
+        xpaths=[
+            ".//small[contains(normalize-space(.), 'un. disponíveis')]",
+            ".//small[contains(normalize-space(.), 'un. disponiveis')]",
+        ],
+    )
+    return extrair_valor_numerico(_obter_texto(elemento), "estoque") if elemento else 0
+
+
+def _extrair_desconto(item) -> float:
+    elemento = _achar_elemento_visivel(
+        item,
+        selectors_css=["[data-testid^='tag-percentual_desconto-']"],
+        xpaths=[".//span[contains(normalize-space(.), '%')]"],
+    )
+    return _extrair_percentual_do_elemento(elemento)
+
+
+def _extrair_preco_fabrica(item) -> float:
+    elemento = _achar_elemento_visivel(item, selectors_css=["del"], xpaths=[".//del"])
+    return extrair_valor_numerico(_obter_texto(elemento)) if elemento else 0.0
+
+
+def _extrair_h5_sem_imposto(item) -> float:
+    elemento = _achar_elemento_visivel(item, selectors_css=["h5"], xpaths=[".//h5"])
+    return extrair_valor_numerico(_obter_texto(elemento)) if elemento else 0.0
+
+
+def _extrair_preco_com_imposto(item) -> float:
+    try:
+        elementos = item.find_elements(
+            By.XPATH,
+            ".//small[contains(translate(normalize-space(.), 'IMPOSTO', 'imposto'), 'com imposto:')]",
+        )
+        for el in elementos:
+            txt = _obter_texto(el)
+            match = re.search(r"com\s*imposto\s*:\s*(?:R\$)?\s*([0-9\.,]+)", txt, re.I)
+            if match:
+                return extrair_valor_numerico(match.group(1))
+            valor = extrair_valor_numerico(txt)
+            if valor:
+                return valor
+    except Exception:
+        pass
+    return 0.0
+
+
 def extract_buybox_row(row, ean: str, nome_produto: str) -> Optional[dict]:
     try:
-        nome_dist = safe_text(
-            row,
-            [
-                (By.CSS_SELECTOR, "p.font-open-sans"),
-                (By.XPATH, ".//p[contains(@class,'font-open-sans') or contains(@class,'text-black')]"),
-            ],
-        )
+        nome_dist = _extrair_nome_distribuidora(row)
         if not nome_dist:
-            nome_dist = "DISTRIBUIDORA NAO IDENTIFICADA"
+            return None
 
-        estoque_txt = safe_text(
-            row,
-            [
-                (By.CSS_SELECTOR, "small.text-primary"),
-                (By.XPATH, ".//small[contains(@class,'text-primary')]"),
-            ],
-        )
+        estoque = _extrair_estoque(row)
+        desconto = _extrair_desconto(row)
+        pf_fabrica = _extrair_preco_fabrica(row)
+
+        # A versão V8 fornecida passou a ler o valor riscado (<del>) como base
+        # de preço da oferta. Mantemos também PF Fábrica no schema atual.
         pf_dist_txt = _find_text_by_keywords(row, ["pf dist", "preco dist", "preco distribuidora"])
-        pf_fabrica_txt = _find_text_by_keywords(row, ["pf fabrica", "preco fabrica", "preco de fabrica"])
-        preco_final_txt = safe_text(row, [(By.CSS_SELECTOR, "h5"), (By.XPATH, ".//h5")])
-        sem_imposto_txt = safe_text(row, [(By.XPATH, ".//small[contains(text(), 'Sem imposto')]")])
-        desconto_txt = safe_text(row, [(By.XPATH, ".//span[contains(text(), '%')]")])
+        pf_dist = extrair_valor_numerico(pf_dist_txt) or pf_fabrica
+
+        preco_sem_imposto = _extrair_h5_sem_imposto(row)
+        preco_com_imposto = _extrair_preco_com_imposto(row)
+        preco_final = preco_com_imposto if preco_com_imposto > 0 else preco_sem_imposto
 
         return {
             "EAN": ean,
             "NOME DO PRODUTO": nome_produto,
             "DISTRIBUIDORA": nome_dist,
-            "ESTOQUE": extrair_valor_numerico(estoque_txt, "estoque"),
-            "DESCONTO (%)": extrair_valor_numerico(desconto_txt, "desconto"),
-            "PF DIST. (R$)": extrair_valor_numerico(pf_dist_txt),
-            "PF FABRICA (R$)": extrair_valor_numerico(pf_fabrica_txt),
-            "PREÇO FINAL (R$)": extrair_valor_numerico(preco_final_txt),
-            "SEM IMPOSTO (R$)": extrair_valor_numerico(sem_imposto_txt),
+            "ESTOQUE": estoque,
+            "DESCONTO (%)": desconto,
+            "PF DIST. (R$)": pf_dist,
+            "PF FABRICA (R$)": pf_fabrica,
+            "PREÇO FINAL (R$)": preco_final,
+            "SEM IMPOSTO (R$)": preco_sem_imposto,
             "DATA": now_str(),
+            "STATUS": "OK",
+            "ERRO": "",
         }
     except Exception:
         return None
 
+
+def _coletar_distribuidores_do_produto(popover, ean: str, nome_produto: str) -> list[dict]:
+    time.sleep(0.25)
+    itens = rows_buybox(popover)
+    resultados: list[dict] = []
+    chaves = set()
+
+    for item in itens:
+        row = extract_buybox_row(item, ean, nome_produto)
+        if not row:
+            continue
+        chave = (
+            str(row.get("DISTRIBUIDORA", "")).strip().lower(),
+            int(row.get("ESTOQUE") or 0),
+            round(float(row.get("PREÇO FINAL (R$)") or 0), 4),
+        )
+        if chave in chaves:
+            continue
+        chaves.add(chave)
+        resultados.append(row)
+
+    return resultados
 
 def build_not_found_row(ean: str) -> dict:
     return {
@@ -466,19 +713,16 @@ def processar_ean_catalogo(driver: WebDriver, ean: str) -> list[dict]:
             card_produto = localizar_card_produto_por_ean(driver, ean)
         except TimeoutException:
             return [build_not_found_row(ean)]
+
         nome_produto = extrair_nome_produto(card_produto) or "NOME NAO IDENTIFICADO"
         popover = abrir_lista_distribuidoras(driver, card_produto)
-        wait(driver, 8).until(lambda _d: len(rows_buybox(popover)) > 0)
-
-        registros = []
-        for item in rows_buybox(popover):
-            row = extract_buybox_row(item, ean, nome_produto)
-            if row:
-                registros.append(row)
+        registros = _coletar_distribuidores_do_produto(popover, ean, nome_produto)
 
         if not registros:
-            raise TimeoutException("Nenhuma distribuidora pode ser lida no buybox.")
+            raise TimeoutException("Lista de distribuidoras nao identificada no popover do produto.")
 
         return registros
     finally:
-        fechar_popover(driver)
+        if popover is not None:
+            fechar_popover(driver)
+
