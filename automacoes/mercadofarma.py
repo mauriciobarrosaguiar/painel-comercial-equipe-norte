@@ -71,7 +71,7 @@ def _linhas_consulta(dados: dict) -> list[dict]:
     return linhas if isinstance(linhas, list) else []
 
 
-def _carregar_bases_d1() -> tuple[pd.DataFrame, pd.DataFrame]:
+def _carregar_bases_banco() -> tuple[pd.DataFrame, pd.DataFrame]:
     database_id = d1.localizar_database_id()
     clientes_dados = d1.executar(
         database_id,
@@ -121,9 +121,9 @@ def _carregar_bases_d1() -> tuple[pd.DataFrame, pd.DataFrame]:
 def _validar_bases_carregadas(clientes: pd.DataFrame, produtos_mercado: pd.DataFrame) -> None:
     faltantes = []
     if clientes is None or clientes.empty:
-        faltantes.append("CARTEIRA DO MAURICIO no D1")
+        faltantes.append("CARTEIRA DO MAURICIO no banco principal")
     if produtos_mercado is None or produtos_mercado.empty:
-        faltantes.append("Produtos do Mercado Farma no D1")
+        faltantes.append("Produtos do Mercado Farma no banco principal")
     if faltantes:
         raise RuntimeError(
             "Bases obrigatórias ausentes: " + ", ".join(faltantes) + ". "
@@ -158,8 +158,8 @@ def main() -> int:
         "traceback": "",
         "iniciado_em": agora_brasilia().isoformat(),
         "finalizado_em": "",
-        "fonte_clientes": "D1 / PAINEL EQUIPE NORTE",
-        "fonte_produtos": "D1 / PRODUTOS MERCADO FARMA",
+        "fonte_clientes": "BANCO PRINCIPAL / PAINEL EQUIPE NORTE",
+        "fonte_produtos": "BANCO PRINCIPAL / PRODUTOS MERCADO FARMA",
     }
 
     try:
@@ -176,11 +176,11 @@ def main() -> int:
         _log(f"UF: {uf}")
         _log(f"Usuário Mercado Farma: {status['usuario_mascarado'] or 'não informado'}")
 
-        status["etapa"] = "carregar_bases_d1"
-        clientes, produtos_mercado = _carregar_bases_d1()
+        status["etapa"] = "carregar_bases_banco"
+        clientes, produtos_mercado = _carregar_bases_banco()
         _validar_bases_carregadas(clientes, produtos_mercado)
-        _log(f"Clientes ativos carregados do D1: {len(clientes)}")
-        _log(f"Produtos autorizados carregados do D1: {len(produtos_mercado)}")
+        _log(f"Clientes ativos carregados do banco principal: {len(clientes)}")
+        _log(f"Produtos autorizados carregados do banco principal: {len(produtos_mercado)}")
 
         status["etapa"] = "montar_alvos"
         alvos = [alvo for alvo in alvos_mercadofarma_por_uf(clientes, usuario_gd, senha_gd) if alvo.get("uf") == uf]
@@ -196,12 +196,12 @@ def main() -> int:
         if isinstance(candidatos, list) and len(candidatos) > 1:
             _log(f"CNPJs candidatos na UF {uf}: {len(candidatos)}")
 
-        status["etapa"] = "carregar_eans_d1"
+        status["etapa"] = "carregar_eans_banco"
         eans = obter_eans_para_consulta(produtos_mercado)
         if args.limite_eans:
             eans = eans[: args.limite_eans]
         if not eans:
-            raise RuntimeError("Nenhum EAN autorizado foi encontrado no D1.")
+            raise RuntimeError("Nenhum EAN autorizado foi encontrado no banco principal.")
         status["total_eans"] = len(eans)
         _log(f"Total de EANs autorizados: {len(eans)}")
 
