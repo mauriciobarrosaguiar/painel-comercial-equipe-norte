@@ -314,6 +314,7 @@ def selecionar_cnpj_catalogo(driver: WebDriver, cnpj: str, log_fn: Optional[Call
         click_first(
             driver,
             [
+                (By.XPATH, "//a[contains(@href, '/catalogo/categoria/1/produtos')]"),
                 (By.XPATH, "//a[contains(., 'Catálogo A a Z') ]"),
                 (By.XPATH, "//*[normalize-space()='Catálogo A a Z']"),
                 (By.XPATH, "//a[contains(., 'Catalogo A a Z') ]"),
@@ -337,6 +338,9 @@ def limpar_busca_catalogo(driver: WebDriver):
             (By.NAME, "term"),
             (By.CSS_SELECTOR, "input[placeholder*='EAN']"),
             (By.CSS_SELECTOR, "input[placeholder*='Procure']"),
+            (By.CSS_SELECTOR, "input[placeholder*='Pesquisar']"),
+            (By.CSS_SELECTOR, "input[placeholder*='Buscar']"),
+            (By.CSS_SELECTOR, "input[type='search']"),
         ],
         timeout=20,
         desc="campo de busca do catalogo",
