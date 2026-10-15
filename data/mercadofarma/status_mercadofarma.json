@@ -1,5 +1,5 @@
 {
-  "gerado_em": "2026-10-15T10:18:50.298038-03:00",
+  "gerado_em": "2026-10-15T16:31:22.016451-03:00",
   "arquivo": "data/mercadofarma/mercadofarma_consolidado.csv",
   "arquivo_excel": "data/mercadofarma/mercadofarma_consolidado.xlsx",
   "ufs_atualizadas": [
@@ -9,7 +9,7 @@
     "PI",
     "TO"
   ],
-  "total_linhas": 6248,
+  "total_linhas": 6245,
   "status": [
     {
       "uf": "MA",
@@ -528,10 +528,10 @@
       "erro": "",
       "etapa": "concluido",
       "traceback": "",
-      "iniciado_em": "2026-10-15T09:40:59.544655-03:00",
-      "finalizado_em": "2026-10-15T10:18:24.090855-03:00",
-      "fonte_clientes": "D1 / PAINEL EQUIPE NORTE",
-      "fonte_produtos": "D1 / PRODUTOS MERCADO FARMA",
+      "iniciado_em": "2026-10-15T16:08:52.631262-03:00",
+      "finalizado_em": "2026-10-15T16:30:45.842321-03:00",
+      "fonte_clientes": "BANCO PRINCIPAL / PAINEL EQUIPE NORTE",
+      "fonte_produtos": "BANCO PRINCIPAL / PRODUTOS MERCADO FARMA",
       "cnpjs_candidatos": [
         "34558660000104",
         "34799538000120",
