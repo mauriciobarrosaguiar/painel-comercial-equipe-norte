@@ -96,7 +96,7 @@ export async function onRequestPost({ request, env }) {
       const intervalo = Math.min(10080, Math.max(minimo, intervaloSolicitado))
       const parametrosSalvos = parametros(configuracao.parametros_json)
       if (tipo === 'MERCADO_FARMA') {
-        parametrosSalvos.ufs = 'TO'
+        delete parametrosSalvos.ufs
       }
 
       const integracaoPessoal = CREDENCIAIS_PESSOAIS.get(tipo)
