@@ -74,9 +74,24 @@ jobs:
           """)
           produtos_total = int((produtos[0] or {}).get("total") or 0)
 
+          ufs = rows("""
+              SELECT UPPER(TRIM(COALESCE(uf,''))) AS uf, COUNT(*) AS clientes
+                FROM clientes
+               WHERE carteira_importada=1
+                 AND ativo=1
+                 AND consultor_id='cons-1ee6626b98906f06c399a6ad350c'
+                 AND LENGTH(TRIM(COALESCE(cnpj,'')))=14
+                 AND LENGTH(TRIM(COALESCE(uf,'')))=2
+               GROUP BY UPPER(TRIM(COALESCE(uf,'')))
+               ORDER BY uf
+          """)
+
           print(f"PAINEL_CLIENTES_MAURICIO={painel_total}")
           print(f"PRODUTOS_ATIVOS={produtos_total}")
           print(f"MIX_ATIVO={mix_total}")
+          print("UFS_MERCADO_FARMA:")
+          for item in ufs:
+              print(item)
           print("METAS:")
           for item in metas:
               print(item)
