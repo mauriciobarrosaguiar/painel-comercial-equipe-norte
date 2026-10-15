@@ -9,7 +9,7 @@ const AGENDAVEIS = new Map([
   }],
   ['MERCADO_FARMA', {
     nome: 'Mercado Farma',
-    descricao: 'Atualiza preços e estoques das UFs configuradas.',
+    descricao: 'Detecta as UFs da carteira e atualiza preços e estoques de cada uma.',
     padrao: 720,
     minimo: 720,
   }],
@@ -124,7 +124,7 @@ export async function onRequestPost({ request, env }) {
       ? { ...parametrosAtuais, ...body.parametros }
       : parametrosAtuais
     if (tipo === 'MERCADO_FARMA') {
-      novosParametros.ufs = 'TO'
+      delete novosParametros.ufs
     }
 
     const agora = new Date()
