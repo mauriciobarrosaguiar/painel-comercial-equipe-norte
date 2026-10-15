@@ -11,7 +11,9 @@ def test_workflow_mercadofarma_pessoal_alterna_backend_no_cutover():
     assert 'TURSO_AUTH_TOKEN' in workflow
     assert 'config/turso-cutover-active.txt' in workflow
     assert '/api/internal/mercado-farma-credencial' in workflow
-    assert 'uf: [TO]' in workflow
+    assert "Detectar UFs da carteira do Maurício" in workflow
+    assert "fromJSON(needs.preparar_ufs.outputs.ufs_json)" in workflow
+    assert "default: \"\"" in workflow
     assert '\n  push:' not in workflow
 
 
@@ -47,3 +49,13 @@ def test_parser_v8_usa_estrutura_nova_do_mercado_farma():
     assert 'selectors_css=["del"]' in source
     assert 'selectors_css=["h5"]' in source
     assert "com\\s*imposto" in source
+
+
+def test_workflow_mercadofarma_detecta_ufs_da_carteira():
+    workflow = Path('.github/workflows/mercadofarma.yml').read_text(encoding='utf-8')
+    assert "SELECT DISTINCT UPPER(TRIM(COALESCE(uf,''))) AS uf" in workflow
+    assert "consultor_id='cons-1ee6626b98906f06c399a6ad350c'" in workflow
+    assert "ufs_json" in workflow
+    assert "matrix:" in workflow
+    assert "fromJSON(needs.preparar_ufs.outputs.ufs_json)" in workflow
+    assert "uf: [TO]" not in workflow
