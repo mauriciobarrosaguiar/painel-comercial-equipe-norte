@@ -41,6 +41,10 @@ def build_driver(download_dir: Path, headless: bool = False):
         headless = True
     if headless:
         options.add_argument("--headless=new")
+    # O Bússola carrega vários recursos secundários. "eager" libera o Selenium
+    # assim que o DOM principal está pronto, evitando travar 90 s esperando
+    # imagens/scripts que não são necessários para a automação.
+    options.page_load_strategy = "eager"
     chrome_bin = shutil.which("chromium") or shutil.which("chromium-browser") or shutil.which("google-chrome")
     if chrome_bin:
         options.binary_location = chrome_bin
@@ -58,7 +62,7 @@ def build_driver(download_dir: Path, headless: bool = False):
     chromedriver = shutil.which("chromedriver")
     service = Service(chromedriver or ChromeDriverManager().install())
     driver = webdriver.Chrome(service=service, options=options)
-    driver.set_page_load_timeout(90)
+    driver.set_page_load_timeout(60)
     return driver
 
 
@@ -99,6 +103,45 @@ def wait_visible(driver, selectors, timeout=25, desc="elemento"):
     raise TimeoutException(f"Não encontrei visível: {desc}. Último erro: {last_err}")
 
 
+def navegar_resiliente(driver, url: str, descricao: str, tentativas: int = 3):
+    ultima_ex = None
+    for tentativa in range(1, tentativas + 1):
+        try:
+            driver.get(url)
+            return
+        except TimeoutException as exc:
+            ultima_ex = exc
+            log(f"{descricao}: carregamento excedeu o tempo na tentativa {tentativa}/{tentativas}.")
+            try:
+                driver.execute_script("window.stop();")
+            except Exception:
+                pass
+
+            # Em alguns casos o Chrome sinaliza timeout embora o DOM útil já
+            # esteja carregado. Se houver conteúdo real, deixe a etapa seguinte
+            # validar os elementos da página em vez de descartar a sessão.
+            try:
+                estado = driver.execute_script("return document.readyState")
+                conteudo = (driver.page_source or "").strip()
+                if estado in {"interactive", "complete"} and len(conteudo) > 1000:
+                    log(f"{descricao}: DOM disponível após o timeout; continuando.")
+                    return
+            except Exception:
+                pass
+
+            if tentativa < tentativas:
+                try:
+                    driver.get("about:blank")
+                except Exception:
+                    pass
+                time.sleep(3 * tentativa)
+
+    raise TimeoutException(
+        f"{descricao}: não foi possível carregar a página após {tentativas} tentativas. "
+        f"Último erro: {ultima_ex}"
+    )
+
+
 def esperar_download(download_dir: Path, timeout=120) -> Path:
     log("Aguardando download terminar...")
     start = time.time()
@@ -116,7 +159,7 @@ def esperar_download(download_dir: Path, timeout=120) -> Path:
 
 def entrar_bussola(driver, usuario: str, senha: str):
     log("Abrindo login do Bússola...")
-    driver.get(BUSSOLA_URL)
+    navegar_resiliente(driver, BUSSOLA_URL, "Login do Bússola")
 
     click_first(driver, [
         (By.XPATH, "//a[normalize-space()='Entrar']"),
@@ -163,7 +206,7 @@ def abrir_analise_com_periodo(driver, data_inicial: str | None = None, data_fina
         data_inicial, data_final = periodo_90_dias()
     url = f"{BUSSOLA_ANALISE_URL}?page=1&from={quote(data_inicial)}&to={quote(data_final)}"
     log(f"Abrindo análise direto com período: {data_inicial} até {data_final}")
-    driver.get(url)
+    navegar_resiliente(driver, url, "Análise de pedidos")
 
     wait_visible(driver, [
         (By.XPATH, "//*[contains(., 'Análise de pedidos') ]"),
