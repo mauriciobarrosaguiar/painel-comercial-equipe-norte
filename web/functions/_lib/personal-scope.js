@@ -60,13 +60,13 @@ export async function enforcePersonalScope(env) {
     env.DB.prepare(`
       UPDATE configuracoes_automacao
          SET intervalo_minutos=720,
-             parametros_json='{"ufs":"TO"}',
+             parametros_json='{}',
              atualizado_por='Modo pessoal Maurício',
              atualizado_em=CURRENT_TIMESTAMP
        WHERE tipo='MERCADO_FARMA'
          AND (
            COALESCE(intervalo_minutos,0)<>720
-           OR COALESCE(parametros_json,'')<>'{"ufs":"TO"}'
+           OR COALESCE(parametros_json,'')<>'{}'
          )
     `),
   ])
