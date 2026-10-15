@@ -6,6 +6,7 @@ on:
     paths:
       - ".github/workflows/diagnosticar-mercadofarma-legado.yml"
       - "src/mercadofarma_inventory.py"
+      - "src/mercadofarma_parser_atual.py"
   workflow_dispatch:
 
 permissions:
