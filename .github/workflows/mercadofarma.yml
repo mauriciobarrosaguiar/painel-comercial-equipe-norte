@@ -9,9 +9,9 @@ on:
         required: true
         default: "atualizar_mercadofarma_paralelo"
       ufs:
-        description: "UFs separadas por virgula. Vazio executa todas."
+        description: "UFs separadas por virgula. Vazio detecta automaticamente todas as UFs da carteira do Maurício."
         required: false
-        default: "TO"
+        default: ""
       uf:
         description: "Compatibilidade: UF ou UFs separadas por virgula."
         required: false
@@ -53,14 +53,93 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 jobs:
+  preparar_ufs:
+    if: ${{ inputs.acao == 'atualizar_mercadofarma_paralelo' }}
+    runs-on: ubuntu-latest
+    outputs:
+      ufs_json: ${{ steps.detectar.outputs.ufs_json }}
+      ufs_texto: ${{ steps.detectar.outputs.ufs_texto }}
+    env:
+      TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+      TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+      UFS_SOLICITADAS: ${{ inputs.ufs || inputs.uf || '' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Instalar cliente Turso
+        run: python -m pip install --disable-pip-version-check "requests>=2.34,<3"
+
+      - name: Detectar UFs da carteira do Maurício
+        id: detectar
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          from scripts import turso_backend as turso
+
+          db = turso.database_id()
+          dados = turso.linhas(turso.executar(db, """
+              SELECT DISTINCT UPPER(TRIM(COALESCE(uf,''))) AS uf
+                FROM clientes
+               WHERE carteira_importada=1
+                 AND ativo=1
+                 AND consultor_id='cons-1ee6626b98906f06c399a6ad350c'
+                 AND LENGTH(TRIM(COALESCE(cnpj,'')))=14
+                 AND LENGTH(TRIM(COALESCE(uf,'')))=2
+               ORDER BY uf
+          """))
+          disponiveis = [
+              str(item.get("uf") or "").strip().upper()
+              for item in dados
+              if str(item.get("uf") or "").strip()
+          ]
+
+          solicitado_raw = os.environ.get("UFS_SOLICITADAS", "")
+          solicitadas = []
+          for parte in solicitado_raw.replace(";", ",").split(","):
+              uf = parte.strip().upper()
+              if len(uf) == 2 and uf not in solicitadas:
+                  solicitadas.append(uf)
+
+          if solicitadas:
+              ufs = [uf for uf in disponiveis if uf in solicitadas]
+              ausentes = [uf for uf in solicitadas if uf not in disponiveis]
+              if ausentes:
+                  print(f"::warning::UFs solicitadas sem cliente ativo na carteira: {', '.join(ausentes)}")
+          else:
+              ufs = disponiveis
+
+          if not ufs:
+              raise SystemExit("Nenhuma UF com cliente ativo foi encontrada na carteira do Maurício.")
+
+          texto = ",".join(ufs)
+          print(f"UFs detectadas automaticamente: {texto}")
+          saida = Path(os.environ["GITHUB_OUTPUT"])
+          with saida.open("a", encoding="utf-8") as arquivo:
+              arquivo.write("ufs_json=" + json.dumps(ufs, separators=(",", ":")) + "\n")
+              arquivo.write("ufs_texto=" + texto + "\n")
+          PY
+
   extrair_uf:
     if: ${{ inputs.acao == 'atualizar_mercadofarma_paralelo' }}
+    needs: preparar_ufs
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       max-parallel: 1
       matrix:
-        uf: [TO]
+        uf: ${{ fromJSON(needs.preparar_ufs.outputs.ufs_json) }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -120,7 +199,6 @@ jobs:
           fi
 
       - name: Extrair UF ${{ matrix.uf }}
-        if: ${{ (inputs.ufs == '' && inputs.uf == '') || contains(inputs.ufs, matrix.uf) || contains(inputs.uf, matrix.uf) }}
         env:
           PYTHONPATH: ${{ github.workspace }}
           GITHUB_TOKEN: ${{ github.token }}
@@ -164,7 +242,7 @@ jobs:
   consolidar_mercadofarma:
     if: ${{ always() && inputs.acao == 'atualizar_mercadofarma_paralelo' }}
     runs-on: ubuntu-latest
-    needs: extrair_uf
+    needs: [preparar_ufs, extrair_uf]
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -230,7 +308,7 @@ jobs:
 
   finalizar_comando:
     if: ${{ always() && inputs.command_id != '' }}
-    needs: [extrair_uf, consolidar_mercadofarma]
+    needs: [preparar_ufs, extrair_uf, consolidar_mercadofarma]
     runs-on: ubuntu-latest
     steps:
       - name: Atualizar solicitação no painel
@@ -240,12 +318,13 @@ jobs:
           COMMAND_ID: ${{ inputs.command_id }}
           RESULTADO_EXTRACAO: ${{ needs.extrair_uf.result }}
           RESULTADO_CONSOLIDACAO: ${{ needs.consolidar_mercadofarma.result }}
+          UFS_EXTRAIDAS: ${{ needs.preparar_ufs.outputs.ufs_texto }}
         shell: bash
         run: |
           set -euo pipefail
           if [ "$RESULTADO_EXTRACAO" = "success" ] && [ "$RESULTADO_CONSOLIDACAO" = "success" ]; then
             STATUS="concluido"
-            MENSAGEM="Extração pessoal do Mercado Farma concluída para TO, consolidada e sincronizada no banco principal."
+            MENSAGEM="Extração pessoal do Mercado Farma concluída para as UFs ${UFS_EXTRAIDAS}, consolidada e sincronizada no banco principal."
             ERRO=""
           else
             STATUS="erro"
