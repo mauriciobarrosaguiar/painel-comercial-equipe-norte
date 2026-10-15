@@ -85,7 +85,7 @@ jobs:
 
             jq -c '.comando.parametros // {}' comando.json > parametros.json
             ano_mes=$(jq -r '.ano_mes // empty' parametros.json)
-            ufs=$(jq -r '.ufs // "TO"' parametros.json)
+            ufs=$(jq -r '.ufs // ""' parametros.json)
             mensagem=""
             acompanha_workflow="false"
             set +e
@@ -99,7 +99,11 @@ jobs:
               MERCADO_FARMA)
                 saida=$(gh workflow run mercadofarma.yml --repo "$GITHUB_REPOSITORY" --ref main -f acao=atualizar_mercadofarma_paralelo -f ufs="$ufs" -f command_id="$id" 2>&1)
                 codigo=$?
-                mensagem="Extração do Mercado Farma enviada para as UFs ${ufs}."
+                if [ -n "$ufs" ]; then
+                  mensagem="Extração do Mercado Farma enviada para as UFs ${ufs}."
+                else
+                  mensagem="Extração do Mercado Farma enviada para detecção automática das UFs da carteira."
+                fi
                 acompanha_workflow="true"
                 ;;
               MIGRAR_BASES)
