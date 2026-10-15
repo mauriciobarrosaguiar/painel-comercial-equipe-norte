@@ -18,7 +18,7 @@ const DISPAROS = {
     workflow: 'mercadofarma.yml',
     inputs: (id, parametros) => ({
       acao: 'atualizar_mercadofarma_paralelo',
-      ufs: texto(parametros?.ufs) || 'TO',
+      ufs: texto(parametros?.ufs),
       command_id: id,
     }),
   },
