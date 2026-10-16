@@ -1,15 +1,14 @@
 {
-  "gerado_em": "2026-10-15T19:53:51.046848-03:00",
+  "gerado_em": "2026-10-15T22:47:43.674482-03:00",
   "arquivo": "data/mercadofarma/mercadofarma_consolidado.csv",
   "arquivo_excel": "data/mercadofarma/mercadofarma_consolidado.xlsx",
   "ufs_atualizadas": [
     "MA",
     "MT",
     "PA",
-    "PI",
-    "TO"
+    "PI"
   ],
-  "total_linhas": 6328,
+  "total_linhas": 6326,
   "status": [
     {
       "uf": "MA",
@@ -267,8 +266,8 @@
       "erro": "",
       "etapa": "concluido",
       "traceback": "",
-      "iniciado_em": "2026-10-15T18:45:46.290610-03:00",
-      "finalizado_em": "2026-10-15T19:07:09.625815-03:00",
+      "iniciado_em": "2026-10-15T20:24:53.583156-03:00",
+      "finalizado_em": "2026-10-15T20:46:58.920103-03:00",
       "fonte_clientes": "BANCO PRINCIPAL / PAINEL EQUIPE NORTE",
       "fonte_produtos": "BANCO PRINCIPAL / PRODUTOS MERCADO FARMA",
       "cnpjs_candidatos": [
@@ -289,8 +288,8 @@
       "erro": "",
       "etapa": "concluido",
       "traceback": "",
-      "iniciado_em": "2026-10-15T19:07:43.195358-03:00",
-      "finalizado_em": "2026-10-15T19:27:18.195258-03:00",
+      "iniciado_em": "2026-10-15T20:47:32.704380-03:00",
+      "finalizado_em": "2026-10-15T21:06:51.551659-03:00",
       "fonte_clientes": "BANCO PRINCIPAL / PAINEL EQUIPE NORTE",
       "fonte_produtos": "BANCO PRINCIPAL / PRODUTOS MERCADO FARMA",
       "cnpjs_candidatos": [
@@ -518,17 +517,17 @@
     },
     {
       "uf": "TO",
-      "status": "sucesso",
+      "status": "erro",
       "consultor_usado": "MAURICIO BARROS DE AGUIAR",
       "cnpj_referencia": "34558660000104",
       "usuario_mascarado": "m0***97",
       "total_eans": 441,
-      "total_produtos": 441,
-      "erro": "",
-      "etapa": "concluido",
-      "traceback": "",
-      "iniciado_em": "2026-10-15T19:27:59.470911-03:00",
-      "finalizado_em": "2026-10-15T19:53:10.632695-03:00",
+      "total_produtos": 0,
+      "erro": "selecao_cnpj: UF TO: nenhum CNPJ candidato abriu o Mercado Farma. 29164930000162: Message: Nao encontrei visivel: campo CNPJ. Ultimo erro: Message: \nStacktrace:\n#0 0x562c609a91da <unknown>\n#1 0x562c602c85c9 <unknown>\n#2 0x562c6031f60f <unknown>\n#3 0x562c6031f891 <unknown>\n#4 0x562c60370b04 <unknown>\n#5 0x562c6036dd6e <unknown>\n#6 0x562c603122f8 <unknown>\n#7 0x562c603130d1 <unknown>\n#8 0x562c6096bcec <unknown>\n#9 0x562c6096a505 <unknown>\n#10 0x562c609553b5 <unknown>\n#11 0x562c6096b15a <unknown>\n#12 0x562c6093d939 <unknown>\n#13 0x562c60993898 <unknown>\n#14 0x562c60993a35 <unknown>\n#15 0x562c609a7b63 <unknown>\n#16 0x7fd6f289cb84 <unknown>\n#17 0x7fd6f2929ecc <unknown> | 08957678000179: Message: Nao encontrei visivel: campo CNPJ. Ultimo erro: Message: \nStacktrace:\n#0 0x562c609a91da <unknown>\n#1 0x562c602c85c9 <unknown>\n#2 0x562c6031f60f <unknown>\n#3 0x562c6031f891 <unknown>\n#4 0x562c60370b04 <unknown>\n#5 0x562c6036dd6e <unknown>\n#6 0x562c603122f8 <unknown>\n#7 0x562c603130d1 <unknown>\n#8 0x562c6096bcec <unknown>\n#9 0x562c6096a505 <unknown>\n#10 0x562c609553b5 <unknown>\n#11 0x562c6096b15a <unknown>\n#12 0x562c6093d939 <unknown>\n#13 0x562c60993898 <unknown>\n#14 0x562c60993a35 <unknown>\n#15 0x562c609a7b63 <unknown>\n#16 0x7fd6f289cb84 <unknown>\n#17 0x7fd6f2929ecc <unknown> | 53862338000119: Message: Nao encontrei visivel: campo CNPJ. Ultimo erro: Message: \nStacktrace:\n#0 0x562c609a91da <unknown>\n#1 0x562c602c85c9 <unknown>\n#2 0x562c6031f60f <unknown>\n#3 0x562c6031f891 <unknown>\n#4 0x562c60370b04 <unknown>\n#5 0x562c6036dd6e <unknown>\n#6 0x562c603122f8 <unknown>\n#7 0x562c603130d1 <unknown>\n#8 0x562c6096bcec <unknown>\n#9 0x562c6096a505 <unknown>\n#10 0x562c609553b5 <unknown>\n#11 0x562c6096b15a <unknown>\n#12 0x562c6093d939 <unknown>\n#13 0x562c60993898 <unknown>\n#14 0x562c60993a35 <unknown>\n#15 0x562c609a7b63 <unknown>\n#16 0x7fd6f289cb84 <unknown>\n#17 0x7fd6f2929ecc <unknown> | 36106802000128: Message: Nao encontrei visivel: campo CNPJ. Ultimo erro: Message: \nStacktrace:\n#0 0x562c609a91da <unknown>\n#1 0x562c602c85c9 <unknown>\n#2 0x562c6031f60f <unknown>\n#3 0x562c6031f891 <unknown>\n#4 0x562c60370b04 <unknown>\n#5 0x562c6036dd6e <unknown>\n#6 0x562c603122f8 <unknown>\n#7 0x562c603130d1 <unknown>\n#8 0x562c6096bcec <unknown>\n#9 0x562c6096a505 <unknown>\n#10 0x562c609553b5 <unknown>\n#11 0x562c6096b15a <unknown>\n#12 0x562c6093d939 <unknown>\n#13 0x562c60993898 <unknown>\n#14 0x562c60993a35 <unknown>\n#15 0x562c609a7b63 <unknown>\n#16 0x7fd6f289cb84 <unknown>\n#17 0x7fd6f2929ecc <unknown> | 13851516000191: Message: Nao encontrei visivel: campo CNPJ. Ultimo erro: Message: \nStacktrace:\n#0 0x562c609a91da <unknown>\n#1 0x562c602c85c9 <unknown>\n#2 0x562c6031f60f <unknown>\n#3 0x562c6031f891 <unknown>\n#4 0x562c60370b04 <unknown>\n#5 0x562c6036dd6e <unknown>\n#6 0x562c603122f8 <unknown>\n#7 0x562c603130d1 <unknown>\n#8 0x562c6096bcec <unknown>\n#9 0x562c6096a505 <unknown>\n#10 0x562c609553b5 <unknown>\n#11 0x562c6096b15a <unknown>\n#12 0x562c6093d939 <unknown>\n#13 0x562c60993898 <unknown>\n#14 0x562c60993a35 <unknown>\n#15 0x562c609a7b63 <unknown>\n#16 0x7fd6f289cb84 <unknown>\n#17 0x7fd6f2929ecc <unknown>",
+      "etapa": "extracao_mercado_farma",
+      "traceback": "Traceback (most recent call last):\n  File \"/home/runner/work/painel-comercial-equipe-norte/painel-comercial-equipe-norte/src/mercado_farma.py\", line 893, in _extrair_alvo\n    raise RuntimeError(f\"UF {uf}: nenhum CNPJ candidato abriu o Mercado Farma. {detalhes}\")\nRuntimeError: UF TO: nenhum CNPJ candidato abriu o Mercado Farma. 29164930000162: Message: Nao encontrei visivel: campo CNPJ. Ultimo erro: Message: \nStacktrace:\n#0 0x562c609a91da <unknown>\n#1 0x562c602c85c9 <unknown>\n#2 0x562c6031f60f <unknown>\n#3 0x562c6031f891 <unknown>\n#4 0x562c60370b04 <unknown>\n#5 0x562c6036dd6e <unknown>\n#6 0x562c603122f8 <unknown>\n#7 0x562c603130d1 <unknown>\n#8 0x562c6096bcec <unknown>\n#9 0x562c6096a505 <unknown>\n#10 0x562c609553b5 <unknown>\n#11 0x562c6096b15a <unknown>\n#12 0x562c6093d939 <unknown>\n#13 0x562c60993898 <unknown>\n#14 0x562c60993a35 <unknown>\n#15 0x562c609a7b63 <unknown>\n#16 0x7fd6f289cb84 <unknown>\n#17 0x7fd6f2929ecc <unknown> | 08957678000179: Message: Nao encontrei visivel: campo CNPJ. Ultimo erro: Message: \nStacktrace:\n#0 0x562c609a91da <unknown>\n#1 0x562c602c85c9 <unknown>\n#2 0x562c6031f60f <unknown>\n#3 0x562c6031f891 <unknown>\n#4 0x562c60370b04 <unknown>\n#5 0x562c6036dd6e <unknown>\n#6 0x562c603122f8 <unknown>\n#7 0x562c603130d1 <unknown>\n#8 0x562c6096bcec <unknown>\n#9 0x562c6096a505 <unknown>\n#10 0x562c609553b5 <unknown>\n#11 0x562c6096b15a <unknown>\n#12 0x562c6093d939 <unknown>\n#13 0x562c60993898 <unknown>\n#14 0x562c60993a35 <unknown>\n#15 0x562c609a7b63 <unknown>\n#16 0x7fd6f289cb84 <unknown>\n#17 0x7fd6f2929ecc <unknown> | 53862338000119: Message: Nao encontrei visivel: campo CNPJ. Ultimo erro: Message: \nStacktrace:\n#0 0x562c609a91da <unknown>\n#1 0x562c602c85c9 <unknown>\n#2 0x562c6031f60f <unknown>\n#3 0x562c6031f891 <unknown>\n#4 0x562c60370b04 <unknown>\n#5 0x562c6036dd6e <unknown>\n#6 0x562c603122f8 <unknown>\n#7 0x562c603130d1 <unknown>\n#8 0x562c6096bcec <unknown>\n#9 0x562c6096a505 <unknown>\n#10 0x562c609553b5 <unknown>\n#11 0x562c6096b15a <unknown>\n#12 0x562c6093d939 <unknown>\n#13 0x562c60993898 <unknown>\n#14 0x562c60993a35 <unknown>\n#15 0x562c609a7b63 <unknown>\n#16 0x7fd6f289cb84 <unknown>\n#17 0x7fd6f2929ecc <unknown> | 36106802000128: Message: Nao encontrei visivel: campo CNPJ. Ultimo erro: Message: \nStacktrace:\n#0 0x562c609a91da <unknown>\n#1 0x562c602c85c9 <unknown>\n#2 0x562c6031f60f <unknown>\n#3 0x562c6031f891 <unknown>\n#4 0x562c60370b04 <unknown>\n#5 0x562c6036dd6e <unknown>\n#6 0x562c603122f8 <unknown>\n#7 0x562c603130d1 <unknown>\n#8 0x562c6096bcec <unknown>\n#9 0x562c6096a505 <unknown>\n#10 0x562c609553b5 <unknown>\n#11 0x562c6096b15a <unknown>\n#12 0x562c6093d939 <unknown>\n#13 0x562c60993898 <unknown>\n#14 0x562c60993a35 <unknown>\n#15 0x562c609a7b63 <unknown>\n#16 0x7fd6f289cb84 <unknown>\n#17 0x7fd6f2929ecc <unknown> | 13851516000191: Message: Nao encontrei visivel: campo CNPJ. Ultimo erro: Message: \nStacktrace:\n#0 0x562c609a91da <unknown>\n#1 0x562c602c85c9 <unknown>\n#2 0x562c6031f60f <unknown>\n#3 0x562c6031f891 <unknown>\n#4 0x562c60370b04 <unknown>\n#5 0x562c6036dd6e <unknown>\n#6 0x562c603122f8 <unknown>\n#7 0x562c603130d1 <unknown>\n#8 0x562c6096bcec <unknown>\n#9 0x562c6096a505 <unknown>\n#10 0x562c609553b5 <unknown>\n#11 0x562c6096b15a <unknown>\n#12 0x562c6093d939 <unknown>\n#13 0x562c60993898 <unknown>\n#14 0x562c60993a35 <unknown>\n#15 0x562c609a7b63 <unknown>\n#16 0x7fd6f289cb84 <unknown>\n#17 0x7fd6f2929ecc <unknown>\n\nThe above exception was the direct cause of the following exception:\n\nTraceback (most recent call last):\n  File \"/home/runner/work/painel-comercial-equipe-norte/painel-comercial-equipe-norte/automacoes/mercadofarma.py\", line 210, in main\n    _extrair_alvo(alvo, eans, headless=not args.visivel, resultados=resultados, log_fn=_log, debug_dir=debug_dir)\n  File \"/home/runner/work/painel-comercial-equipe-norte/painel-comercial-equipe-norte/src/mercado_farma.py\", line 936, in _extrair_alvo\n    raise RuntimeError(f\"{etapa}: {exc}\") from exc\nRuntimeError: selecao_cnpj: UF TO: nenhum CNPJ candidato abriu o Mercado Farma. 29164930000162: Message: Nao encontrei visivel: campo CNPJ. Ultimo erro: Message: \nStacktrace:\n#0 0x562c609a91da <unknown>\n#1 0x562c602c85c9 <unknown>\n#2 0x562c6031f60f <unknown>\n#3 0x562c6031f891 <unknown>\n#4 0x562c60370b04 <unknown>\n#5 0x562c6036dd6e <unknown>\n#6 0x562c603122f8 <unknown>\n#7 0x562c603130d1 <unknown>\n#8 0x562c6096bcec <unknown>\n#9 0x562c6096a505 <unknown>\n#10 0x562c609553b5 <unknown>\n#11 0x562c6096b15a <unknown>\n#12 0x562c6093d939 <unknown>\n#13 0x562c60993898 <unknown>\n#14 0x562c60993a35 <unknown>\n#15 0x562c609a7b63 <unknown>\n#16 0x7fd6f289cb84 <unknown>\n#17 0x7fd6f2929ecc <unknown> | 08957678000179: Message: Nao encontrei visivel: campo CNPJ. Ultimo erro: Message: \nStacktrace:\n#0 0x562c609a91da <unknown>\n#1 0x562c602c85c9 <unknown>\n#2 0x562c6031f60f <unknown>\n#3 0x562c6031f891 <unknown>\n#4 0x562c60370b04 <unknown>\n#5 0x562c6036dd6e <unknown>\n#6 0x562c603122f8 <unknown>\n#7 0x562c603130d1 <unknown>\n#8 0x562c6096bcec <unknown>\n#9 0x562c6096a505 <unknown>\n#10 0x562c609553b5 <unknown>\n#11 0x562c6096b15a <unknown>\n#12 0x562c6093d939 <unknown>\n#13 0x562c60993898 <unknown>\n#14 0x562c60993a35 <unknown>\n#15 0x562c609a7b63 <unknown>\n#16 0x7fd6f289cb84 <unknown>\n#17 0x7fd6f2929ecc <unknown> | 53862338000119: Message: Nao encontrei visivel: campo CNPJ. Ultimo erro: Message: \nStacktrace:\n#0 0x562c609a91da <unknown>\n#1 0x562c602c85c9 <unknown>\n#2 0x562c6031f60f <unknown>\n#3 0x562c6031f891 <unknown>\n#4 0x562c60370b04 <unknown>\n#5 0x562c6036dd6e <unknown>\n#6 0x562c603122f8 <unknown>\n#7 0x562c603130d1 <unknown>\n#8 0x562c6096bcec <unknown>\n#9 0x562c6096a505 <unknown>\n#10 0x562c609553b5 <unknown>\n#11 0x562c6096b15a <unknown>\n#12 0x562c6093d939 <unknown>\n#13 0x562c60993898 <unknown>\n#14 0x562c60993a35 <unknown>\n#15 0x562c609a7b63 <unknown>\n#16 0x7fd6f289cb84 <unknown>\n#17 0x7fd6f2929ecc <unknown> | 36106802000128: Message: Nao encontrei visivel: campo CNPJ. Ultimo erro: Message: \nStacktrace:\n#0 0x562c609a91da <unknown>\n#1 0x562c602c85c9 <unknown>\n#2 0x562c6031f60f <unknown>\n#3 0x562c6031f891 <unknown>\n#4 0x562c60370b04 <unknown>\n#5 0x562c6036dd6e <unknown>\n#6 0x562c603122f8 <unknown>\n#7 0x562c603130d1 <unknown>\n#8 0x562c6096bcec <unknown>\n#9 0x562c6096a505 <unknown>\n#10 0x562c609553b5 <unknown>\n#11 0x562c6096b15a <unknown>\n#12 0x562c6093d939 <unknown>\n#13 0x562c60993898 <unknown>\n#14 0x562c60993a35 <unknown>\n#15 0x562c609a7b63 <unknown>\n#16 0x7fd6f289cb84 <unknown>\n#17 0x7fd6f2929ecc <unknown> | 13851516000191: Message: Nao encontrei visivel: campo CNPJ. Ultimo erro: Message: \nStacktrace:\n#0 0x562c609a91da <unknown>\n#1 0x562c602c85c9 <unknown>\n#2 0x562c6031f60f <unknown>\n#3 0x562c6031f891 <unknown>\n#4 0x562c60370b04 <unknown>\n#5 0x562c6036dd6e <unknown>\n#6 0x562c603122f8 <unknown>\n#7 0x562c603130d1 <unknown>\n#8 0x562c6096bcec <unknown>\n#9 0x562c6096a505 <unknown>\n#10 0x562c609553b5 <unknown>\n#11 0x562c6096b15a <unknown>\n#12 0x562c6093d939 <unknown>\n#13 0x562c60993898 <unknown>\n#14 0x562c60993a35 <unknown>\n#15 0x562c609a7b63 <unknown>\n#16 0x7fd6f289cb84 <unknown>\n#17 0x7fd6f2929ecc <unknown>\n",
+      "iniciado_em": "2026-10-15T21:07:45.091796-03:00",
+      "finalizado_em": "2026-10-15T22:47:14.399206-03:00",
       "fonte_clientes": "BANCO PRINCIPAL / PAINEL EQUIPE NORTE",
       "fonte_produtos": "BANCO PRINCIPAL / PRODUTOS MERCADO FARMA",
       "cnpjs_candidatos": [
@@ -605,8 +604,7 @@
         "53862338000119",
         "36106802000128",
         "13851516000191"
-      ],
-      "arquivo": "data/mercadofarma/parciais/mercadofarma_TO.csv"
+      ]
     }
   ]
 }
