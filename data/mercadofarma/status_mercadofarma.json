@@ -1,5 +1,5 @@
 {
-  "gerado_em": "2026-10-20T19:32:36.992022-03:00",
+  "gerado_em": "2026-10-21T07:43:09.226234-03:00",
   "arquivo": "data/mercadofarma/mercadofarma_consolidado.csv",
   "arquivo_excel": "data/mercadofarma/mercadofarma_consolidado.xlsx",
   "ufs_atualizadas": [
@@ -9,7 +9,7 @@
     "PI",
     "TO"
   ],
-  "total_linhas": 6316,
+  "total_linhas": 6375,
   "status": [
     {
       "uf": "MA",
@@ -267,8 +267,8 @@
       "erro": "",
       "etapa": "concluido",
       "traceback": "",
-      "iniciado_em": "2026-10-20T18:25:02.335001-03:00",
-      "finalizado_em": "2026-10-20T18:45:13.821169-03:00",
+      "iniciado_em": "2026-10-21T06:34:00.961965-03:00",
+      "finalizado_em": "2026-10-21T06:55:42.753350-03:00",
       "fonte_clientes": "BANCO PRINCIPAL / PAINEL EQUIPE NORTE",
       "fonte_produtos": "BANCO PRINCIPAL / PRODUTOS MERCADO FARMA",
       "cnpjs_candidatos": [
@@ -289,8 +289,8 @@
       "erro": "",
       "etapa": "concluido",
       "traceback": "",
-      "iniciado_em": "2026-10-20T18:45:56.111833-03:00",
-      "finalizado_em": "2026-10-20T19:07:13.881621-03:00",
+      "iniciado_em": "2026-10-21T06:56:25.873679-03:00",
+      "finalizado_em": "2026-10-21T07:17:57.142476-03:00",
       "fonte_clientes": "BANCO PRINCIPAL / PAINEL EQUIPE NORTE",
       "fonte_produtos": "BANCO PRINCIPAL / PRODUTOS MERCADO FARMA",
       "cnpjs_candidatos": [
@@ -527,8 +527,8 @@
       "erro": "",
       "etapa": "concluido",
       "traceback": "",
-      "iniciado_em": "2026-10-20T19:07:49.658326-03:00",
-      "finalizado_em": "2026-10-20T19:32:02.580291-03:00",
+      "iniciado_em": "2026-10-21T07:18:55.810351-03:00",
+      "finalizado_em": "2026-10-21T07:42:33.788418-03:00",
       "fonte_clientes": "BANCO PRINCIPAL / PAINEL EQUIPE NORTE",
       "fonte_produtos": "BANCO PRINCIPAL / PRODUTOS MERCADO FARMA",
       "cnpjs_candidatos": [
