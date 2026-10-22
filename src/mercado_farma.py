@@ -14,6 +14,7 @@ from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
 
+from scripts.janela_mercadofarma import validar_janela
 from src.datas import agora_brasilia
 from src.loader import DATA_DIR, carregar_mercado_farma
 from src.mercadofarma_inventory import login_mercadofarma, processar_ean_catalogo, selecionar_cnpj_catalogo
@@ -865,6 +866,7 @@ def _extrair_alvo(
                 f"{len(cnpjs_candidatos)} candidato(s) | usuario {mascarar_usuario(usuario)}"
             )
             log_fn(f"UF {uf}: etapa login - abrindo Mercado Farma")
+        validar_janela()
         driver = criar_driver(headless=headless)
         etapa = "login"
         login_mercadofarma(driver, usuario, senha, log_fn=log_fn)
@@ -875,12 +877,14 @@ def _extrair_alvo(
             if posicao > 1:
                 if callable(log_fn):
                     log_fn(f"UF {uf}: resetando tela de selecao antes do proximo CNPJ.")
+                validar_janela()
                 driver.get("https://www.mercadofarma.com.br/selecionar-loja")
             if estado is not None:
                 estado["current_cnpj"] = cnpj
             if callable(log_fn):
                 log_fn(f"UF {uf}: etapa selecao CNPJ {posicao}/{len(cnpjs_candidatos)} - {cnpj}")
             try:
+                validar_janela()
                 selecionar_cnpj_catalogo(driver, cnpj, log_fn=log_fn)
                 alvo["cnpj"] = cnpj
                 break
@@ -897,6 +901,7 @@ def _extrair_alvo(
             log_fn(f"UF {uf}: etapa catalogo - Catalogo A a Z carregado com CNPJ {cnpj}")
         etapa = "extracao"
         for idx in range(start_index, len(eans)):
+            validar_janela()
             ean = eans[idx]
             if estado is not None and estado.get("cancelar"):
                 raise RuntimeError("Extração cancelada pelo usuário.")
