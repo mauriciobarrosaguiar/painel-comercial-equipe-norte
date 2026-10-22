@@ -69,6 +69,13 @@ function matchesClient(client: ClientOption, query: string) {
   return !query || normalize(`${client.nome} ${client.cidade} ${client.uf}`).includes(normalized) || (queryDigits && client.cnpj.includes(queryDigits))
 }
 
+const extracaoPermitidaAgora = () => {
+  const hora = Number(new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'America/Sao_Paulo', hour: '2-digit', hourCycle: 'h23',
+  }).format(new Date()))
+  return hora >= 7 && hora < 20
+}
+
 export default function MarketFarmaModule({ onBack, onAutomations }: { onBack: () => void; onAutomations: () => void }) {
   const [uf, setUf] = useState('')
   const [dist, setDist] = useState('')
@@ -81,6 +88,8 @@ export default function MarketFarmaModule({ onBack, onAutomations }: { onBack: (
   const [queueing, setQueueing] = useState(false)
   const [reload, setReload] = useState(0)
   const [trackingStart, setTrackingStart] = useState(0)
+  const [janelaAberta, setJanelaAberta] = useState(extracaoPermitidaAgora)
+  const [ultimoRelatorio, setUltimoRelatorio] = useState<{ status: string; mensagem: string; erro: string; finalizado_em?: string } | null>(null)
   const [openBuybox, setOpenBuybox] = useState('')
   const [selectedRows, setSelectedRows] = useState<Record<string, string>>({})
   const [quantities, setQuantities] = useState<Record<string, number>>({})
@@ -140,6 +149,28 @@ export default function MarketFarmaModule({ onBack, onAutomations }: { onBack: (
   }, [storageKey, cartReady, clientCnpj, cart])
 
   useEffect(() => {
+    const atualizar = () => setJanelaAberta(extracaoPermitidaAgora())
+    const timer = window.setInterval(atualizar, 30_000)
+    return () => window.clearInterval(timer)
+  }, [])
+
+  useEffect(() => {
+    let ativo = true
+    async function carregarUltimoRelatorio() {
+      try {
+        const response = await fetch('/api/automacoes', { cache: 'no-store' })
+        if (!response.ok) return
+        const resultado = await response.json()
+        const ultimo = (resultado.comandos || []).find((item: { tipo: string }) => item.tipo === 'MERCADO_FARMA')
+        if (ativo && ultimo) setUltimoRelatorio(ultimo)
+      } catch { /* Relatório não impede uso da vitrine */ }
+    }
+    void carregarUltimoRelatorio()
+    const timer = window.setInterval(() => void carregarUltimoRelatorio(), 15_000)
+    return () => { ativo = false; window.clearInterval(timer) }
+  }, [])
+
+  useEffect(() => {
     if (!trackingStart) return
     async function acompanhar() {
       try {
@@ -149,7 +180,7 @@ export default function MarketFarmaModule({ onBack, onAutomations }: { onBack: (
         const inicio = trackingStart - 60000
         const extracao = (json.extracoes || []).find((item: { tipo: string; criado_em: string }) => item.tipo === 'MERCADO_FARMA' && new Date(item.criado_em).getTime() >= inicio)
         const comando = (json.comandos || []).find((item: { tipo: string; solicitado_em: string }) => item.tipo === 'MERCADO_FARMA' && new Date(item.solicitado_em).getTime() >= inicio)
-        if (extracao?.status === 'concluido') {
+        if (extracao?.status === 'concluido' || comando?.status === 'concluido') {
           setStatus('Atualizado'); setQueueing(false); setTrackingStart(0); setReload(value => value + 1); return
         }
         if (extracao?.status === 'erro' || comando?.status === 'erro') {
@@ -278,7 +309,7 @@ export default function MarketFarmaModule({ onBack, onAutomations }: { onBack: (
       <div><h1>Mercado Farma</h1><p>Selecione o cliente. O sistema exibirá somente distribuidores que atendem a UF do CNPJ escolhido.</p></div>
       <div className="market-hero-actions">
         <button className="market-cart-button" type="button" onClick={() => setCartOpen(true)}>🛒 Carrinho <b>{cartUnits}</b><span>{money.format(cartTotal)}</span></button>
-        <button className="secondary-button" disabled={queueing} onClick={() => void extract()}>{queueing ? (status || 'Extraindo…') : 'Atualizar Mercado Farma'}</button>
+        <button className="secondary-button" disabled={queueing || !janelaAberta} title={janelaAberta ? 'Iniciar extração' : 'Extrações disponíveis apenas das 07h às 20h de Brasília'} onClick={() => void extract()}>{!janelaAberta ? 'Disponível às 07h' : queueing ? (status || 'Extraindo…') : 'Atualizar Mercado Farma'}</button>
         <a className="secondary-button market-download" href={excelHref} download={`mercado-farma-${effectiveUf || 'todas-ufs'}.xlsx`}>Baixar em Excel</a>
       </div>
     </section>
@@ -303,6 +334,11 @@ export default function MarketFarmaModule({ onBack, onAutomations }: { onBack: (
     </section>
     {error && <div className="alert alert-error">{error}<button className="error-action" onClick={onAutomations}>Automações</button></div>}
     {status && !queueing && <div className="alert alert-success">{status}</div>}
+    {ultimoRelatorio && <section className="market-extraction-report" aria-label="Último relatório da extração por UF">
+      <strong>Última execução do Mercado Farma — {ultimoRelatorio.status === 'concluido' ? 'Concluída' : ultimoRelatorio.status === 'erro' ? 'Falha parcial ou total' : 'Em andamento'}</strong>
+      <pre>{[ultimoRelatorio.mensagem, ultimoRelatorio.erro].filter(Boolean).join('\n')}</pre>
+      <button type="button" className="outline-button" onClick={onAutomations}>Ver detalhes das automações</button>
+    </section>}
     <section className="market-summary">
       <article><span>Produtos</span><strong>{loading ? '—' : num.format(groups.length)}</strong></article>
       <article><span>Registros</span><strong>{num.format(search ? visibleRows : summary?.registros || 0)}</strong></article>
