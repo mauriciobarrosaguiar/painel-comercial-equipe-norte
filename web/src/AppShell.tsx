@@ -120,7 +120,7 @@ export default function AppShell() {
   }
 
   const back = () => go('dashboard')
-  let module = <ClientsModule onBack={back} />
+  let module = <ClientsModule onBack={back} onOpenMarket={() => go('mercado')} />
   if (page === 'oportunidades') module = <OpportunitiesModule onBack={back} />
   if (page === 'sips') module = <SipsModule onBack={back} />
   if (page === 'mercado') module = <MarketFarmaModule onBack={back} onAutomations={() => go('automacoes')} />
