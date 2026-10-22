@@ -31,6 +31,13 @@ type Data = {
 }
 type ProductGroup = { key: string; ean: string; produto: string; rows: Row[] }
 type CartItem = { key: string; ean: string; produto: string; quantidade: number; selectedRowKey: string; ofertas: Row[] }
+type TransferenciaCliente = {
+  criado_em: number
+  cliente_cnpj: string
+  uf: string
+  itens: Array<{ ean: string; quantidade: number; distribuidora: string; preco_referencia?: number }>
+}
+const CHAVE_TRANSFERENCIA = 'mercado-farma-importacao-proposta'
 
 const money = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
 const num = new Intl.NumberFormat('pt-BR')
@@ -90,6 +97,7 @@ export default function MarketFarmaModule({ onBack, onAutomations }: { onBack: (
   const [cart, setCart] = useState<CartItem[]>([])
   const [cartOpen, setCartOpen] = useState(false)
   const [cartReady, setCartReady] = useState(false)
+  const transferenciaRef = useRef<TransferenciaCliente | null>(null)
   const [exporting, setExporting] = useState(false)
   const timerRef = useRef<number | null>(null)
 
@@ -125,8 +133,26 @@ export default function MarketFarmaModule({ onBack, onAutomations }: { onBack: (
     if (!storageKey) return
     try {
       const saved = JSON.parse(localStorage.getItem(storageKey) || '{}')
-      setClientCnpj(String(saved.cliente_cnpj || ''))
-      setCart(Array.isArray(saved.itens) ? saved.itens : [])
+      let pendente: TransferenciaCliente | null = null
+      try {
+        const bruto = sessionStorage.getItem(CHAVE_TRANSFERENCIA)
+        const item = bruto ? JSON.parse(bruto) as TransferenciaCliente : null
+        if (item && Date.now() - Number(item.criado_em) < 60 * 60 * 1000
+          && /^\\d{14}$/.test(String(item.cliente_cnpj))
+          && /^[A-Z]{2}$/.test(String(item.uf))
+          && Array.isArray(item.itens) && item.itens.length <= 45) pendente = item
+        else if (bruto) sessionStorage.removeItem(CHAVE_TRANSFERENCIA)
+      } catch { sessionStorage.removeItem(CHAVE_TRANSFERENCIA) }
+      const carrinhoSalvo = Array.isArray(saved.itens) ? saved.itens : []
+      if (pendente && carrinhoSalvo.length && String(saved.cliente_cnpj) !== pendente.cliente_cnpj
+        && !window.confirm('Há um carrinho de outro cliente salvo. Deseja substituí-lo pelas sugestões desta ficha?')) {
+        sessionStorage.removeItem(CHAVE_TRANSFERENCIA)
+        pendente = null
+      }
+      transferenciaRef.current = pendente
+      setClientCnpj(pendente?.cliente_cnpj || String(saved.cliente_cnpj || ''))
+      setCart(!pendente || String(saved.cliente_cnpj) === pendente.cliente_cnpj ? carrinhoSalvo : [])
+      if (pendente) { setUf(pendente.uf); setDist(''); setSearch(''); setStock(false) }
     } catch {
       setClientCnpj('')
       setCart([])
@@ -138,6 +164,49 @@ export default function MarketFarmaModule({ onBack, onAutomations }: { onBack: (
     if (!storageKey || !cartReady) return
     localStorage.setItem(storageKey, JSON.stringify({ cliente_cnpj: clientCnpj, itens: cart }))
   }, [storageKey, cartReady, clientCnpj, cart])
+
+  // Importa uma proposta apenas após a API autenticar CNPJ/UF e retornar ofertas atuais.
+  useEffect(() => {
+    const transferencia = transferenciaRef.current
+    if (!cartReady || !transferencia || !data?.cliente_selecionado || loading) return
+    const cliente = data.cliente_selecionado
+    if (cliente.cnpj !== transferencia.cliente_cnpj || cliente.uf.toUpperCase() !== transferencia.uf) {
+      setError('A proposta não corresponde ao CNPJ/UF autorizado no Mercado Farma.')
+      transferenciaRef.current = null
+      sessionStorage.removeItem(CHAVE_TRANSFERENCIA)
+      return
+    }
+    const validos: CartItem[] = []
+    const indisponiveis: string[] = []
+    for (const sugestao of transferencia.itens) {
+      const ean = String(sugestao.ean || '').replace(/\\D/g, '')
+      const quantidade = Math.floor(Number(sugestao.quantidade))
+      if (!ean || !Number.isSafeInteger(quantidade) || quantidade < 1 || quantidade > 99999) { indisponiveis.push(ean || 'EAN inválido'); continue }
+      const ofertas = (data.resultados || []).filter(row =>
+        row.ean === ean && row.uf.toUpperCase() === cliente.uf.toUpperCase()
+        && row.estoque >= quantidade && priceOrder(row) < Number.MAX_SAFE_INTEGER
+      )
+      const escolhida = ofertas.find(row => row.distribuidora === sugestao.distribuidora)
+      if (!escolhida) { indisponiveis.push(ean); continue }
+      validos.push({ key: ean, ean, produto: escolhida.produto, quantidade, selectedRowKey: rowKey(escolhida), ofertas })
+    }
+    if (validos.length) {
+      setCart(antigos => {
+        const novo = [...antigos]
+        for (const item of validos) {
+          const posicao = novo.findIndex(antigo => antigo.ean === item.ean)
+          if (posicao >= 0) novo[posicao] = { ...item, quantidade: Math.min(99999, novo[posicao].quantidade + item.quantidade) }
+          else novo.push(item)
+        }
+        return novo
+      })
+      setCartOpen(true)
+      setStatus(`${validos.length} produto(s) da ficha importados para o carrinho. Revise preços e quantidades.`)
+    }
+    if (indisponiveis.length) setError(`Não foi possível importar ${indisponiveis.length} produto(s) por falta de oferta/estoque da distribuidora escolhida para ${cliente.uf}: ${indisponiveis.join(', ')}.`)
+    transferenciaRef.current = null
+    sessionStorage.removeItem(CHAVE_TRANSFERENCIA)
+  }, [cartReady, data, loading])
 
   useEffect(() => {
     if (!trackingStart) return
