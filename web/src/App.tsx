@@ -19,10 +19,9 @@ type Props = {
 }
 
 const modules = [
-  ['Visão Geral', 'Indicadores, metas, projeções e desempenho da equipe.', '▦'],
-  ['Consultores', 'Ranking, resultados individuais e acompanhamento das metas.', '◉'],
+  ['Meu desempenho', 'Resultados pessoais e acompanhamento das metas.', '◉'],
   ['Clientes', 'Positivação, cobertura, histórico e oportunidades por cliente.', '◇'],
-  ['Foco Semanal', 'Produtos foco, metas por consultor e acompanhamento da semana.', '◎'],
+  ['Foco Semanal', 'Produtos foco, metas pessoais e acompanhamento da semana.', '◎'],
   ['Desafio de Gigantes', 'Campanha, metas, consultores e conferência SAP → EAN.', '🏆'],
   ['Oportunidades', 'Clientes sem compra, mix ausente e potenciais de crescimento.', '↗'],
   ['Mercado Farma', 'Preços, estoques e distribuidores organizados por UF.', '⌁'],
@@ -143,7 +142,7 @@ export default function App({ user, page, onNavigate, onLogout, onInstall }: Pro
   const filter = [dashboard.filtros?.aplicado?.rotulo || status, consultantName, uf ? `UF ${uf}` : ''].filter(Boolean).join(' · ')
   const open = (title: string) => {
     const route: Record<string, AppPage> = {
-      'Visão Geral': 'dashboard', Consultores: 'consultores', Clientes: 'clientes', 'Foco Semanal': 'foco',
+      'Visão Geral': 'dashboard', 'Meu desempenho': 'consultores', Clientes: 'clientes', 'Foco Semanal': 'foco',
       'Desafio de Gigantes': 'desafio', Oportunidades: 'oportunidades', 'Mercado Farma': 'mercado', 'SIP / Redes': 'sips', Histórico: 'historico',
       Automações: 'automacoes', Administração: 'administracao', 'Anotações de CNPJs': 'cnpj-anotacoes',
     }
@@ -160,7 +159,7 @@ export default function App({ user, page, onNavigate, onLogout, onInstall }: Pro
     <div className="app-shell">
       <header className="topbar">
         <button className="brand brand-button" onClick={() => onNavigate('dashboard')}>
-          <div className="brand-mark">N</div><div><strong>Painel Comercial</strong><span>Equipe Norte</span></div>
+          <div className="brand-mark">N</div><div><strong>Painel Comercial</strong><span>Painel pessoal · Maurício</span></div>
         </button>
         <div className="topbar-actions">
           <button className="topbar-download topbar-install" onClick={onInstall}>Baixar app</button>
@@ -177,11 +176,10 @@ export default function App({ user, page, onNavigate, onLogout, onInstall }: Pro
       ) : (
         <main className="content">
           <section className="hero">
-            <div><span className="eyebrow">Gestão comercial</span><h1>Olá, {user.nome.split(' ')[0]}</h1><p>Acompanhe a operação da Equipe Norte em um único lugar.</p></div>
+            <div><span className="eyebrow">Gestão comercial</span><h1>Olá, {user.nome.split(' ')[0]}</h1><p>Sua carteira, suas metas e seus pedidos em um único lugar.</p></div>
             <div className="hero-actions">
               <DownloadImagesButton query={presentationQuery} />
-              <button className="secondary-button" onClick={onInstall}>Baixar app mobile</button>
-              <button className="primary-button" onClick={() => onNavigate('administracao')}>Central de automações</button>
+              <button className="primary-button" onClick={() => onNavigate('automacoes')}>Central de automações</button>
             </div>
           </section>
 
@@ -218,19 +216,28 @@ export default function App({ user, page, onNavigate, onLogout, onInstall }: Pro
               <div className="goal-card-heading"><span>Clientes com venda</span><b>{pct.format(dashboard.clientes_ativos > 0 ? dashboard.clientes_com_venda / dashboard.clientes_ativos * 100 : 0)}%</b></div>
               <strong>{num.format(dashboard.clientes_com_venda || 0)}</strong>
               <div className="goal-details"><span>Sem venda</span><b>{num.format(dashboard.clientes_sem_venda || 0)}</b></div><small>{filter}</small>
+              <button className="secondary-button" onClick={() => onNavigate('clientes')}>Revisar clientes sem compra</button>
             </article>
           </section>
 
           <section className="section-heading"><div><span className="eyebrow">Acesso rápido</span><h2>Módulos do painel</h2></div><span className="development-note">{status}</span></section>
-          <section className="modules-grid">
-            {modules.map(([title, description, icon]) => <button className="module-card" key={title} onClick={() => open(title)}>
-              <div className="module-card-top"><span className="module-icon">{icon}</span><span className="module-status">Ativo</span></div>
-              <div><h3>{title}</h3><p>{description}</p></div><span className="module-link">Abrir módulo <b>→</b></span>
-            </button>)}
-          </section>
+          {[
+            ['Vendas e metas', ['Meu desempenho', 'Foco Semanal', 'Desafio de Gigantes', 'Histórico']],
+            ['Clientes e oportunidades', ['Clientes', 'Oportunidades', 'SIP / Redes']],
+            ['Mercado Farma e pedidos', ['Mercado Farma']],
+            ['Operação e ajustes', ['Automações', 'Administração', 'Anotações de CNPJs']],
+          ].map(([group, titles]) => <details className="module-group" key={String(group)} open={group !== 'Operação e ajustes'}>
+            <summary>{group}</summary>
+            <section className="modules-grid" data-module-group={String(group)}>
+              {modules.filter(([title]) => titles.includes(title)).map(([title, description, icon]) => <button className="module-card" key={title} onClick={() => open(title)}>
+                <div className="module-card-top"><span className="module-icon">{icon}</span><span className="module-status">Ativo</span></div>
+                <div><h3>{title}</h3><p>{description}</p></div><span className="module-link">Abrir módulo <b>→</b></span>
+              </button>)}
+            </section>
+          </details>)}
         </main>
       )}
-      <footer><span>Painel Comercial · Equipe Norte</span><span>Versão SaaS em evolução</span></footer>
+      <footer><span>Painel Comercial · Maurício</span><span>Versão SaaS em evolução</span></footer>
     </div>
   )
 }

@@ -72,6 +72,7 @@ export default function ClientPurchaseInsights({ dados, onOpenMarket }: { dados:
     <section className="detail-section client-intelligence">
       <div className="client-insights-heading"><div><span className="eyebrow">Recomendação baseada no giro</span><h3>Sugestão de compras</h3></div><strong>{integer.format(disponiveis.length)} com oferta</strong></div>
       <p>Escolha as quantidades e a distribuidora. O preço vem da última extração Mercado Farma para <b>{dados.cliente.uf}</b>. Nenhum pedido será enviado automaticamente.</p>
+      {dados.avisos.map(aviso => <p className="client-rec-warning" key={aviso}>{aviso}</p>)}
       <div className="client-recommendation-actions">
         <button type="button" className="outline-button" onClick={() => setMarcados(disponiveis.map(item => item.ean))}>Selecionar disponíveis</button>
         <button type="button" className="outline-button" onClick={() => setMarcados([])}>Limpar seleção</button>
@@ -97,7 +98,7 @@ export default function ClientPurchaseInsights({ dados, onOpenMarket }: { dados:
                   {item.ofertas.map(op => <option key={op.distribuidora} value={op.distribuidora}>{op.distribuidora} · {money.format(op.preco)} · estoque {integer.format(op.estoque)}</option>)}
                 </select>
               </label>
-              <div className="client-recommendation-value"><small>Preço unitário</small><strong>{escolhida ? money.format(escolhida.preco) : 'Indisponível'}</strong>{escolhida && <small>{semEstoque ? 'Estoque insuficiente' : `Subtotal: ${money.format(escolhida.preco * qtd)}`}</small>}</div>
+              <div className="client-recommendation-value"><small>Preço unitário</small><strong>{escolhida ? money.format(escolhida.preco) : 'Indisponível'}</strong>{escolhida && <small>Extração: {escolhida.atualizado_em ? new Date(escolhida.atualizado_em).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : 'data não informada'} · Sujeito à confirmação</small>}{escolhida && <small>{semEstoque ? 'Estoque insuficiente' : `Subtotal: ${money.format(escolhida.preco * qtd)}`}</small>}</div>
             </div>
           </article>
         })}

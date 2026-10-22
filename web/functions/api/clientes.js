@@ -148,7 +148,8 @@ export async function onRequestGet({ request, env }) {
     `
 
     const resultado = await env.DB.prepare(sql).bind(...binds).all()
-    const referencia = faixa.fim || hojeSaoPaulo()
+    const hoje = hojeSaoPaulo()
+    const referencia = faixa.fim && faixa.fim < hoje ? faixa.fim : hoje
     let clientes = (resultado.results || []).map((item) => {
       const classificacao = prioridade(item, referencia)
       const faturamentoAtual = numero(item.faturamento_atual)

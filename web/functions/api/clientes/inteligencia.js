@@ -97,6 +97,7 @@ export async function onRequestGet({ request, env }) {
       cobertura: analise.cobertura,
       sugestoes,
       avisos: [
+        'Histórico agregado sem EAN não identifica produtos e não é usado para sugerir reposição por produto.',
         'Sugestões baseadas apenas em itens faturados identificados; não equivalem a pedido confirmado.',
         'Valores e estoque são consultados no último registro do Mercado Farma para a UF do cliente e precisam ser revisados antes de comprar.',
       ],

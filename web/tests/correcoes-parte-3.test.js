@@ -42,7 +42,8 @@ test('Mercado Farma usa buybox, busca de PDV e Excel dinâmico por UF', () => {
   assert.match(download, /application\/vnd\.openxmlformats-officedocument\.spreadsheetml\.sheet/)
   assert.match(download, /\?='' OR UPPER\(TRIM\(uf\)\)=\?/)
   assert.match(download, /todas-ufs/)
-  assert.match(workflow, /mercadofarma_consolidado\.xlsx web\/public\/exports\/mercadofarma\.xlsx/)
+  assert.match(workflow, /consolidado-mercadofarma-/)
+  assert.doesNotMatch(workflow, /git pull --rebase|git push/)
   // Após o cutover, o Turso é o banco principal; o D1 permanece apenas como fallback legado.
   assert.match(workflow, /Sincronizar somente produtos autorizados no banco principal/)
   assert.match(workflow, /importar_mercadofarma_turso_filtrado\.py/)
