@@ -196,7 +196,11 @@ export default function MarketFarmaModule({ onBack, onAutomations }: { onBack: (
         && row.estoque >= quantidade && priceOrder(row) < Number.MAX_SAFE_INTEGER
       )
       const escolhida = ofertas.find(row => row.distribuidora === sugestao.distribuidora)
-      if (!escolhida) { indisponiveis.push(ean); continue }
+      const existente = cart.find(item => item.ean === ean)
+      if (!escolhida || (existente && existente.quantidade + quantidade > escolhida.estoque)) {
+        indisponiveis.push(ean)
+        continue
+      }
       validos.push({ key: ean, ean, produto: escolhida.produto, quantidade, selectedRowKey: rowKey(escolhida), ofertas })
     }
     if (validos.length) {
@@ -215,7 +219,7 @@ export default function MarketFarmaModule({ onBack, onAutomations }: { onBack: (
     if (indisponiveis.length) setError(`Não foi possível importar ${indisponiveis.length} produto(s) por falta de oferta/estoque da distribuidora escolhida para ${cliente.uf}: ${indisponiveis.join(', ')}.`)
     transferenciaRef.current = null
     sessionStorage.removeItem(CHAVE_TRANSFERENCIA)
-  }, [cartReady, data, loading])
+  }, [cartReady, data, loading, cart])
 
   useEffect(() => {
     const atualizar = () => setJanelaAberta(extracaoPermitidaAgora())
