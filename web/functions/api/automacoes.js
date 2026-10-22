@@ -1,4 +1,5 @@
 import { authorized, json } from '../_lib/credentials.js'
+import { horarioPermitidoMercadoFarma, MENSAGEM_JANELA_MERCADO_FARMA } from '../_lib/mercado-farma-janela.js'
 
 const TIPOS = new Set(['BUSSOLA', 'MERCADO_FARMA', 'AUDITORIA', 'FECHAMENTO_MENSAL', 'MIGRAR_BASES'])
 const REPOSITORIO = 'mauriciobarrosaguiar/painel-comercial-equipe-norte'
@@ -221,6 +222,9 @@ export async function onRequestPost({ request, env }) {
     const body = await request.json()
     const tipo = texto(body.tipo).toUpperCase()
     if (!TIPOS.has(tipo)) return json({ erro: 'Tipo de automação inválido.' }, 400)
+    if (tipo === 'MERCADO_FARMA' && !horarioPermitidoMercadoFarma()) {
+      return json({ erro: MENSAGEM_JANELA_MERCADO_FARMA }, 423)
+    }
 
     const existente = await env.DB.prepare(
       "SELECT id,status FROM comandos_automacao WHERE tipo=? AND status IN ('aguardando','executando') ORDER BY solicitado_em DESC LIMIT 1",

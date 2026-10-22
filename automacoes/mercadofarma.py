@@ -15,6 +15,7 @@ if str(ROOT) not in sys.path:
 
 from scripts import importar_mercadofarma_d1 as d1
 from src.configuracoes import carregar_login_bussola
+from scripts.janela_mercadofarma import validar_janela
 from src.datas import agora_brasilia
 from src.mercado_farma import (
     _extrair_alvo,
@@ -166,6 +167,7 @@ def main() -> int:
         _log(f"Iniciando extração Mercado Farma para UF {uf}")
         if csv_path.exists():
             csv_path.unlink()
+        validar_janela()
 
         status["etapa"] = "carregar_acesso_pessoal"
         login = carregar_login_bussola()
@@ -207,6 +209,7 @@ def main() -> int:
 
         resultados: list[dict] = []
         status["etapa"] = "extracao_mercado_farma"
+        validar_janela()
         _extrair_alvo(alvo, eans, headless=not args.visivel, resultados=resultados, log_fn=_log, debug_dir=debug_dir)
         status["cnpj_referencia"] = alvo.get("cnpj", status["cnpj_referencia"])
         status["etapa"] = "salvar_arquivo"

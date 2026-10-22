@@ -1,4 +1,5 @@
 import { authorized, json } from '../../_lib/credentials.js'
+import { horarioPermitidoMercadoFarma } from '../../_lib/mercado-farma-janela.js'
 
 const AGENDAVEIS = new Set(['BUSSOLA', 'MERCADO_FARMA', 'AUDITORIA'])
 const INTERVALOS_MINIMOS = new Map([
@@ -86,6 +87,10 @@ export async function onRequestPost({ request, env }) {
 
     for (const configuracao of vencidas.results || []) {
       const tipo = texto(configuracao.tipo).toUpperCase()
+      if (tipo === 'MERCADO_FARMA' && !horarioPermitidoMercadoFarma(agora)) {
+        ignorados.push({ tipo, motivo: 'Janela de extração fechada das 20h às 07h (Brasília). Agendamento preservado para a próxima verificação permitida.' })
+        continue
+      }
       if (!AGENDAVEIS.has(tipo)) {
         ignorados.push({ tipo, motivo: 'Tipo não agendável.' })
         continue

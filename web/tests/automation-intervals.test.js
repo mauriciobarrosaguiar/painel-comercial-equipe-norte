@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { readFileSync } from 'node:fs'
 import { DatabaseSync } from 'node:sqlite'
+import { horarioPermitidoMercadoFarma } from '../functions/_lib/mercado-farma-janela.js'
 
 import {
   onRequestGet as listarConfiguracoes,
@@ -109,7 +110,8 @@ test('Mercado Farma respeita o mínimo pessoal de 720 minutos', async () => {
   assert.equal(saved.status, 200)
   const savedBody = await saved.json()
   assert.equal(savedBody.configuracao.intervalo_minutos, 720)
-  assert.equal(savedBody.configuracao.parametros.ufs, 'TO')
+  // Agendamento detecta automaticamente todas as UFs da carteira pessoal; sem UF fixa.
+  assert.equal(savedBody.configuracao.parametros.ufs, undefined)
   assert.equal(savedBody.configuracao.ativo, true)
 })
 
@@ -125,13 +127,21 @@ test('verificador enfileira somente uma execução vencida e calcula a próxima'
   })
   assert.equal(first.status, 200)
   const firstBody = await first.json()
-  assert.equal(firstBody.total_agendados, 1)
-  assert.equal(firstBody.agendados[0].tipo, 'MERCADO_FARMA')
-  assert.equal(DB.raw.prepare("SELECT COUNT(*) total FROM comandos_automacao WHERE tipo='MERCADO_FARMA'").get().total, 1)
+  const permitido = horarioPermitidoMercadoFarma()
+  assert.equal(firstBody.total_agendados, permitido ? 1 : 0)
+  if (permitido) {
+    assert.equal(firstBody.agendados[0].tipo, 'MERCADO_FARMA')
+    assert.equal(DB.raw.prepare("SELECT COUNT(*) total FROM comandos_automacao WHERE tipo='MERCADO_FARMA'").get().total, 1)
+  } else {
+    assert.match(firstBody.ignorados[0].motivo, /20h às 07h/)
+    assert.equal(DB.raw.prepare("SELECT COUNT(*) total FROM comandos_automacao WHERE tipo='MERCADO_FARMA'").get().total, 0)
+  }
 
   const config = DB.raw.prepare("SELECT ultima_execucao_em,proxima_execucao_em FROM configuracoes_automacao WHERE tipo='MERCADO_FARMA'").get()
-  assert.ok(config.ultima_execucao_em)
-  assert.ok(new Date(config.proxima_execucao_em).getTime() > new Date(config.ultima_execucao_em).getTime())
+  if (permitido) {
+    assert.ok(config.ultima_execucao_em)
+    assert.ok(new Date(config.proxima_execucao_em).getTime() > new Date(config.ultima_execucao_em).getTime())
+  }
 
   DB.raw.prepare("UPDATE configuracoes_automacao SET proxima_execucao_em='2020-01-01T00:00:00.000Z' WHERE tipo='MERCADO_FARMA'").run()
   const second = await agendarAutomacoes({
@@ -140,7 +150,7 @@ test('verificador enfileira somente uma execução vencida e calcula a próxima'
   })
   const secondBody = await second.json()
   assert.equal(secondBody.total_agendados, 0)
-  assert.equal(DB.raw.prepare("SELECT COUNT(*) total FROM comandos_automacao WHERE tipo='MERCADO_FARMA'").get().total, 1)
+  assert.equal(DB.raw.prepare("SELECT COUNT(*) total FROM comandos_automacao WHERE tipo='MERCADO_FARMA'").get().total, permitido ? 1 : 0)
 })
 
 test('painel e workflows usam o agendador central configurável', () => {
