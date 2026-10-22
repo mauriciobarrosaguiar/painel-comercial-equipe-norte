@@ -1,0 +1,52 @@
+name: Atualizar dependencias vulneraveis da PR 92 (execucao unica)
+
+on:
+  push:
+    branches:
+      - fix/mercadofarma-uf-status-janela-brt
+    paths:
+      - .github/workflows/atualizar-dependencias-pr92-once.yml
+
+permissions:
+  contents: write
+
+jobs:
+  corrigir:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Baixar a branch da PR
+        uses: actions/checkout@v4
+        with:
+          ref: fix/mercadofarma-uf-status-janela-brt
+          persist-credentials: true
+      - name: Preparar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Corrigir dependencias diretas e indiretas vulneraveis
+        working-directory: web
+        run: |
+          set -euo pipefail
+          npm pkg set "devDependencies.wrangler=4.151.3"
+          npm pkg set "overrides.sharp=0.35.5"
+          npm pkg set "overrides.undici=7.29.1"
+          npm pkg set "overrides.source-map-js=1.2.2"
+          npm install --package-lock-only --ignore-scripts --no-fund
+          npm audit fix --package-lock-only --ignore-scripts --no-fund
+          npm ci --ignore-scripts --no-fund
+          npm audit --audit-level=high
+          npm run test:web
+          npm run build
+      - name: Fazer commit apenas apos auditoria e testes aprovados
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm -- ".github/workflows/atualizar-dependencias-pr92-once.yml"
+          git add web/package.json web/package-lock.json
+          git diff --cached --check
+          git commit -m "Atualiza dependencias vulneraveis e remove workflow temporario"
+          git push origin HEAD:fix/mercadofarma-uf-status-janela-brt
