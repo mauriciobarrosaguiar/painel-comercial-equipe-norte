@@ -110,7 +110,8 @@ test('Mercado Farma respeita o mínimo pessoal de 720 minutos', async () => {
   assert.equal(saved.status, 200)
   const savedBody = await saved.json()
   assert.equal(savedBody.configuracao.intervalo_minutos, 720)
-  assert.equal(savedBody.configuracao.parametros.ufs, 'TO')
+  // Agendamento detecta automaticamente todas as UFs da carteira pessoal; sem UF fixa.
+  assert.equal(savedBody.configuracao.parametros.ufs, undefined)
   assert.equal(savedBody.configuracao.ativo, true)
 })
 
