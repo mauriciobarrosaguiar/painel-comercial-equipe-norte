@@ -36,7 +36,7 @@ def _texto_percentual(raiz) -> str:
                 texto = str(item.text or "")
             except Exception:
                 continue
-            encontrado = re.search(r"(\\d+(?:[.,]\\d+)?)\\s*%", texto)
+            encontrado = re.search(r"(\d+(?:[.,]\d+)?)\s*%", texto)
             if encontrado:
                 return encontrado.group(1) + "%"
     return ""
