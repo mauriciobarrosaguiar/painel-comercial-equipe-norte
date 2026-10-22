@@ -72,6 +72,9 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Validar janela do Mercado Farma (07h-20h, Brasília)
+        run: python scripts/janela_mercadofarma.py --check
+
       - name: Instalar cliente Turso
         run: python -m pip install --disable-pip-version-check "requests>=2.34,<3"
 
@@ -149,6 +152,9 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Validar janela da UF (07h-20h, Brasília)
+        run: python scripts/janela_mercadofarma.py --check
+
       - name: Instalar dependencias
         run: |
           python -m pip install --upgrade pip
@@ -222,11 +228,25 @@ jobs:
             test -n "${TURSO_DATABASE_URL:-}"
             test -n "${TURSO_AUTH_TOKEN:-}"
             echo "Mercado Farma sincronizando no Turso."
-            python automacoes/mercadofarma_turso_atualizado.py --uf "${{ matrix.uf }}" --limite-eans "${{ inputs.limite_eans || '0' }}" $EXTRA_ARGS
+            PROGRAMA="automacoes/mercadofarma_turso_atualizado.py"
           else
             echo "Cutover Turso ainda não ativo; Mercado Farma sincronizando no D1."
-            python automacoes/mercadofarma_atualizado.py --uf "${{ matrix.uf }}" --limite-eans "${{ inputs.limite_eans || '0' }}" $EXTRA_ARGS
+            PROGRAMA="automacoes/mercadofarma_atualizado.py"
           fi
+          # Interrompe também um Selenium bloqueado, antes das 20h.
+          if ! TEMPO_RESTANTE=$(python scripts/janela_mercadofarma.py --seconds); then
+            python scripts/janela_mercadofarma.py --registrar-interrupcao "${{ matrix.uf }}"
+            exit 2
+          fi
+          set +e
+          timeout --signal=TERM --kill-after=10 "${TEMPO_RESTANTE}s" python "$PROGRAMA" --uf "${{ matrix.uf }}" --limite-eans "${{ inputs.limite_eans || '0' }}" $EXTRA_ARGS
+          CODIGO=$?
+          set -e
+          if [ "$CODIGO" -eq 124 ] || [ "$CODIGO" -eq 137 ]; then
+            python scripts/janela_mercadofarma.py --registrar-interrupcao "${{ matrix.uf }}"
+            echo "::error::UF ${{ matrix.uf }}: interrompida antes das 20h para respeitar o bloqueio noturno."
+          fi
+          exit "$CODIGO"
 
       - name: Publicar artifact da UF ${{ matrix.uf }}
         if: always()
@@ -240,7 +260,7 @@ jobs:
             data/mercadofarma/debug/${{ matrix.uf }}/**
 
   consolidar_mercadofarma:
-    if: ${{ always() && inputs.acao == 'atualizar_mercadofarma_paralelo' }}
+    if: ${{ always() && needs.preparar_ufs.result == 'success' && inputs.acao == 'atualizar_mercadofarma_paralelo' }}
     runs-on: ubuntu-latest
     needs: [preparar_ufs, extrair_uf]
     env:
@@ -311,7 +331,18 @@ jobs:
     needs: [preparar_ufs, extrair_uf, consolidar_mercadofarma]
     runs-on: ubuntu-latest
     steps:
-      - name: Atualizar solicitação no painel
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Baixar relatórios individuais das UFs
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          pattern: mercadofarma-*
+          merge-multiple: true
+          path: /tmp/mercadofarma-artifacts
+
+      - name: Atualizar solicitação no painel com diagnostico por UF
         env:
           PAINEL_URL: https://painel-equipe-norte.pages.dev
           PAINEL_ADMIN_KEY: ${{ secrets.PAINEL_ADMIN_KEY }}
@@ -322,21 +353,15 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if [ "$RESULTADO_EXTRACAO" = "success" ] && [ "$RESULTADO_CONSOLIDACAO" = "success" ]; then
-            STATUS="concluido"
-            MENSAGEM="Extração pessoal do Mercado Farma concluída para as UFs ${UFS_EXTRAIDAS}, consolidada e sincronizada no banco principal."
-            ERRO=""
-          else
-            STATUS="erro"
-            MENSAGEM=""
-            ERRO="Mercado Farma terminou com extração=${RESULTADO_EXTRACAO} e consolidação=${RESULTADO_CONSOLIDACAO}. Consulte o GitHub Actions para os detalhes."
-          fi
+          python scripts/resumir_mercadofarma_ufs.py \
+            --ufs "$UFS_EXTRAIDAS" \
+            --extracao "$RESULTADO_EXTRACAO" \
+            --consolidacao "$RESULTADO_CONSOLIDACAO" > resultado_ufs.json
           jq -n \
             --arg id "$COMMAND_ID" \
-            --arg status "$STATUS" \
-            --arg mensagem "$MENSAGEM" \
-            --arg erro "$ERRO" \
-            '{acao:"finalizar",id:$id,status:$status,mensagem:$mensagem,erro:$erro}' > finalizar.json
+            --slurpfile resultado resultado_ufs.json \
+            '{acao:"finalizar",id:$id,status:$resultado[0].status,mensagem:$resultado[0].mensagem,erro:$resultado[0].erro}' > finalizar.json
+          jq '{status, mensagem, erro}' resultado_ufs.json
           curl --fail-with-body --silent --show-error \
             --request POST "${PAINEL_URL}/api/internal/automacoes" \
             --header "x-admin-key: ${PAINEL_ADMIN_KEY}" \
