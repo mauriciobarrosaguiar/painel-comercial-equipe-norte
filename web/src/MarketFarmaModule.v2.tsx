@@ -138,7 +138,7 @@ export default function MarketFarmaModule({ onBack, onAutomations }: { onBack: (
         const bruto = sessionStorage.getItem(CHAVE_TRANSFERENCIA)
         const item = bruto ? JSON.parse(bruto) as TransferenciaCliente : null
         if (item && Date.now() - Number(item.criado_em) < 60 * 60 * 1000
-          && /^\\d{14}$/.test(String(item.cliente_cnpj))
+          && /^\d{14}$/.test(String(item.cliente_cnpj))
           && /^[A-Z]{2}$/.test(String(item.uf))
           && Array.isArray(item.itens) && item.itens.length <= 45) pendente = item
         else if (bruto) sessionStorage.removeItem(CHAVE_TRANSFERENCIA)
@@ -179,7 +179,7 @@ export default function MarketFarmaModule({ onBack, onAutomations }: { onBack: (
     const validos: CartItem[] = []
     const indisponiveis: string[] = []
     for (const sugestao of transferencia.itens) {
-      const ean = String(sugestao.ean || '').replace(/\\D/g, '')
+      const ean = String(sugestao.ean || '').replace(/\D/g, '')
       const quantidade = Math.floor(Number(sugestao.quantidade))
       if (!ean || !Number.isSafeInteger(quantidade) || quantidade < 1 || quantidade > 99999) { indisponiveis.push(ean || 'EAN inválido'); continue }
       const ofertas = (data.resultados || []).filter(row =>
