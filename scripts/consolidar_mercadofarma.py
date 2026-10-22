@@ -19,6 +19,12 @@ TZ_BRASILIA = ZoneInfo("America/Sao_Paulo")
 COLUNAS_MINIMAS = {"UF", "EAN", "CNPJ_REFERENCIA"}
 
 
+def salvar_status(resumo: dict) -> None:
+    temporario = STATUS_PATH.with_suffix('.tmp.json')
+    temporario.write_text(json.dumps(resumo, ensure_ascii=False, indent=2), encoding='utf-8')
+    temporario.replace(STATUS_PATH)
+
+
 def log(msg: str) -> None:
     print(msg, flush=True)
 
@@ -184,9 +190,7 @@ def salvar_excel_por_uf(df: pd.DataFrame) -> None:
     with pd.ExcelWriter(temporario, engine="openpyxl") as writer:
         ufs = sorted(uf for uf in base["UF"].dropna().astype(str).str.strip().str.upper().unique().tolist() if uf)
         if not ufs:
-            base.to_excel(writer, sheet_name="SEM_UF", index=False)
-            formatar_aba_excel(writer.book["SEM_UF"])
-            return
+            ufs = ['']
         abas_usadas: set[str] = set()
         for uf in ufs:
             aba = nome_aba_uf(uf)
@@ -250,14 +254,7 @@ def main() -> int:
 
     if not frames and anterior.empty:
         log("Aviso: nenhuma UF gerou arquivo parcial valido e nao existe consolidado anterior.")
-        STATUS_PATH.write_text(
-            json.dumps(
-                {"gerado_em": agora_brasilia_iso(), "ufs_atualizadas": [], "status": list(status_por_uf.values())},
-                ensure_ascii=False,
-                indent=2,
-            ),
-            encoding="utf-8",
-        )
+        salvar_status({"gerado_em": agora_brasilia_iso(), "ufs_atualizadas": [], "status": list(status_por_uf.values())})
         return 0
 
     if frames:
@@ -281,7 +278,7 @@ def main() -> int:
         "total_linhas": int(len(consolidado)),
         "status": list(status_por_uf.values()),
     }
-    STATUS_PATH.write_text(json.dumps(resumo, ensure_ascii=False, indent=2), encoding="utf-8")
+    salvar_status(resumo)
     log(f"Arquivo consolidado gerado com sucesso: {FINAL_PATH}")
     log(f"Arquivo Excel por UF gerado com sucesso: {FINAL_XLSX_PATH}")
     log(f"Total de linhas consolidadas: {len(consolidado)}")

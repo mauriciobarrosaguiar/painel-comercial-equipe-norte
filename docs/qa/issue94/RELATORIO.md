@@ -43,7 +43,7 @@ Navegação real de leitura em desktop e em viewport móvel solicitado 390 × 84
 | Dashboard | Indicadores carregaram; cards redundantes e destino incorreto confirmados. Algumas capturas móveis registram carregamento, não erro de banco. |
 | Clientes e ficha | Carteira, botão Ver ficha e histórico abriram. Produção ainda mostra ficha lateral antiga, pois #93 não foi publicada. |
 | Mercado Farma e carrinho | Vitrine carregou; carrinho vazio abriu e geração estava desabilitada sem cliente. Base histórica também contém MA/PI; não foi apagada. |
-| Oportunidades | Plano de ação carregou. Há caso com última compra atual na ficha e dias sem compra divergentes no plano; precisa reconciliação específica antes de tomar decisão comercial. Não alterado por falta de prova da consulta/filtro responsável. |
+| Oportunidades | Plano de ação carregou. Corrigida divergência comprovada: a API contava dias até o fim futuro do mês (31/10), mostrando 9 dias para compra em 22/10. Agora a referência é limitada a hoje; meses encerrados mantêm o fim do período. Regressão com compra de hoje exige zero dias. |
 | Histórico | 25 meses e 1.344 registros importados informados na tela. Histórico agregado não comprova EAN. |
 | Automações/Bússola | Agendamentos e histórico visíveis; nenhum botão de executar foi acionado. |
 | Consultores | Somente Maurício no desempenho atual; métricas e relatório presentes. |
@@ -65,6 +65,10 @@ Os testes de navegação não equivalem a homologação de todas as operações 
 - TypeScript/Vite: build passou; aviso existente de bundle acima de 500 kB, sem falha.
 - npm audit: **zero vulnerabilidades**, sem mudanças de dependências.
 - E2E isolado: `scripts/qa_issue94_browser.py`, com APIs fictícias e sem chamada a serviço externo. Confere destino de automações, instalação, ficha inteira e proposta → carrinho com CNPJ/UF, 3 unidades e R$36 com imposto. Faz capturas desktop/mobile e falha se ocorrer escrita externa. Execução local bloqueada: Chromium não disponível; download recebido truncado neste ambiente. A prévia local também não é acessível pelo navegador remoto. Foi preparado passo no CI para execução e upload de capturas. Resultado do CI será registrado após execução; não declarado aprovado antecipadamente.
+
+## Ajustes encontrados na validação
+
+O validador de workflow do GitHub rejeitou o uso de `runner.temp` em env de job. Corrigido para diretório temporário explícito `/tmp/mercadofarma-atual`, sem alterar a janela ou disparar extrações. A correção foi acrescentada à mesma PR.
 
 ## Impacto, reversão e aprovação
 

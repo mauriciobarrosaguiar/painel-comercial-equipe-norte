@@ -78,5 +78,6 @@ def test_workflow_nao_disputa_main_com_outros_escritores():
     assert 'git push' not in workflow
     assert 'git pull --rebase' not in workflow
     assert 'contents: read' in workflow
+    assert 'MERCADOFARMA_ARTIFACTS_DIR: ${{ runner.' not in workflow
     assert 'consolidado-mercadofarma-${{ github.run_id }}-${{ github.run_attempt }}' in workflow
     assert 'MERCADOFARMA_ARTIFACTS_DIR' in workflow

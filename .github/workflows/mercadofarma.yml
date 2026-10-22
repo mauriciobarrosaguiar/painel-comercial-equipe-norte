@@ -281,7 +281,7 @@ jobs:
       sincronizacao: ${{ steps.sincronizar.outcome }}
       publicacao: ${{ steps.publicar.outcome }}
     env:
-      MERCADOFARMA_ARTIFACTS_DIR: ${{ runner.temp }}/mercadofarma-atual
+      MERCADOFARMA_ARTIFACTS_DIR: /tmp/mercadofarma-atual
       MERCADOFARMA_UFS: ${{ needs.preparar_ufs.outputs.ufs_texto }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -308,7 +308,7 @@ jobs:
         with:
           pattern: mercadofarma-*
           merge-multiple: true
-          path: ${{ runner.temp }}/mercadofarma-atual
+          path: /tmp/mercadofarma-atual
 
       - name: Consolidar Mercado Farma
         id: consolidar
