@@ -111,10 +111,14 @@ export default function ClientsModule({ onBack, onOpenMarket }: Props) {
       if (!response.ok) throw new Error(result.detalhe || result.erro || 'Não foi possível abrir a ficha do cliente.')
       setDetail(result)
       // Falha da análise não esconde a ficha nem seu histórico existente.
-      const resposta = await fetch(`/api/clientes/inteligencia?id=${encodeURIComponent(client.id)}`, { cache: 'no-store' })
-      const analise = await resposta.json() as InteligenciaCliente & { erro?: string; detalhe?: string }
-      if (resposta.ok) setInsights(analise)
-      else setInsightsError(analise.detalhe || analise.erro || 'Dados de cobertura indisponíveis.')
+      try {
+        const resposta = await fetch(`/api/clientes/inteligencia?id=${encodeURIComponent(client.id)}`, { cache: 'no-store' })
+        const analise = await resposta.json() as InteligenciaCliente & { erro?: string; detalhe?: string }
+        if (resposta.ok) setInsights(analise)
+        else setInsightsError(analise.detalhe || analise.erro || 'Dados de cobertura indisponíveis.')
+      } catch (motivo) {
+        setInsightsError(motivo instanceof Error ? motivo.message : 'Análise de compras temporariamente indisponível.')
+      }
     } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)) }
     finally { setDetailLoading(false) }
   }
