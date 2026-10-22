@@ -26,6 +26,12 @@ def resumo_uf(uf: str, raiz: Path) -> tuple[str, bool]:
         etapa = str(dados.get("etapa") or "desconhecida").strip()[:80]
         erro = str(dados.get("erro") or "Falha sem mensagem registrada.").strip()
         erro = re.sub(r"[\r\n\t]+", " ", erro)[:450]
+        # _extrair_alvo registra a subetapa antes do erro: login, selecao_cnpj, extracao.
+        match_etapa = re.match(r"^(login|selecao_cnpj|catalogo|extracao):", erro, re.I)
+        if match_etapa:
+            etapa = match_etapa.group(1).lower()
+        if "HTTPConnectionPool" in erro and "Read timed out" in erro:
+            erro = "Navegador Selenium não respondeu à solicitação no tempo limite. Possível travamento ou lentidão; não comprova erro na senha. Detalhe: " + erro
         return f"UF {uf} | ERRO | etapa {etapa} | {erro}", False
     except (OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
         return f"UF {uf} | ERRO | status inválido ({type(exc).__name__})", False
