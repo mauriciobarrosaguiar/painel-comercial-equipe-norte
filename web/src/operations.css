@@ -6,3 +6,7 @@
 .mercado-uf-resultado strong{font-size:.84rem}
 .operation-row .mercado-uf-resultado span{margin:0;font-size:.78rem;color:#273e4b;overflow-wrap:anywhere}
 @media(max-width:650px){.mercado-uf-resultado{grid-template-columns:48px 1fr}.mercado-uf-resultado span{grid-column:1/-1}}
+
+.market-extraction-report{margin:14px 0;padding:16px 18px;background:#fff;border:1px solid #dce5ea;border-radius:12px}
+.market-extraction-report strong{display:block;margin-bottom:8px}
+.market-extraction-report pre{font:inherit;font-size:.84rem;line-height:1.6;white-space:pre-wrap;overflow-wrap:anywhere;color:#274054;margin:6px 0 12px}
