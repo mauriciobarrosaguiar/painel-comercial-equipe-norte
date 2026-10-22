@@ -22,7 +22,7 @@ def resumo_uf(uf: str, raiz: Path) -> tuple[str, bool]:
         if str(dados.get("uf") or "").upper() != uf:
             raise ValueError("UF do arquivo não confere")
         if str(dados.get("status") or "").lower() == "sucesso":
-            return f"UF {uf} | SUCESSO | {int(dados.get('total_produtos') or 0)} EANs extraídos", True
+            return f"UF {uf} | SUCESSO | {int(dados.get('total_produtos') or 0)} EANs extraídos | {dados.get('finalizado_em') or 'horário não informado'}", True
         etapa = str(dados.get("etapa") or "desconhecida").strip()[:80]
         erro = str(dados.get("erro") or "Falha sem mensagem registrada.").strip()
         erro = re.sub(r"[\r\n\t]+", " ", erro)[:450]
@@ -37,7 +37,7 @@ def resumo_uf(uf: str, raiz: Path) -> tuple[str, bool]:
         return f"UF {uf} | ERRO | status inválido ({type(exc).__name__})", False
 
 
-def montar_resumo(ufs: list[str], raiz: Path, extracao: str, consolidacao: str) -> dict:
+def montar_resumo(ufs: list[str], raiz: Path, extracao: str, consolidacao: str, sincronizacao: str | None = None, publicacao: str | None = None) -> dict:
     linhas = []
     falhas = []
     ok = 0
@@ -53,10 +53,18 @@ def montar_resumo(ufs: list[str], raiz: Path, extracao: str, consolidacao: str) 
     if extracao != "success" and not falhas:
         falhas.append(f"Resultado da etapa de extração: {extracao}.")
     if consolidacao != "success":
-        falhas.append(f"Consolidação/sincronização: {consolidacao}. Consulte o workflow.")
+        falhas.append(f"Consolidação: {consolidacao}. Consulte o workflow.")
+    for nome, resultado in [('Sincronização Turso', sincronizacao), ('Publicação do arquivo', publicacao)]:
+        if resultado is not None and resultado != 'success':
+            falhas.append(f'{nome}: {resultado or "não executada"}.')
     texto = f"Mercado Farma: {ok}/{len(ufs)} UFs concluídas.\n" + "\n".join(linhas)
-    if consolidacao != "success":
-        texto += f"\nConsolidação: {consolidacao}"
+    texto += f"\nConsolidação: {consolidacao or chr(8212)}"
+    if sincronizacao is not None:
+        texto += f"\nSincronização Turso: {sincronizacao or 'não executada'}"
+        if sincronizacao == 'success':
+            texto += ' — dados sincronizados'
+    if publicacao is not None:
+        texto += f"\nPublicação do arquivo: {publicacao or 'não executada'}"
     return {
         "status": "erro" if falhas else "concluido",
         "mensagem": texto,
@@ -70,10 +78,12 @@ def main() -> int:
     parser.add_argument("--artifacts", default="/tmp/mercadofarma-artifacts")
     parser.add_argument("--extracao", default="unknown")
     parser.add_argument("--consolidacao", default="unknown")
+    parser.add_argument('--sincronizacao', default=None)
+    parser.add_argument('--publicacao', default=None)
     args = parser.parse_args()
     ufs = sorted(set(uf.strip().upper() for uf in args.ufs.split(",") if uf.strip()))
     ufs = [uf for uf in ufs if uf_valida(uf)]
-    resumo = montar_resumo(ufs, Path(args.artifacts), args.extracao, args.consolidacao)
+    resumo = montar_resumo(ufs, Path(args.artifacts), args.extracao, args.consolidacao, args.sincronizacao, args.publicacao)
     print(json.dumps(resumo, ensure_ascii=False))
     return 0
 

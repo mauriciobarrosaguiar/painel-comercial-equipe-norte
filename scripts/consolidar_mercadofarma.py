@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -10,12 +11,18 @@ import pandas as pd
 
 ROOT = Path(__file__).resolve().parents[1]
 BASE_DIR = ROOT / "data" / "mercadofarma"
-PARCIAIS_DIR = BASE_DIR / "parciais"
+PARCIAIS_DIR = Path(os.environ.get("MERCADOFARMA_ARTIFACTS_DIR", BASE_DIR / "parciais"))
 FINAL_PATH = BASE_DIR / "mercadofarma_consolidado.csv"
 FINAL_XLSX_PATH = BASE_DIR / "mercadofarma_consolidado.xlsx"
 STATUS_PATH = BASE_DIR / "status_mercadofarma.json"
 TZ_BRASILIA = ZoneInfo("America/Sao_Paulo")
 COLUNAS_MINIMAS = {"UF", "EAN", "CNPJ_REFERENCIA"}
+
+
+def salvar_status(resumo: dict) -> None:
+    temporario = STATUS_PATH.with_suffix('.tmp.json')
+    temporario.write_text(json.dumps(resumo, ensure_ascii=False, indent=2), encoding='utf-8')
+    temporario.replace(STATUS_PATH)
 
 
 def log(msg: str) -> None:
@@ -48,9 +55,7 @@ def arquivos_parciais() -> list[Path]:
 
 
 def arquivos_status() -> list[Path]:
-    if not BASE_DIR.exists():
-        return []
-    return sorted(BASE_DIR.rglob("mercadofarma_*.json"))
+    return sorted(PARCIAIS_DIR.rglob("mercadofarma_*.json")) if PARCIAIS_DIR.exists() else []
 
 
 def ler_status_ufs() -> dict[str, dict]:
@@ -181,12 +186,11 @@ def salvar_excel_por_uf(df: pd.DataFrame) -> None:
     if ordenacao:
         base = base.sort_values(ordenacao, kind="stable").reset_index(drop=True)
     base = base.drop(columns=["_ORDEM_STATUS"], errors="ignore")
-    with pd.ExcelWriter(FINAL_XLSX_PATH, engine="openpyxl") as writer:
+    temporario = FINAL_XLSX_PATH.with_suffix(".tmp.xlsx")
+    with pd.ExcelWriter(temporario, engine="openpyxl") as writer:
         ufs = sorted(uf for uf in base["UF"].dropna().astype(str).str.strip().str.upper().unique().tolist() if uf)
         if not ufs:
-            base.to_excel(writer, sheet_name="SEM_UF", index=False)
-            formatar_aba_excel(writer.book["SEM_UF"])
-            return
+            ufs = ['']
         abas_usadas: set[str] = set()
         for uf in ufs:
             aba = nome_aba_uf(uf)
@@ -196,6 +200,7 @@ def salvar_excel_por_uf(df: pd.DataFrame) -> None:
             df_uf = base[base["UF"].astype(str).str.upper().eq(uf)].copy()
             df_uf.to_excel(writer, sheet_name=aba, index=False)
             formatar_aba_excel(writer.book[aba])
+    temporario.replace(FINAL_XLSX_PATH)
 
 
 def main() -> int:
@@ -204,6 +209,7 @@ def main() -> int:
     PARCIAIS_DIR.mkdir(parents=True, exist_ok=True)
 
     status_por_uf = ler_status_ufs()
+    solicitadas = {uf.strip() for uf in os.environ.get("MERCADOFARMA_UFS", "").split(",") if uf.strip()}
     frames: list[pd.DataFrame] = []
     ufs_atualizadas: set[str] = set()
     for path in arquivos_parciais():
@@ -219,7 +225,14 @@ def main() -> int:
             continue
 
         uf = uf_arquivo(path, df)
+        if solicitadas and uf not in solicitadas:
+            continue
+        if not df['UF'].eq(uf).all():
+            raise RuntimeError(f'CSV contém UF divergente: {path.name}')
         status_uf = status_por_uf.get(uf, {})
+        if os.environ.get('MERCADOFARMA_ARTIFACTS_DIR') and not status_uf:
+            log(f'UF {uf}: relatório atual ausente, mantendo dados anteriores.')
+            continue
         if status_uf and str(status_uf.get("status", "")).lower() != "sucesso":
             log(f"Aviso: CSV ignorado porque a UF {uf} terminou com status {status_uf.get('status')}: {status_uf.get('erro', '')}")
             continue
@@ -241,14 +254,7 @@ def main() -> int:
 
     if not frames and anterior.empty:
         log("Aviso: nenhuma UF gerou arquivo parcial valido e nao existe consolidado anterior.")
-        STATUS_PATH.write_text(
-            json.dumps(
-                {"gerado_em": agora_brasilia_iso(), "ufs_atualizadas": [], "status": list(status_por_uf.values())},
-                ensure_ascii=False,
-                indent=2,
-            ),
-            encoding="utf-8",
-        )
+        salvar_status({"gerado_em": agora_brasilia_iso(), "ufs_atualizadas": [], "status": list(status_por_uf.values())})
         return 0
 
     if frames:
@@ -258,10 +264,13 @@ def main() -> int:
     subset = [col for col in ["UF", "EAN", "DISTRIBUIDORA", "CNPJ_REFERENCIA"] if col in consolidado.columns]
     if subset:
         consolidado = consolidado.drop_duplicates(subset=subset, keep="last")
-    consolidado.to_csv(FINAL_PATH, index=False, encoding="utf-8-sig")
+    temporario = FINAL_PATH.with_suffix(".tmp.csv")
+    consolidado.to_csv(temporario, index=False, encoding="utf-8-sig")
+    temporario.replace(FINAL_PATH)
     salvar_excel_por_uf(consolidado)
 
     resumo = {
+        "run_id": os.environ.get("GITHUB_RUN_ID", ""),
         "gerado_em": agora_brasilia_iso(),
         "arquivo": FINAL_PATH.relative_to(ROOT).as_posix(),
         "arquivo_excel": FINAL_XLSX_PATH.relative_to(ROOT).as_posix(),
@@ -269,7 +278,7 @@ def main() -> int:
         "total_linhas": int(len(consolidado)),
         "status": list(status_por_uf.values()),
     }
-    STATUS_PATH.write_text(json.dumps(resumo, ensure_ascii=False, indent=2), encoding="utf-8")
+    salvar_status(resumo)
     log(f"Arquivo consolidado gerado com sucesso: {FINAL_PATH}")
     log(f"Arquivo Excel por UF gerado com sucesso: {FINAL_XLSX_PATH}")
     log(f"Total de linhas consolidadas: {len(consolidado)}")

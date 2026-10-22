@@ -55,7 +55,7 @@ export default function ConsultantPerformanceReport({ rows, totals, periodLabel,
   const compatibleXlsxUrl = xlsxUrl.replace('/resumo-xlsx', '/resumo-excel')
   const totalRow: ReportRow = {
     id: 'total-equipe',
-    nome: 'TOTAL EQUIPE NORTE',
+    nome: 'TOTAL DA CARTEIRA PESSOAL',
     setor: '',
     ol_total_faturado: Number(totals.ol_total_faturado || 0),
     ol_sem_combate: Number(totals.ol_sem_combate || 0),

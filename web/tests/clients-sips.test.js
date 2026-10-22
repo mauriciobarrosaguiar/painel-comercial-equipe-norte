@@ -35,3 +35,16 @@ test('SIP consolida clientes e faturamento sem duplicar itens inativos', async (
   assert.equal(body.sips[0].ol_total, 200)
   assert.equal(body.sips[0].ol_sem_combate, 150)
 })
+
+
+test('dias sem compra no mês atual não contam os dias futuros até o fim do mês', async () => {
+  const DB = testDatabase()
+  const hoje = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())
+  await DB.prepare("UPDATE pedidos SET data_pedido=?, data_faturamento=? WHERE id='p1'").bind(hoje, hoje).run()
+  const response = await clientes({ request: new Request('https://painel.local/api/clientes?periodo=mes-atual'), env: { DB } })
+  assert.equal(response.status, 200)
+  const body = await response.json()
+  const cliente = body.clientes.find(item => item.id === 'cl1')
+  assert.equal(cliente.ultima_compra, hoje)
+  assert.equal(cliente.dias_sem_comprar, 0)
+})
