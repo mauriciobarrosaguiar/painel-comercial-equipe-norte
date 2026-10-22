@@ -432,7 +432,7 @@ export default function ConsultantsModule({ onBack }: { onBack: () => void }) {
     <main className="content consultants-page">
       <button className="back-button" onClick={onBack}>← Voltar ao painel</button>
       <section className="consultants-hero">
-        <div><h1>Consultores</h1></div>
+        <div><h1>Meu desempenho</h1></div>
         <span className="consultants-period">{data?.periodo.rotulo || 'Carregando período…'}</span>
       </section>
 
@@ -467,7 +467,7 @@ export default function ConsultantsModule({ onBack }: { onBack: () => void }) {
         <article>
           <span>OL sem combate</span>
           <strong>{loading ? '—' : money.format(totals.ol_sem_combate || 0)}</strong>
-          <small>Meta GD: {money.format(managerGoal.ol_sem_combate || 0)} · <b className={cls(ratio(totals.ol_sem_combate || 0, managerGoal.ol_sem_combate || 0))}>{pct.format(ratio(totals.ol_sem_combate || 0, managerGoal.ol_sem_combate || 0))}%</b></small>
+          <small>Meta pessoal: {money.format(managerGoal.ol_sem_combate || 0)} · <b className={cls(ratio(totals.ol_sem_combate || 0, managerGoal.ol_sem_combate || 0))}>{pct.format(ratio(totals.ol_sem_combate || 0, managerGoal.ol_sem_combate || 0))}%</b></small>
         </article>
         <article>
           <span>OL prioritários</span>
@@ -497,7 +497,7 @@ export default function ConsultantsModule({ onBack }: { onBack: () => void }) {
 
       <section className="consultants-ranking">
         <div className="ranking-heading">
-          <div><h2>Ranking de resultados</h2><small>Clique no consultor para abrir os pedidos.</small></div>
+          <div><h2>Resultados pessoais</h2><small>Clique no consultor para abrir os pedidos.</small></div>
           <span>{(data?.consultores || []).length} consultores</span>
         </div>
         <div className="consultant-card-list">

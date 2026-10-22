@@ -31,6 +31,13 @@ type Data = {
 }
 type ProductGroup = { key: string; ean: string; produto: string; rows: Row[] }
 type CartItem = { key: string; ean: string; produto: string; quantidade: number; selectedRowKey: string; ofertas: Row[] }
+type TransferenciaCliente = {
+  criado_em: number
+  cliente_cnpj: string
+  uf: string
+  itens: Array<{ ean: string; quantidade: number; distribuidora: string; preco_referencia?: number }>
+}
+const CHAVE_TRANSFERENCIA = 'mercado-farma-importacao-proposta'
 
 const money = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
 const num = new Intl.NumberFormat('pt-BR')
@@ -69,6 +76,13 @@ function matchesClient(client: ClientOption, query: string) {
   return !query || normalize(`${client.nome} ${client.cidade} ${client.uf}`).includes(normalized) || (queryDigits && client.cnpj.includes(queryDigits))
 }
 
+const extracaoPermitidaAgora = () => {
+  const hora = Number(new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'America/Sao_Paulo', hour: '2-digit', hourCycle: 'h23',
+  }).format(new Date()))
+  return hora >= 7 && hora < 20
+}
+
 export default function MarketFarmaModule({ onBack, onAutomations }: { onBack: () => void; onAutomations: () => void }) {
   const [uf, setUf] = useState('')
   const [dist, setDist] = useState('')
@@ -81,6 +95,8 @@ export default function MarketFarmaModule({ onBack, onAutomations }: { onBack: (
   const [queueing, setQueueing] = useState(false)
   const [reload, setReload] = useState(0)
   const [trackingStart, setTrackingStart] = useState(0)
+  const [janelaAberta, setJanelaAberta] = useState(extracaoPermitidaAgora)
+  const [ultimoRelatorio, setUltimoRelatorio] = useState<{ status: string; mensagem: string; erro: string; finalizado_em?: string } | null>(null)
   const [openBuybox, setOpenBuybox] = useState('')
   const [selectedRows, setSelectedRows] = useState<Record<string, string>>({})
   const [quantities, setQuantities] = useState<Record<string, number>>({})
@@ -90,6 +106,7 @@ export default function MarketFarmaModule({ onBack, onAutomations }: { onBack: (
   const [cart, setCart] = useState<CartItem[]>([])
   const [cartOpen, setCartOpen] = useState(false)
   const [cartReady, setCartReady] = useState(false)
+  const transferenciaRef = useRef<TransferenciaCliente | null>(null)
   const [exporting, setExporting] = useState(false)
   const timerRef = useRef<number | null>(null)
 
@@ -125,8 +142,26 @@ export default function MarketFarmaModule({ onBack, onAutomations }: { onBack: (
     if (!storageKey) return
     try {
       const saved = JSON.parse(localStorage.getItem(storageKey) || '{}')
-      setClientCnpj(String(saved.cliente_cnpj || ''))
-      setCart(Array.isArray(saved.itens) ? saved.itens : [])
+      let pendente: TransferenciaCliente | null = null
+      try {
+        const bruto = sessionStorage.getItem(CHAVE_TRANSFERENCIA)
+        const item = bruto ? JSON.parse(bruto) as TransferenciaCliente : null
+        if (item && Date.now() - Number(item.criado_em) < 60 * 60 * 1000
+          && /^\d{14}$/.test(String(item.cliente_cnpj))
+          && /^[A-Z]{2}$/.test(String(item.uf))
+          && Array.isArray(item.itens) && item.itens.length <= 45) pendente = item
+        else if (bruto) sessionStorage.removeItem(CHAVE_TRANSFERENCIA)
+      } catch { sessionStorage.removeItem(CHAVE_TRANSFERENCIA) }
+      const carrinhoSalvo = Array.isArray(saved.itens) ? saved.itens : []
+      if (pendente && carrinhoSalvo.length && String(saved.cliente_cnpj) !== pendente.cliente_cnpj
+        && !window.confirm('Há um carrinho de outro cliente salvo. Deseja substituí-lo pelas sugestões desta ficha?')) {
+        sessionStorage.removeItem(CHAVE_TRANSFERENCIA)
+        pendente = null
+      }
+      transferenciaRef.current = pendente
+      setClientCnpj(pendente?.cliente_cnpj || String(saved.cliente_cnpj || ''))
+      setCart(!pendente || String(saved.cliente_cnpj) === pendente.cliente_cnpj ? carrinhoSalvo : [])
+      if (pendente) { setUf(pendente.uf); setDist(''); setSearch(''); setStock(false) }
     } catch {
       setClientCnpj('')
       setCart([])
@@ -139,6 +174,75 @@ export default function MarketFarmaModule({ onBack, onAutomations }: { onBack: (
     localStorage.setItem(storageKey, JSON.stringify({ cliente_cnpj: clientCnpj, itens: cart }))
   }, [storageKey, cartReady, clientCnpj, cart])
 
+  // Importa uma proposta apenas após a API autenticar CNPJ/UF e retornar ofertas atuais.
+  useEffect(() => {
+    const transferencia = transferenciaRef.current
+    if (!cartReady || !transferencia || !data?.cliente_selecionado || loading) return
+    const cliente = data.cliente_selecionado
+    if (cliente.cnpj !== transferencia.cliente_cnpj || cliente.uf.toUpperCase() !== transferencia.uf) {
+      setError('A proposta não corresponde ao CNPJ/UF autorizado no Mercado Farma.')
+      transferenciaRef.current = null
+      sessionStorage.removeItem(CHAVE_TRANSFERENCIA)
+      return
+    }
+    const validos: CartItem[] = []
+    const indisponiveis: string[] = []
+    for (const sugestao of transferencia.itens) {
+      const ean = String(sugestao.ean || '').replace(/\D/g, '')
+      const quantidade = Math.floor(Number(sugestao.quantidade))
+      if (!ean || !Number.isSafeInteger(quantidade) || quantidade < 1 || quantidade > 99999) { indisponiveis.push(ean || 'EAN inválido'); continue }
+      const ofertas = (data.resultados || []).filter(row =>
+        row.ean === ean && row.uf.toUpperCase() === cliente.uf.toUpperCase()
+        && row.estoque >= quantidade && priceOrder(row) < Number.MAX_SAFE_INTEGER
+      )
+      const escolhida = ofertas.find(row => row.distribuidora === sugestao.distribuidora)
+      const existente = cart.find(item => item.ean === ean)
+      if (!escolhida || (existente && existente.quantidade + quantidade > escolhida.estoque)) {
+        indisponiveis.push(ean)
+        continue
+      }
+      validos.push({ key: ean, ean, produto: escolhida.produto, quantidade, selectedRowKey: rowKey(escolhida), ofertas })
+    }
+    if (validos.length) {
+      setCart(antigos => {
+        const novo = [...antigos]
+        for (const item of validos) {
+          const posicao = novo.findIndex(antigo => antigo.ean === item.ean)
+          if (posicao >= 0) novo[posicao] = { ...item, quantidade: Math.min(99999, novo[posicao].quantidade + item.quantidade) }
+          else novo.push(item)
+        }
+        return novo
+      })
+      setCartOpen(true)
+      setStatus(`${validos.length} produto(s) da ficha importados para o carrinho. Revise preços e quantidades.`)
+    }
+    if (indisponiveis.length) setError(`Não foi possível importar ${indisponiveis.length} produto(s) por falta de oferta/estoque da distribuidora escolhida para ${cliente.uf}: ${indisponiveis.join(', ')}.`)
+    transferenciaRef.current = null
+    sessionStorage.removeItem(CHAVE_TRANSFERENCIA)
+  }, [cartReady, data, loading, cart])
+
+  useEffect(() => {
+    const atualizar = () => setJanelaAberta(extracaoPermitidaAgora())
+    const timer = window.setInterval(atualizar, 30_000)
+    return () => window.clearInterval(timer)
+  }, [])
+
+  useEffect(() => {
+    let ativo = true
+    async function carregarUltimoRelatorio() {
+      try {
+        const response = await fetch('/api/automacoes', { cache: 'no-store' })
+        if (!response.ok) return
+        const resultado = await response.json()
+        const ultimo = (resultado.comandos || []).find((item: { tipo: string }) => item.tipo === 'MERCADO_FARMA')
+        if (ativo && ultimo) setUltimoRelatorio(ultimo)
+      } catch { /* Relatório não impede uso da vitrine */ }
+    }
+    void carregarUltimoRelatorio()
+    const timer = window.setInterval(() => void carregarUltimoRelatorio(), 15_000)
+    return () => { ativo = false; window.clearInterval(timer) }
+  }, [])
+
   useEffect(() => {
     if (!trackingStart) return
     async function acompanhar() {
@@ -149,7 +253,7 @@ export default function MarketFarmaModule({ onBack, onAutomations }: { onBack: (
         const inicio = trackingStart - 60000
         const extracao = (json.extracoes || []).find((item: { tipo: string; criado_em: string }) => item.tipo === 'MERCADO_FARMA' && new Date(item.criado_em).getTime() >= inicio)
         const comando = (json.comandos || []).find((item: { tipo: string; solicitado_em: string }) => item.tipo === 'MERCADO_FARMA' && new Date(item.solicitado_em).getTime() >= inicio)
-        if (extracao?.status === 'concluido') {
+        if (extracao?.status === 'concluido' || comando?.status === 'concluido') {
           setStatus('Atualizado'); setQueueing(false); setTrackingStart(0); setReload(value => value + 1); return
         }
         if (extracao?.status === 'erro' || comando?.status === 'erro') {
@@ -278,7 +382,7 @@ export default function MarketFarmaModule({ onBack, onAutomations }: { onBack: (
       <div><h1>Mercado Farma</h1><p>Selecione o cliente. O sistema exibirá somente distribuidores que atendem a UF do CNPJ escolhido.</p></div>
       <div className="market-hero-actions">
         <button className="market-cart-button" type="button" onClick={() => setCartOpen(true)}>🛒 Carrinho <b>{cartUnits}</b><span>{money.format(cartTotal)}</span></button>
-        <button className="secondary-button" disabled={queueing} onClick={() => void extract()}>{queueing ? (status || 'Extraindo…') : 'Atualizar Mercado Farma'}</button>
+        <button className="secondary-button" disabled={queueing || !janelaAberta} title={janelaAberta ? 'Iniciar extração' : 'Extrações disponíveis apenas das 07h às 20h de Brasília'} onClick={() => void extract()}>{!janelaAberta ? 'Disponível às 07h' : queueing ? (status || 'Extraindo…') : 'Atualizar Mercado Farma'}</button>
         <a className="secondary-button market-download" href={excelHref} download={`mercado-farma-${effectiveUf || 'todas-ufs'}.xlsx`}>Baixar em Excel</a>
       </div>
     </section>
@@ -303,6 +407,11 @@ export default function MarketFarmaModule({ onBack, onAutomations }: { onBack: (
     </section>
     {error && <div className="alert alert-error">{error}<button className="error-action" onClick={onAutomations}>Automações</button></div>}
     {status && !queueing && <div className="alert alert-success">{status}</div>}
+    {ultimoRelatorio && <section className="market-extraction-report" aria-label="Último relatório da extração por UF">
+      <strong>Última execução do Mercado Farma — {ultimoRelatorio.status === 'concluido' ? 'Concluída' : ultimoRelatorio.status === 'erro' ? 'Falha parcial ou total' : 'Em andamento'}</strong>
+      <pre>{[ultimoRelatorio.mensagem, ultimoRelatorio.erro].filter(Boolean).join('\n')}</pre>
+      <button type="button" className="outline-button" onClick={onAutomations}>Ver detalhes das automações</button>
+    </section>}
     <section className="market-summary">
       <article><span>Produtos</span><strong>{loading ? '—' : num.format(groups.length)}</strong></article>
       <article><span>Registros</span><strong>{num.format(search ? visibleRows : summary?.registros || 0)}</strong></article>

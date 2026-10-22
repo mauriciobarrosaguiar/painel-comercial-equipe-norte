@@ -35,10 +35,16 @@ type Data = {
 }
 
 const activeStatuses = new Set(['aguardando', 'encaminhando', 'executando'])
+const horarioMercadoFarmaPermitido = () => {
+  const hora = Number(new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'America/Sao_Paulo', hour: '2-digit', hourCycle: 'h23',
+  }).format(new Date()))
+  return hora >= 7 && hora < 20
+}
 const dateTime = (value: string | null | undefined) => {
   if (!value) return '—'
   const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleString('pt-BR')
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })
 }
 const label = (value: string) => value.replaceAll('_', ' ').toLowerCase().replace(/(^|\s)\S/g, item => item.toUpperCase())
 const statusLabel = (value: string) => value === 'aguardando'
@@ -56,19 +62,41 @@ const statusLabel = (value: string) => value === 'aguardando'
             : value
 
 function Detail({ item }: { item: { mensagem: string; erro: string } }) {
-  const text = item.erro || item.mensagem || 'Sem detalhes registrados.'
+  const text = [item.mensagem, item.erro].filter(Boolean).join('\n') || 'Sem detalhes registrados.'
   return <details className={`operation-details ${item.erro ? 'has-error' : ''}`}>
     <summary>{item.erro ? 'Abrir erro completo' : 'Ver detalhes'}</summary>
     <pre>{text}</pre>
   </details>
 }
 
+function ResultadoPorUF({ item }: { item: Command }) {
+  if (item.tipo !== 'MERCADO_FARMA') return null
+  const linhas = String(item.mensagem || '').split('\n').filter(linha => /^UF [A-Z]{2} \| /.test(linha))
+  const etapas = String(item.mensagem || '').split('\n').filter(linha => /^(Consolidação|Sincronização Turso|Publicação do arquivo):/.test(linha))
+  if (!linhas.length && !etapas.length) return null
+  return <div className="mercado-uf-resultados" aria-label="Resultado da extração por UF">
+    {etapas.map(linha => <p key={linha}>{linha}</p>)}
+    {linhas.map(linha => {
+      const [uf, resultado, ...detalhes] = linha.split(' | ')
+      const sucesso = resultado === 'SUCESSO'
+      return <div className="mercado-uf-resultado" key={uf}>
+        <strong>{uf}</strong>
+        <b className={`operation-status status-${sucesso ? 'concluido' : 'erro'}`}>{sucesso ? 'Concluído' : 'Erro'}</b>
+        <span>{detalhes.join(' — ') || (sucesso ? 'Atualizado' : 'Falha não detalhada')}</span>
+      </div>
+    })}
+  </div>
+}
+
 export default function AutomationsModule({ onBack }: { onBack: () => void }) {
   const [data, setData] = useState<Data>({ comandos: [], extracoes: [], em_execucao: 0, atualizado_em: '' })
+  const [typeFilter, setTypeFilter] = useState('')
+  const [showHistory, setShowHistory] = useState(false)
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
   const [busy, setBusy] = useState<string[]>([])
   const [month, setMonth] = useState(new Date().toISOString().slice(0, 7))
+  const janelaMercadoFarmaAberta = horarioMercadoFarmaPermitido()
 
   async function load() {
     try {
@@ -122,7 +150,7 @@ export default function AutomationsModule({ onBack }: { onBack: () => void }) {
 
   const actions = [
     ['BUSSOLA', 'Extrair Bússola', 'Execução manual; o agendamento automático continua ativo.'],
-    ['MERCADO_FARMA', 'Extrair Mercado Farma', 'Atualiza preços e estoques das UFs cadastradas.'],
+    ['MERCADO_FARMA', 'Extrair Mercado Farma', 'Atualiza as UFs cadastradas. Horário permitido: 07h às 20h (Brasília).'],
     ['AUDITORIA', 'Auditar cálculos', 'Confere vínculos, EANs, datas, status e conciliação.'],
     ['MIGRAR_BASES', 'Migrar bases legadas', 'Recupera dados preservados do painel anterior.'],
   ]
@@ -159,10 +187,10 @@ export default function AutomationsModule({ onBack }: { onBack: () => void }) {
         <div><h2>{title}</h2><p>{description}</p></div>
         <button
           className="primary-action"
-          disabled={busy.includes(type) || activeTypes.has(type)}
+          disabled={busy.includes(type) || activeTypes.has(type) || (type === 'MERCADO_FARMA' && !janelaMercadoFarmaAberta)}
           onClick={() => void run(type)}
         >
-          {buttonText(type, 'Executar agora')}
+          {type === 'MERCADO_FARMA' && !janelaMercadoFarmaAberta ? 'Disponível às 07h' : buttonText(type, 'Executar agora')}
         </button>
       </article>)}
       <article>
@@ -186,11 +214,17 @@ export default function AutomationsModule({ onBack }: { onBack: () => void }) {
         <div><h2>Solicitações recentes</h2><small>Atualizado em {dateTime(data.atualizado_em)}</small></div>
         <button className="outline-button" onClick={() => void load()}>Atualizar</button>
       </div>
+      <label>Tipo de rotina <select value={typeFilter} onChange={event => setTypeFilter(event.target.value)}>
+        <option value="">Todas</option>
+        {[...new Set([...data.comandos, ...data.extracoes].map(item => item.tipo))].map(tipo => <option key={tipo} value={tipo}>{label(tipo)}</option>)}
+      </select></label>
+      <label><input type="checkbox" checked={showHistory} onChange={event => setShowHistory(event.target.checked)} /> Expandir histórico completo</label>
       {!data.comandos.length && <div className="operations-empty">Nenhuma solicitação registrada.</div>}
-      {data.comandos.map(item => <div className="operation-row operation-row-expanded" key={item.id}>
+      {data.comandos.filter(item => !typeFilter || item.tipo === typeFilter).filter((item, index, lista) => showHistory || activeStatuses.has(item.status) || lista.findIndex(outro => outro.tipo === item.tipo) === index).map(item => <div className="operation-row operation-row-expanded" key={item.id}>
         <div>
           <strong>{label(item.tipo)}</strong>
-          <span>{item.erro || item.mensagem || 'Sem mensagem'}</span>
+          <span>{item.tipo === 'MERCADO_FARMA' ? (item.mensagem?.split('\n')[0] || item.erro) : (item.erro || item.mensagem || 'Sem mensagem')}</span>
+          <ResultadoPorUF item={item} />
           <Detail item={item} />
         </div>
         <div>
@@ -203,7 +237,7 @@ export default function AutomationsModule({ onBack }: { onBack: () => void }) {
     <section className="operations-list">
       <div className="operations-heading"><h2>Últimas extrações</h2></div>
       {!data.extracoes.length && <div className="operations-empty">Nenhuma extração registrada.</div>}
-      {data.extracoes.map(item => <div className="operation-row operation-row-expanded" key={item.id}>
+      {data.extracoes.filter(item => !typeFilter || item.tipo === typeFilter).filter((item, index, lista) => showHistory || lista.findIndex(outro => outro.tipo === item.tipo) === index).map(item => <div className="operation-row operation-row-expanded" key={item.id}>
         <div>
           <strong>{label(item.tipo)}</strong>
           <span>{item.erro || item.mensagem || `${item.total_registros || 0} registros`}</span>

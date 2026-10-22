@@ -97,3 +97,12 @@ O painel também cria espaço para os dados pessoais dos clientes:
 - `CARGO`
 - `CELULAR`
 - `EMAIL`
+
+
+## Mercado Farma — janela de execução e diagnóstico por UF
+
+- A extração do Mercado Farma pode ser iniciada apenas das **07:00 às 19:59** (fuso `America/Sao_Paulo`).
+- Comandos solicitados após as 20:00 não disparam novas consultas; agendamentos pendentes são preservados para a primeira verificação no horário permitido.
+- Uma extração em andamento deve parar antes das 20:00 e registrar a UF interrompida, sem atualizar a base com resultados incompletos.
+- Na **Central de Automações** e na tela **Mercado Farma**, o último comando apresenta os resultados separados por UF, com etapa e motivo quando houver erro. Um estado com falha não deve ser anunciado como atualizado.
+- A execução de automações externas continua isolada do MIX e do painel comercial pessoal.

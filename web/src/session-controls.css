@@ -37,7 +37,7 @@
   }
 
   .topbar-install {
-    display: none;
+    display: grid;
   }
 
   .topbar-logout {

@@ -42,7 +42,7 @@ on:
         default: ""
 
 permissions:
-  contents: write
+  contents: read
   actions: read
 
 concurrency:
@@ -71,6 +71,9 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+
+      - name: Validar janela do Mercado Farma (07h-20h, Brasília)
+        run: python scripts/janela_mercadofarma.py --check
 
       - name: Instalar cliente Turso
         run: python -m pip install --disable-pip-version-check "requests>=2.34,<3"
@@ -149,6 +152,9 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Validar janela da UF (07h-20h, Brasília)
+        run: python scripts/janela_mercadofarma.py --check
+
       - name: Instalar dependencias
         run: |
           python -m pip install --upgrade pip
@@ -198,6 +204,19 @@ jobs:
             echo "::warning::Credencial não está no Turso/Secrets; a extração usará o acesso legado criptografado do app-storage."
           fi
 
+      - name: Limpar saídas locais da UF antes da execução
+        env:
+          UF_ATUAL: ${{ matrix.uf }}
+        run: |
+          python - <<'PYCODE'
+          import os
+          from pathlib import Path
+          uf = os.environ['UF_ATUAL']
+          assert len(uf) == 2 and uf.isalpha()
+          for pasta, ext in [('parciais', 'csv'), ('status', 'json')]:
+              Path(f'data/mercadofarma/{pasta}/mercadofarma_{uf}.{ext}').unlink(missing_ok=True)
+          PYCODE
+
       - name: Extrair UF ${{ matrix.uf }}
         env:
           PYTHONPATH: ${{ github.workspace }}
@@ -222,11 +241,25 @@ jobs:
             test -n "${TURSO_DATABASE_URL:-}"
             test -n "${TURSO_AUTH_TOKEN:-}"
             echo "Mercado Farma sincronizando no Turso."
-            python automacoes/mercadofarma_turso_atualizado.py --uf "${{ matrix.uf }}" --limite-eans "${{ inputs.limite_eans || '0' }}" $EXTRA_ARGS
+            PROGRAMA="automacoes/mercadofarma_turso_atualizado.py"
           else
             echo "Cutover Turso ainda não ativo; Mercado Farma sincronizando no D1."
-            python automacoes/mercadofarma_atualizado.py --uf "${{ matrix.uf }}" --limite-eans "${{ inputs.limite_eans || '0' }}" $EXTRA_ARGS
+            PROGRAMA="automacoes/mercadofarma_atualizado.py"
           fi
+          # Interrompe também um Selenium bloqueado, antes das 20h.
+          if ! TEMPO_RESTANTE=$(python scripts/janela_mercadofarma.py --seconds); then
+            python scripts/janela_mercadofarma.py --registrar-interrupcao "${{ matrix.uf }}"
+            exit 2
+          fi
+          set +e
+          timeout --signal=TERM --kill-after=10 "${TEMPO_RESTANTE}s" python "$PROGRAMA" --uf "${{ matrix.uf }}" --limite-eans "${{ inputs.limite_eans || '0' }}" $EXTRA_ARGS
+          CODIGO=$?
+          set -e
+          if [ "$CODIGO" -eq 124 ] || [ "$CODIGO" -eq 137 ]; then
+            python scripts/janela_mercadofarma.py --registrar-interrupcao "${{ matrix.uf }}"
+            echo "::error::UF ${{ matrix.uf }}: interrompida antes das 20h para respeitar o bloqueio noturno."
+          fi
+          exit "$CODIGO"
 
       - name: Publicar artifact da UF ${{ matrix.uf }}
         if: always()
@@ -237,13 +270,19 @@ jobs:
           path: |
             data/mercadofarma/parciais/mercadofarma_${{ matrix.uf }}.csv
             data/mercadofarma/status/mercadofarma_${{ matrix.uf }}.json
-            data/mercadofarma/debug/${{ matrix.uf }}/**
+
 
   consolidar_mercadofarma:
-    if: ${{ always() && inputs.acao == 'atualizar_mercadofarma_paralelo' }}
+    if: ${{ always() && needs.preparar_ufs.result == 'success' && inputs.acao == 'atualizar_mercadofarma_paralelo' }}
     runs-on: ubuntu-latest
     needs: [preparar_ufs, extrair_uf]
+    outputs:
+      consolidacao: ${{ steps.consolidar.outcome }}
+      sincronizacao: ${{ steps.sincronizar.outcome }}
+      publicacao: ${{ steps.publicar.outcome }}
     env:
+      MERCADOFARMA_ARTIFACTS_DIR: /tmp/mercadofarma-atual
+      MERCADOFARMA_UFS: ${{ needs.preparar_ufs.outputs.ufs_texto }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_D1_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       CLOUDFLARE_D1_DATABASE: painel-equipe-norte-db
@@ -269,17 +308,14 @@ jobs:
         with:
           pattern: mercadofarma-*
           merge-multiple: true
-          path: data/mercadofarma/parciais
+          path: /tmp/mercadofarma-atual
 
       - name: Consolidar Mercado Farma
+        id: consolidar
         run: python scripts/consolidar_mercadofarma.py
 
-      - name: Disponibilizar Excel no painel
-        run: |
-          mkdir -p web/public/exports
-          cp data/mercadofarma/mercadofarma_consolidado.xlsx web/public/exports/mercadofarma.xlsx
-
       - name: Sincronizar somente produtos autorizados no banco principal
+        id: sincronizar
         env:
           PYTHONPATH: ${{ github.workspace }}
         shell: bash
@@ -293,50 +329,61 @@ jobs:
             python scripts/importar_mercadofarma_d1_filtrado.py
           fi
 
-      - name: Salvar consolidado no repositorio
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add -A data/mercadofarma web/public/exports
-          if git diff --staged --quiet; then
-            echo "Nenhuma alteracao para publicar."
-          else
-            git commit -m "Atualiza Mercado Farma consolidado"
-            git pull --rebase origin main
-            git push
-          fi
+      # O Excel do painel já é gerado pelo endpoint autenticado a partir do banco.
+      # Arquivos de auditoria são imutáveis por run/tentativa; nenhuma escrita na main.
+      - name: Publicar consolidado imutável da execução
+        id: publicar
+        if: always() && steps.consolidar.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: consolidado-mercadofarma-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: error
+          retention-days: 90
+          path: |
+            data/mercadofarma/mercadofarma_consolidado.csv
+            data/mercadofarma/mercadofarma_consolidado.xlsx
+            data/mercadofarma/status_mercadofarma.json
 
   finalizar_comando:
     if: ${{ always() && inputs.command_id != '' }}
     needs: [preparar_ufs, extrair_uf, consolidar_mercadofarma]
     runs-on: ubuntu-latest
     steps:
-      - name: Atualizar solicitação no painel
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Baixar relatórios individuais das UFs
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          pattern: mercadofarma-*
+          merge-multiple: true
+          path: /tmp/mercadofarma-artifacts
+
+      - name: Atualizar solicitação no painel com diagnostico por UF
         env:
           PAINEL_URL: https://painel-equipe-norte.pages.dev
           PAINEL_ADMIN_KEY: ${{ secrets.PAINEL_ADMIN_KEY }}
           COMMAND_ID: ${{ inputs.command_id }}
           RESULTADO_EXTRACAO: ${{ needs.extrair_uf.result }}
-          RESULTADO_CONSOLIDACAO: ${{ needs.consolidar_mercadofarma.result }}
+          RESULTADO_CONSOLIDACAO: ${{ needs.consolidar_mercadofarma.outputs.consolidacao }}
+          RESULTADO_SINCRONIZACAO: ${{ needs.consolidar_mercadofarma.outputs.sincronizacao }}
+          RESULTADO_PUBLICACAO: ${{ needs.consolidar_mercadofarma.outputs.publicacao }}
           UFS_EXTRAIDAS: ${{ needs.preparar_ufs.outputs.ufs_texto }}
         shell: bash
         run: |
           set -euo pipefail
-          if [ "$RESULTADO_EXTRACAO" = "success" ] && [ "$RESULTADO_CONSOLIDACAO" = "success" ]; then
-            STATUS="concluido"
-            MENSAGEM="Extração pessoal do Mercado Farma concluída para as UFs ${UFS_EXTRAIDAS}, consolidada e sincronizada no banco principal."
-            ERRO=""
-          else
-            STATUS="erro"
-            MENSAGEM=""
-            ERRO="Mercado Farma terminou com extração=${RESULTADO_EXTRACAO} e consolidação=${RESULTADO_CONSOLIDACAO}. Consulte o GitHub Actions para os detalhes."
-          fi
+          python scripts/resumir_mercadofarma_ufs.py \
+            --ufs "$UFS_EXTRAIDAS" \
+            --extracao "$RESULTADO_EXTRACAO" \
+            --consolidacao "$RESULTADO_CONSOLIDACAO" \
+            --sincronizacao "$RESULTADO_SINCRONIZACAO" \
+            --publicacao "$RESULTADO_PUBLICACAO" > resultado_ufs.json
           jq -n \
             --arg id "$COMMAND_ID" \
-            --arg status "$STATUS" \
-            --arg mensagem "$MENSAGEM" \
-            --arg erro "$ERRO" \
-            '{acao:"finalizar",id:$id,status:$status,mensagem:$mensagem,erro:$erro}' > finalizar.json
+            --slurpfile resultado resultado_ufs.json \
+            '{acao:"finalizar",id:$id,status:$resultado[0].status,mensagem:$resultado[0].mensagem,erro:$resultado[0].erro}' > finalizar.json
+          jq '{status, mensagem, erro}' resultado_ufs.json
           curl --fail-with-body --silent --show-error \
             --request POST "${PAINEL_URL}/api/internal/automacoes" \
             --header "x-admin-key: ${PAINEL_ADMIN_KEY}" \
