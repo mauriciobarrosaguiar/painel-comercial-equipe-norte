@@ -89,7 +89,7 @@ export default function AppShell() {
     return (
       <div className="app-shell public-sip-shell">
         <SipsModule onBack={() => window.location.assign(window.location.pathname)} publicId={publicSip} />
-        <footer><span>Painel Comercial · Equipe Norte</span><span>Acompanhamento SIP</span></footer>
+        <footer><span>Painel Comercial · Maurício</span><span>Acompanhamento SIP</span></footer>
       </div>
     )
   }
@@ -139,7 +139,7 @@ export default function AppShell() {
       <header className="topbar">
         <button className="brand brand-button" type="button" onClick={back}>
           <div className="brand-mark">N</div>
-          <div><strong>Painel Comercial</strong><span>Equipe Norte</span></div>
+          <div><strong>Painel Comercial</strong><span>Painel pessoal · Maurício</span></div>
         </button>
         <div className="topbar-actions">
           {exportType && (
@@ -156,7 +156,7 @@ export default function AppShell() {
         </div>
       </header>
       {module}
-      <footer><span>Painel Comercial · Equipe Norte</span><span>Módulo ativo</span></footer>
+      <footer><span>Painel Comercial · Maurício</span><span>Módulo ativo</span></footer>
     </div>
   )
 }

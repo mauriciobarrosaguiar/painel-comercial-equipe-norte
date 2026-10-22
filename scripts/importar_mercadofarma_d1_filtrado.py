@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import json
+import os
+from pathlib import Path
+
 from scripts import importar_mercadofarma_d1 as legacy
 
 
@@ -34,6 +38,13 @@ def sincronizar() -> None:
 
     base = legacy.carregar_base()
     base = base[base["EAN"].isin(permitidos)].copy()
+    # Nunca reaplicar snapshots antigos sobre UFs sem extração nesta execução.
+    if os.environ.get('MERCADOFARMA_ARTIFACTS_DIR'):
+        resumo = json.loads((Path(legacy.CSV_PATH).parent / 'status_mercadofarma.json').read_text())
+        atualizadas = resumo.get('ufs_atualizadas', [])
+        base = base[base['UF'].isin(atualizadas)].copy()
+        if base.empty:
+            raise RuntimeError('Nenhuma UF nova válida para sincronizar; dados anteriores preservados.')
     if base.empty:
         raise RuntimeError(
             "O consolidado do Mercado Farma não contém nenhum EAN "

@@ -13,7 +13,7 @@ export default function DashboardSeparatorShortcut({
   const [target, setTarget] = useState<Element | null>(null)
 
   useEffect(() => {
-    const locate = () => setTarget(document.querySelector('.modules-grid'))
+    const locate = () => setTarget(document.querySelector('[data-module-group="Mercado Farma e pedidos"]'))
     locate()
     const observer = new MutationObserver(locate)
     observer.observe(document.body, { childList: true, subtree: true })

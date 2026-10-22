@@ -100,3 +100,16 @@ jobs:
       - name: Interromper quando a auditoria npm encontrar risco alto
         if: steps.audit_web.outputs.status != '0'
         run: exit 1
+
+      - name: Instalar Chromium para homologação isolada
+        run: python -m playwright install --with-deps chromium
+      - name: Homologar ficha e carrinho sem envio comercial
+        run: python scripts/qa_issue94_browser.py
+      - name: Publicar evidências da homologação visual
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: homologacao-issue94-${{ github.run_id }}
+          path: docs/qa/issue94/depois-*.png
+          if-no-files-found: warn
+          retention-days: 30
