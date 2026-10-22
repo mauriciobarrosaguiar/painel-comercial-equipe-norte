@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import ClientPurchaseInsights, { type InteligenciaCliente } from './ClientPurchaseInsights'
 import './clients.css'
 
 type PeriodOption = 'mes-atual' | 'mes-anterior' | 'todo-periodo' | 'personalizado'
@@ -19,12 +20,12 @@ type ClientResponse = {
 type ClientDetail = {
   cliente: ClientRow & { grupo_economico?: string; rede_associacao?: string; bandeira?: string; situacao?: string }
   resumo: { faturamento: number; pedidos: number; produtos: number; ultima_compra: string | null; prioritarios: number; lancamentos: number; ticket_medio: number }
-  historico: Array<{ ano_mes: string; faturamento: number; pedidos: number; produtos: number }>
+  historico: Array<{ ano_mes: string; faturamento: number; pedidos: number; produtos: number; origem?: string }>
   produtos: Array<{ produto: string; ean: string; tipo_mix: string; faturamento: number; quantidade: number; pedidos: number }>
   pedidos: Array<{ id: string; pedido_origem: string; nota_fiscal: string; status: string; data: string; valor: number; itens: number }>
   oportunidades: Array<{ id: string; ean: string; produto: string; tipo_mix: string }>
 }
-type Props = { onBack: () => void }
+type Props = { onBack: () => void; onOpenMarket: () => void }
 
 const currency = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
 const integer = new Intl.NumberFormat('pt-BR')
@@ -46,7 +47,7 @@ function priorityLabel(value: string) {
   return value === 'CRITICA' ? 'Crítica' : value === 'ALTA' ? 'Alta' : value === 'MEDIA' ? 'Média' : value === 'BAIXA' ? 'Baixa' : 'Novo'
 }
 
-export default function ClientsModule({ onBack }: Props) {
+export default function ClientsModule({ onBack, onOpenMarket }: Props) {
   const currentMonth = monthBounds(0)
   const [period, setPeriod] = useState<PeriodOption>('mes-atual')
   const [customStart, setCustomStart] = useState(currentMonth.inicio)
@@ -60,6 +61,8 @@ export default function ClientsModule({ onBack }: Props) {
   const [page, setPage] = useState(1)
   const [data, setData] = useState<ClientResponse | null>(null)
   const [detail, setDetail] = useState<ClientDetail | null>(null)
+  const [insights, setInsights] = useState<InteligenciaCliente | null>(null)
+  const [insightsError, setInsightsError] = useState('')
   const [loading, setLoading] = useState(true)
   const [detailLoading, setDetailLoading] = useState(false)
   const [error, setError] = useState('')
@@ -99,7 +102,7 @@ export default function ClientsModule({ onBack }: Props) {
   }, [period, customStart, customEnd, selectedPeriod.inicio, selectedPeriod.fim, consultant, uf, city, search, priority, sort, page])
 
   async function openDetail(client: ClientRow) {
-    setDetailLoading(true); setDetail(null); setError('')
+    setDetailLoading(true); setDetail(null); setInsights(null); setInsightsError(''); setError('')
     try {
       const params = new URLSearchParams({ id: client.id })
       if (selectedPeriod.inicio && selectedPeriod.fim) { params.set('inicio', selectedPeriod.inicio); params.set('fim', selectedPeriod.fim) }
@@ -107,12 +110,26 @@ export default function ClientsModule({ onBack }: Props) {
       const result = await response.json() as ClientDetail & { erro?: string; detalhe?: string }
       if (!response.ok) throw new Error(result.detalhe || result.erro || 'Não foi possível abrir a ficha do cliente.')
       setDetail(result)
+      // Falha da análise não esconde a ficha nem seu histórico existente.
+      const resposta = await fetch(`/api/clientes/inteligencia?id=${encodeURIComponent(client.id)}`, { cache: 'no-store' })
+      const analise = await resposta.json() as InteligenciaCliente & { erro?: string; detalhe?: string }
+      if (resposta.ok) setInsights(analise)
+      else setInsightsError(analise.detalhe || analise.erro || 'Dados de cobertura indisponíveis.')
     } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)) }
     finally { setDetailLoading(false) }
   }
 
   const resumo = data?.resumo
-  const maxHistory = Math.max(1, ...(detail?.historico || []).map((item) => item.faturamento))
+  const mesesRecentes = (detail?.historico || []).slice(-12).reverse()
+  const maxHistory = Math.max(1, ...mesesRecentes.map((item) => item.faturamento))
+  useEffect(() => {
+    if (!detail && !detailLoading) return
+    const fechar = (event: KeyboardEvent) => { if (event.key === 'Escape') { setDetail(null); setDetailLoading(false) } }
+    document.addEventListener('keydown', fechar)
+    const original = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => { document.removeEventListener('keydown', fechar); document.body.style.overflow = original }
+  }, [detail, detailLoading])
 
   return <main className="content clients-page">
     <button className="back-button" type="button" onClick={onBack}>← Voltar ao painel</button>
@@ -156,16 +173,17 @@ export default function ClientsModule({ onBack }: Props) {
       <div className="pagination"><button type="button" disabled={(data?.paginacao.pagina || 1) <= 1} onClick={() => setPage((value) => Math.max(1, value - 1))}>← Anterior</button><span>Página {data?.paginacao.pagina || 1} de {data?.paginacao.paginas || 1}</span><button type="button" disabled={(data?.paginacao.pagina || 1) >= (data?.paginacao.paginas || 1)} onClick={() => setPage((value) => value + 1)}>Próxima →</button></div>
     </section>
 
-    {(detailLoading || detail) && <div className="client-detail-backdrop" role="presentation" onClick={() => !detailLoading && setDetail(null)}><aside className="client-detail" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
+    {(detailLoading || detail) && <div className="client-detail-backdrop" role="presentation" onClick={() => !detailLoading && setDetail(null)}><section className="client-detail" role="dialog" aria-modal="true" aria-label="Ficha completa do cliente" onClick={(event) => event.stopPropagation()}>
       <button className="detail-close" type="button" onClick={() => setDetail(null)}>×</button>
       {detailLoading ? <div className="detail-loading">Carregando ficha do cliente…</div> : detail && <>
         <header><span className="eyebrow">Ficha do cliente</span><h2>{detail.cliente.nome}</h2><p>{detail.cliente.cnpj} · {detail.cliente.cidade}/{detail.cliente.uf} · {detail.cliente.consultor || 'Sem consultor'}</p></header>
         <div className="detail-metrics"><article><span>Faturamento</span><strong>{currency.format(detail.resumo.faturamento)}</strong></article><article><span>Pedidos</span><strong>{integer.format(detail.resumo.pedidos)}</strong></article><article><span>Ticket médio</span><strong>{currency.format(detail.resumo.ticket_medio)}</strong></article><article><span>Última compra</span><strong>{formatDate(detail.resumo.ultima_compra)}</strong></article></div>
-        <section className="detail-section"><h3>Evolução mensal</h3><div className="history-bars">{detail.historico.map((item) => <div key={item.ano_mes}><span>{item.ano_mes.slice(5, 7)}/{item.ano_mes.slice(0, 4)}</span><div><i style={{ width: `${Math.max(2, item.faturamento / maxHistory * 100)}%` }} /></div><strong>{currency.format(item.faturamento)}</strong></div>)}</div></section>
-        <section className="detail-section"><h3>Produtos mais comprados</h3>{detail.produtos.slice(0, 12).map((item) => <div className="detail-row" key={`${item.ean}-${item.produto}`}><div><strong>{item.produto}</strong><span>{item.ean} · {item.tipo_mix}</span></div><b>{currency.format(item.faturamento)}</b></div>)}</section>
+        <section className="detail-section"><h3>Histórico de compras — últimos 12 meses disponíveis</h3><p>Evolução do faturamento, pedidos e produtos registrados em cada mês.</p><div className="history-bars">{mesesRecentes.map((item) => <div key={item.ano_mes}><span>{item.ano_mes.slice(5, 7)}/{item.ano_mes.slice(0, 4)}</span><div><i style={{ width: `${item.faturamento > 0 ? Math.max(2, item.faturamento / maxHistory * 100) : 0}%` }} /></div><strong>{currency.format(item.faturamento)}</strong></div>)}</div><div className="client-history-table-wrap"><table className="client-history-table"><thead><tr><th>Mês</th><th>Faturamento</th><th>Pedidos</th><th>Produtos</th><th>Origem</th></tr></thead><tbody>{mesesRecentes.map(item => <tr key={item.ano_mes}><td>{item.ano_mes.slice(5, 7)}/{item.ano_mes.slice(0, 4)}</td><td>{currency.format(item.faturamento)}</td><td>{integer.format(item.pedidos)}</td><td>{integer.format(item.produtos)}</td><td>{item.origem === 'IMPORTADO' ? 'Histórico agregado' : 'Bússola'}</td></tr>)}</tbody></table></div>{!mesesRecentes.length && <p>Não há histórico de compras cadastrado.</p>}</section>
+        {insights ? <ClientPurchaseInsights dados={insights} onOpenMarket={onOpenMarket} /> : <section className="detail-section"><h3>Cobertura e sugestões</h3><p>{insightsError || 'Carregando análise de compras por produto…'}</p></section>}
+        <div className="client-ficha-grid"><div><section className="detail-section"><h3>Produtos mais comprados</h3>{detail.produtos.slice(0, 12).map((item) => <div className="detail-row" key={`${item.ean}-${item.produto}`}><div><strong>{item.produto}</strong><span>{item.ean} · {item.tipo_mix}</span></div><b>{currency.format(item.faturamento)}</b></div>)}</section>
         <section className="detail-section"><h3>Oportunidades de mix</h3>{detail.oportunidades.length === 0 ? <p>Nenhum prioritário ou lançamento ausente.</p> : detail.oportunidades.slice(0, 20).map((item) => <div className="detail-row" key={item.id}><div><strong>{item.produto}</strong><span>{item.ean}</span></div><b>{item.tipo_mix}</b></div>)}</section>
-        <section className="detail-section"><h3>Últimos pedidos</h3>{detail.pedidos.slice(0, 15).map((item) => <div className="detail-row" key={item.id}><div><strong>Pedido {item.pedido_origem}</strong><span>{formatDate(item.data)} · NF {item.nota_fiscal || 'não informada'} · {item.itens} itens</span></div><b>{currency.format(item.valor)}</b></div>)}</section>
+        </div><div><section className="detail-section"><h3>Últimos pedidos</h3>{detail.pedidos.slice(0, 15).map((item) => <div className="detail-row" key={item.id}><div><strong>Pedido {item.pedido_origem}</strong><span>{formatDate(item.data)} · NF {item.nota_fiscal || 'não informada'} · {item.itens} itens</span></div><b>{currency.format(item.valor)}</b></div>)}</section></div></div>
       </>}
-    </aside></div>}
+    </section></div>}
   </main>
 }
