@@ -77,5 +77,14 @@ test('pedido do carrinho gera Excel verdadeiro e valida a carteira do consultor'
   const bytes = new Uint8Array(await response.arrayBuffer())
   assert.deepEqual([...bytes.slice(0, 4)], [0x50, 0x4b, 0x03, 0x04])
   const text = archiveText(bytes)
-  for (const expected of ['Nome do Cliente:', 'Nome do Consultor:', 'DISTRIBUIDORA ESCOLHIDA', 'TOTAL POR DISTRIBUIDORA', 'Farmácia A']) assert.ok(text.includes(expected))
+  for (const expected of ['Nome do Cliente:', 'Nome do Consultor:', 'DISTRIBUIDORA ESCOLHIDA', 'PREÇO UNITÁRIO', 'SUBTOTAL', 'TOTAL POR DISTRIBUIDORA', 'Farmácia A']) assert.ok(text.includes(expected))
+  // Preço unitário e subtotal precisam ser células numéricas em moeda, não apenas totais no rodapé.
+  const preco = text.match(/<c r="E9" s="5" t="n"><v>([\d.]+)<\/v><\/c>/)
+  const subtotal = text.match(/<c r="F9" s="5" t="n"><v>([\d.]+)<\/v><\/c>/)
+  assert.ok(preco, 'A primeira linha deve trazer o preço unitário em E9')
+  assert.ok(subtotal, 'A primeira linha deve trazer o subtotal em F9')
+  assert.ok(Number(preco[1]) > 0)
+  assert.equal(Number(subtotal[1]), Number(preco[1]) * 3)
+  assert.match(text, /<dimension ref="A1:F\d+"\/>/)
+
 })
