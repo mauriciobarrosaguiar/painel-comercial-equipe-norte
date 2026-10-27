@@ -37,6 +37,8 @@
 .client-distributor-options label:has(input:checked){background:#e6f7ee;border-color:#99d5b9}
 .client-distributor-options input{width:18px;height:18px;flex:none;accent-color:#168763}
 .client-distributor-filter>small{display:block;margin-top:12px;color:#637889;line-height:1.5}
+.client-rec-toggle{margin:12px 0;min-height:42px;font-weight:700}
+#client-rec-list[hidden]{display:none}
 .client-recommendation-actions{display:flex;flex-wrap:wrap;gap:10px;margin:16px 0}
 .client-recommendations{display:grid;gap:10px}
 .client-recommendation{border:1px solid #dae5eb;border-radius:12px;padding:16px;background:#fff}
