@@ -85,13 +85,17 @@ export async function onRequestPost({ request, env }) {
       FROM mercado_farma_precos
       WHERE REPLACE(REPLACE(REPLACE(TRIM(ean),'.0',''),' ',''),'-','')=?
         AND distribuidora=? AND UPPER(TRIM(uf))=?
+        AND COALESCE(estoque,0)>0
+        AND (COALESCE(preco_com_imposto,0)>0 OR COALESCE(preco_sem_imposto,0)>0)
+        AND UPPER(TRIM(COALESCE(status,'OK')))='OK'
       ORDER BY atualizado_em DESC LIMIT 1
     `).bind(item.ean, item.distribuidora, cliente.uf))
     const resultados = await env.DB.batch(consultas)
     const itens = solicitados.map((solicitado, index) => {
       const oferta = resultados[index]?.results?.[0]
       if (!oferta) throw new Error(`A distribuidora escolhida para o EAN ${solicitado.ean} não atende a UF ${cliente.uf}. Atualize o Mercado Farma.`)
-      const valorUnitario = numero(oferta.preco_com_imposto) || numero(oferta.preco_sem_imposto)
+      const valorUnitario = numero(oferta.preco_com_imposto) > 0 ? numero(oferta.preco_com_imposto) : numero(oferta.preco_sem_imposto)
+      if (valorUnitario <= 0) throw new Error(`Preço indisponível para EAN ${solicitado.ean}; revise a oferta antes de exportar.`)
       return {
         produto: texto(oferta.produto), ean: texto(oferta.ean).replace(/\D/g, ''), quantidade: solicitado.quantidade,
         distribuidora_rotulo: `${texto(oferta.distribuidora)}${oferta.uf ? ` - atende ${texto(oferta.uf)}` : ''}`,
