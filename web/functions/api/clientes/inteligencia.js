@@ -32,12 +32,20 @@ export async function onRequestGet({ request, env }) {
       env.DB.prepare(`
         SELECT pr.id,
           SUM(CASE WHEN DATE(COALESCE(pe.data_faturamento,pe.data_pedido))>=DATE(?)
+                    AND DATE(COALESCE(pe.data_faturamento,pe.data_pedido))<DATE(?)
                THEN COALESCE(ip.quantidade_faturada,0) ELSE 0 END) quantidade_3m,
-          SUM(COALESCE(ip.quantidade_faturada,0)) quantidade_6m,
+          SUM(CASE WHEN DATE(COALESCE(pe.data_faturamento,pe.data_pedido))<DATE(?)
+               THEN COALESCE(ip.quantidade_faturada,0) ELSE 0 END) quantidade_6m,
           SUM(CASE WHEN DATE(COALESCE(pe.data_faturamento,pe.data_pedido))>=DATE(?)
+                    AND DATE(COALESCE(pe.data_faturamento,pe.data_pedido))<DATE(?)
                THEN 1 ELSE 0 END) linhas_3m,
           COUNT(DISTINCT CASE WHEN DATE(COALESCE(pe.data_faturamento,pe.data_pedido))>=DATE(?)
+                    AND DATE(COALESCE(pe.data_faturamento,pe.data_pedido))<DATE(?)
                THEN pe.id END) pedidos_3m,
+          SUM(CASE WHEN DATE(COALESCE(pe.data_faturamento,pe.data_pedido))>=DATE(?)
+               THEN COALESCE(ip.quantidade_faturada,0) ELSE 0 END) quantidade_mes_atual,
+          SUM(CASE WHEN DATE(COALESCE(pe.data_faturamento,pe.data_pedido))>=DATE(?)
+               THEN 1 ELSE 0 END) linhas_mes_atual,
           MAX(DATE(COALESCE(pe.data_faturamento,pe.data_pedido))) ultima_compra
         FROM pedidos pe
         JOIN itens_pedido ip ON ip.pedido_id=pe.id
@@ -48,7 +56,14 @@ export async function onRequestGet({ request, env }) {
         WHERE pe.cliente_id=? AND ${ITEM_FATURADO}
           AND DATE(COALESCE(pe.data_faturamento,pe.data_pedido)) BETWEEN DATE(?) AND DATE(?)
         GROUP BY pr.id
-      `).bind(periodo.inicio_3m, periodo.inicio_3m, periodo.inicio_3m, id, periodo.inicio_6m, periodo.fim),
+      `).bind(
+        periodo.inicio_3m, periodo.inicio_mes_atual,
+        periodo.inicio_mes_atual,
+        periodo.inicio_3m, periodo.inicio_mes_atual,
+        periodo.inicio_3m, periodo.inicio_mes_atual,
+        periodo.inicio_mes_atual, periodo.inicio_mes_atual,
+        id, periodo.inicio_6m, periodo.fim,
+      ),
     ])
 
     const catalogo = catalogoResult.results || []
