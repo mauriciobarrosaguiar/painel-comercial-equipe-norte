@@ -81,7 +81,13 @@ def main():
                 box = dialog.bounding_box()
                 assert box['width'] >= width - 2 and box['x'] <= 1, box
                 page.screenshot(path=str(OUT / f'depois-ficha-{name}.png'), full_page=True)
-                dialog.get_by_role('checkbox').check()
+                # A ficha agora tem checkboxes de fornecedores e de produtos: usar seletor específico.
+                fornecedor = dialog.get_by_role('checkbox', name='Distribuidora Teste')
+                expect(fornecedor).to_be_checked()
+                fornecedor.uncheck()
+                expect(dialog.get_by_text('Sem oferta nas distribuidoras selecionadas')).to_be_visible()
+                fornecedor.check()
+                dialog.locator('.client-rec-select input[type="checkbox"]').check()
                 dialog.get_by_role('button', name='Enviar selecionados ao carrinho do Mercado Farma →', exact=True).click()
                 expect(page.get_by_role('heading', name='Carrinho', exact=True)).to_be_visible()
                 expect(page.get_by_role('dialog')).to_contain_text(ROW['produto'])
