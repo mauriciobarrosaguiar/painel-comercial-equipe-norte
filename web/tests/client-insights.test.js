@@ -76,8 +76,9 @@ test('análise exige sessão da carteira e oferece somente UF do cliente com est
   assert.equal(response.status, 200)
   const body = await response.json()
   assert.equal(body.cobertura.total, 4)
-  assert.equal(body.cobertura.comprados, 1)
-  assert.equal(body.cobertura.nao_comprados, 3)
+  // O fixture tem quatro produtos faturados em julho; julho integra agora os três meses completos.
+  assert.equal(body.cobertura.comprados, 4)
+  assert.equal(body.cobertura.nao_comprados, 0)
   assert.equal(body.cliente.uf, 'PA')
   const compra = body.sugestoes.find(item => item.ean === '111')
   assert.equal(compra.quantidade_mes_atual, 1)
