@@ -72,6 +72,20 @@ export async function onRequestGet({ request, env }) {
       ofertas = response.results || []
     }
 
+    // Exibe todas as distribuidoras com oferta válida para a UF da carteira,
+    // mesmo quando uma delas não tem preço para as sugestões atuais.
+    const distribuidorasResult = /^[A-Z]{2}$/.test(ufs) ? await env.DB.prepare(`
+      SELECT DISTINCT TRIM(distribuidora) AS distribuidora
+      FROM mercado_farma_precos
+      WHERE UPPER(TRIM(uf))=? AND TRIM(COALESCE(distribuidora,''))<>''
+        AND COALESCE(estoque,0)>0
+        AND (COALESCE(preco_com_imposto,0)>0 OR COALESCE(preco_sem_imposto,0)>0)
+        AND UPPER(TRIM(COALESCE(status,'OK')))='OK'
+      ORDER BY distribuidora COLLATE NOCASE
+      LIMIT 200
+    `).bind(ufs).all() : { results: [] }
+    const distribuidoras_disponiveis = (distribuidorasResult.results || []).map(item => String(item.distribuidora))
+
     const porEan = new Map()
     for (const oferta of ofertas) {
       const ean = String(oferta.ean || '')
@@ -96,6 +110,7 @@ export async function onRequestGet({ request, env }) {
       cliente: { id: cliente.id, cnpj: limparCnpj(cliente.cnpj), uf: ufs, nome: cliente.nome },
       cobertura: analise.cobertura,
       sugestoes,
+      distribuidoras_disponiveis,
       avisos: [
         'Histórico agregado sem EAN não identifica produtos e não é usado para sugerir reposição por produto.',
         'Sugestões baseadas apenas em itens faturados identificados; não equivalem a pedido confirmado.',
