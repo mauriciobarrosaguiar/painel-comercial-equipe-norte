@@ -33,25 +33,25 @@ function worksheet({ cliente, consultor, itens, totais }) {
     `<row r="4">${stringCell('A4', 'CNPJ:', 2)}${stringCell('B4', cliente.cnpj, 3)}</row>`,
     `<row r="5">${stringCell('A5', 'UF do Cliente:', 2)}${stringCell('B5', cliente.uf, 3)}</row>`,
     `<row r="6">${stringCell('A6', 'Nome do Consultor:', 2)}${stringCell('B6', consultor, 3)}</row>`,
-    `<row r="8" ht="24" customHeight="1">${['PRODUTO','EAN','QNTDE','DISTRIBUIDORA ESCOLHIDA'].map((label,index) => stringCell(`${String.fromCharCode(65+index)}8`,label,1)).join('')}</row>`,
+    `<row r="8" ht="24" customHeight="1">${['PRODUTO','EAN','QNTDE','DISTRIBUIDORA ESCOLHIDA','PREÇO UNITÁRIO','SUBTOTAL'].map((label,index) => stringCell(`${String.fromCharCode(65+index)}8`,label,1)).join('')}</row>`,
   ]
   itens.forEach((item, index) => {
     const row = index + 9
-    lines.push(`<row r="${row}">${stringCell(`A${row}`, item.produto, 3)}${stringCell(`B${row}`, item.ean, 4)}${numberCell(`C${row}`, item.quantidade, 4)}${stringCell(`D${row}`, item.distribuidora_rotulo, 3)}</row>`)
+    lines.push(`<row r="${row}">${stringCell(`A${row}`, item.produto, 3)}${stringCell(`B${row}`, item.ean, 4)}${numberCell(`C${row}`, item.quantidade, 4)}${stringCell(`D${row}`, item.distribuidora_rotulo, 3)}${numberCell(`E${row}`, item.valor_unitario, 5)}${numberCell(`F${row}`, item.valor_total, 5)}</row>`)
   })
   const summaryStart = 10 + itens.length
   lines.push(`<row r="${summaryStart}" ht="24" customHeight="1">${stringCell(`A${summaryStart}`, 'TOTAL POR DISTRIBUIDORA', 1)}</row>`)
   totais.forEach((item, index) => {
     const row = summaryStart + index + 1
-    lines.push(`<row r="${row}">${stringCell(`A${row}`, item.distribuidora, 6)}${numberCell(`B${row}`, item.valor, 7)}</row>`)
+    lines.push(`<row r="${row}">${stringCell(`A${row}`, item.distribuidora, 6)}${numberCell(`F${row}`, item.valor, 7)}</row>`)
   })
   const totalRow = summaryStart + totais.length + 2
-  lines.push(`<row r="${totalRow}">${stringCell(`A${totalRow}`, 'TOTAL DO PEDIDO', 6)}${numberCell(`B${totalRow}`, totais.reduce((sum,item)=>sum+item.valor,0), 7)}</row>`)
+  lines.push(`<row r="${totalRow}">${stringCell(`A${totalRow}`, 'TOTAL DO PEDIDO', 6)}${numberCell(`F${totalRow}`, totais.reduce((sum,item)=>sum+item.valor,0), 7)}</row>`)
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
-  <dimension ref="A1:D${totalRow}"/><sheetViews><sheetView workbookViewId="0"><pane ySplit="8" topLeftCell="A9" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>
-  <sheetFormatPr defaultRowHeight="18"/><cols><col min="1" max="1" width="48" customWidth="1"/><col min="2" max="2" width="20" customWidth="1"/><col min="3" max="3" width="12" customWidth="1"/><col min="4" max="4" width="38" customWidth="1"/></cols>
-  <sheetData>${lines.join('')}</sheetData><mergeCells count="6"><mergeCell ref="A1:D1"/><mergeCell ref="B3:D3"/><mergeCell ref="B4:D4"/><mergeCell ref="B5:D5"/><mergeCell ref="B6:D6"/><mergeCell ref="A${summaryStart}:D${summaryStart}"/></mergeCells>
+  <dimension ref="A1:F${totalRow}"/><sheetViews><sheetView workbookViewId="0"><pane ySplit="8" topLeftCell="A9" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>
+  <sheetFormatPr defaultRowHeight="18"/><cols><col min="1" max="1" width="48" customWidth="1"/><col min="2" max="2" width="20" customWidth="1"/><col min="3" max="3" width="12" customWidth="1"/><col min="4" max="4" width="38" customWidth="1"/><col min="5" max="5" width="19" customWidth="1"/><col min="6" max="6" width="21" customWidth="1"/></cols>
+  <sheetData>${lines.join('')}</sheetData><mergeCells count="6"><mergeCell ref="A1:F1"/><mergeCell ref="B3:F3"/><mergeCell ref="B4:F4"/><mergeCell ref="B5:F5"/><mergeCell ref="B6:F6"/><mergeCell ref="A${summaryStart}:F${summaryStart}"/></mergeCells>
   <pageMargins left="0.3" right="0.3" top="0.5" bottom="0.5" header="0.2" footer="0.2"/><pageSetup orientation="landscape" fitToWidth="1" fitToHeight="0" paperSize="9"/>
 </worksheet>`
 }
@@ -85,16 +85,21 @@ export async function onRequestPost({ request, env }) {
       FROM mercado_farma_precos
       WHERE REPLACE(REPLACE(REPLACE(TRIM(ean),'.0',''),' ',''),'-','')=?
         AND distribuidora=? AND UPPER(TRIM(uf))=?
+        AND COALESCE(estoque,0)>0
+        AND (COALESCE(preco_com_imposto,0)>0 OR COALESCE(preco_sem_imposto,0)>0)
+        AND UPPER(TRIM(COALESCE(status,'OK')))='OK'
       ORDER BY atualizado_em DESC LIMIT 1
     `).bind(item.ean, item.distribuidora, cliente.uf))
     const resultados = await env.DB.batch(consultas)
     const itens = solicitados.map((solicitado, index) => {
       const oferta = resultados[index]?.results?.[0]
       if (!oferta) throw new Error(`A distribuidora escolhida para o EAN ${solicitado.ean} não atende a UF ${cliente.uf}. Atualize o Mercado Farma.`)
-      const valorUnitario = numero(oferta.preco_com_imposto) || numero(oferta.preco_sem_imposto)
+      const valorUnitario = numero(oferta.preco_com_imposto) > 0 ? numero(oferta.preco_com_imposto) : numero(oferta.preco_sem_imposto)
+      if (valorUnitario <= 0) throw new Error(`Preço indisponível para EAN ${solicitado.ean}; revise a oferta antes de exportar.`)
       return {
         produto: texto(oferta.produto), ean: texto(oferta.ean).replace(/\D/g, ''), quantidade: solicitado.quantidade,
         distribuidora_rotulo: `${texto(oferta.distribuidora)}${oferta.uf ? ` - atende ${texto(oferta.uf)}` : ''}`,
+        valor_unitario: valorUnitario,
         valor_total: valorUnitario * solicitado.quantidade,
       }
     })
