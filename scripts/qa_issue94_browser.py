@@ -81,6 +81,10 @@ def main():
                 box = dialog.bounding_box()
                 assert box['width'] >= width - 2 and box['x'] <= 1, box
                 page.screenshot(path=str(OUT / f'depois-ficha-{name}.png'), full_page=True)
+                toggle = dialog.get_by_role('button', name='Mostrar recomendações (1)')
+                expect(toggle).to_have_attribute('aria-expanded', 'false')
+                toggle.click()
+                expect(dialog.get_by_role('button', name='Ocultar recomendações')).to_have_attribute('aria-expanded', 'true')
                 # A ficha agora tem checkboxes de fornecedores e de produtos: usar seletor específico.
                 fornecedor = dialog.get_by_role('checkbox', name='Distribuidora Teste')
                 expect(fornecedor).to_be_checked()
