@@ -55,6 +55,9 @@ test('análise exige sessão da carteira e oferece somente UF do cliente com est
   assert.equal(compra.quantidade_sugerida, 3)
   assert.equal(compra.ofertas.length, 1)
   assert.equal(compra.ofertas[0].distribuidora, 'Distribuidora A')
+  assert.ok(body.distribuidoras_disponiveis.includes('Distribuidora A'))
+  assert.ok(!body.distribuidoras_disponiveis.includes('Distribuidora TO'))
+
 
   const forjado = await inteligencia({ request: new Request('https://painel.local/api/clientes/inteligencia?id=cl-nao-autorizado', { headers }), env: { DB, PAINEL_ADMIN_KEY: segredo } })
   assert.equal(forjado.status, 404)
