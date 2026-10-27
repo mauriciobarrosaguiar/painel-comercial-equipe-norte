@@ -27,6 +27,16 @@
 .client-coverage-track{height:12px;margin:16px 0;background:#e4edf0;border-radius:99px;overflow:hidden}
 .client-coverage-track span{display:block;height:100%;background:#15926a}
 .client-intelligence>small{display:block;margin-top:12px;color:#657589;line-height:1.5}
+.client-distributor-filter{margin:18px 0;padding:16px;border:1px solid #d6e4e9;border-radius:12px;background:#f7fbfc;min-width:0}
+.client-distributor-filter legend{padding:0 8px;color:#143149;font-size:.9rem;font-weight:800}
+.client-distributor-toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:4px 0 14px}
+.client-distributor-toolbar span{color:#415970;font-weight:700;margin-right:auto}
+.client-distributor-toolbar button{min-height:36px}
+.client-distributor-options{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px;max-height:230px;overflow-y:auto}
+.client-distributor-options label{display:flex;align-items:center;gap:9px;border:1px solid #d9e5eb;border-radius:8px;background:white;padding:10px 12px;cursor:pointer;color:#24465b;overflow-wrap:anywhere;font-size:.84rem}
+.client-distributor-options label:has(input:checked){background:#e6f7ee;border-color:#99d5b9}
+.client-distributor-options input{width:18px;height:18px;flex:none;accent-color:#168763}
+.client-distributor-filter>small{display:block;margin-top:12px;color:#637889;line-height:1.5}
 .client-recommendation-actions{display:flex;flex-wrap:wrap;gap:10px;margin:16px 0}
 .client-recommendations{display:grid;gap:10px}
 .client-recommendation{border:1px solid #dae5eb;border-radius:12px;padding:16px;background:#fff}
