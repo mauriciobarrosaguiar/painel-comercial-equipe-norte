@@ -14,6 +14,7 @@ export type InteligenciaCliente = {
   cliente: { id: string; cnpj: string; uf: string; nome: string }
   cobertura: { total: number; comprados: number; nao_comprados: number; percentual: number; periodo: string; inicio: string; fim: string; criterio: string }
   sugestoes: SugestaoInteligencia[]
+  distribuidoras_disponiveis?: string[]
   avisos: string[]
 }
 const money = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
@@ -28,19 +29,46 @@ export default function ClientPurchaseInsights({ dados, onOpenMarket }: { dados:
   const [marcados, setMarcados] = useState<string[]>([])
   const [quantidades, setQuantidades] = useState<Record<string, number>>({})
   const [distribuidoras, setDistribuidoras] = useState<Record<string, string>>({})
+  const [distribuidorasAtivas, setDistribuidorasAtivas] = useState<string[] | null>(null)
   const [aviso, setAviso] = useState('')
 
   useEffect(() => {
     setMarcados([])
     setQuantidades({})
     setDistribuidoras({})
+    setDistribuidorasAtivas(null)
     setAviso('')
   }, [dados.cliente.id])
-  const disponiveis = dados.sugestoes.filter(item => item.ofertas.length)
-  const selecionados = useMemo(() => dados.sugestoes.filter(item => marcados.includes(item.ean)), [dados.sugestoes, marcados])
-  const oferta = (item: SugestaoInteligencia) => item.ofertas.find(op => op.distribuidora === distribuidoras[item.ean]) || item.ofertas[0]
+  // O filtro é por UF do cliente; ao iniciar, todas as distribuidoras elegíveis participam.
+  // Uma lista vazia significa que o usuário desmarcou todas (não buscar ofertas).
+  const distribuidorasDisponiveis = useMemo(() => Array.from(new Set(
+    [...(dados.distribuidoras_disponiveis || []), ...dados.sugestoes.flatMap(item => item.ofertas.map(op => op.distribuidora))]
+      .map(nome => nome.trim()).filter(Boolean),
+  )).sort((a, b) => a.localeCompare(b, 'pt-BR')), [dados.distribuidoras_disponiveis, dados.sugestoes])
+  const ativas = distribuidorasAtivas === null ? distribuidorasDisponiveis : distribuidorasAtivas
+  const ofertasPara = (item: SugestaoInteligencia) => item.ofertas.filter(op => ativas.includes(op.distribuidora))
   const quantidade = (item: SugestaoInteligencia) => Math.max(1, Math.min(99999, quantidades[item.ean] || item.quantidade_sugerida))
-  const total = selecionados.reduce((soma, item) => soma + (oferta(item)?.preco || 0) * Math.min(quantidade(item), oferta(item)?.estoque || 0), 0)
+  const oferta = (item: SugestaoInteligencia) => {
+    const opcoes = ofertasPara(item)
+    const manual = opcoes.find(op => op.distribuidora === distribuidoras[item.ean])
+    // Comparação automática: menor preço com estoque para a quantidade informada.
+    return manual || opcoes.find(op => op.estoque >= quantidade(item)) || opcoes[0]
+  }
+  const disponiveis = dados.sugestoes.filter(item => ofertasPara(item).length)
+  const selecionados = useMemo(() => dados.sugestoes.filter(item => marcados.includes(item.ean)), [dados.sugestoes, marcados])
+  const total = selecionados.reduce((soma, item) => {
+    const escolhida = oferta(item)
+    return soma + (escolhida && escolhida.estoque >= quantidade(item) ? escolhida.preco * quantidade(item) : 0)
+  }, 0)
+
+  function definirDistribuidoras(proximas: string[]) {
+    setDistribuidorasAtivas(proximas)
+    // Não mantém no pedido produtos que perderam todas as ofertas após o filtro.
+    setMarcados(anteriores => anteriores.filter(ean => dados.sugestoes.some(item =>
+      item.ean === ean && item.ofertas.some(op => proximas.includes(op.distribuidora)),
+    )))
+    setAviso(proximas.length ? '' : 'Selecione pelo menos uma distribuidora para comparar os preços.')
+  }
 
   function enviar() {
     const itens = selecionados.map(item => {
@@ -71,7 +99,22 @@ export default function ClientPurchaseInsights({ dados, onOpenMarket }: { dados:
     </section>
     <section className="detail-section client-intelligence">
       <div className="client-insights-heading"><div><span className="eyebrow">Recomendação baseada no giro</span><h3>Sugestão de compras</h3></div><strong>{integer.format(disponiveis.length)} com oferta</strong></div>
-      <p>Escolha as quantidades e a distribuidora. O preço vem da última extração Mercado Farma para <b>{dados.cliente.uf}</b>. Nenhum pedido será enviado automaticamente.</p>
+      <p>Escolha as distribuidoras que deseja consultar, depois confirme as quantidades. O painel encontra o menor preço com estoque suficiente somente entre as selecionadas para <b>{dados.cliente.uf}</b>. Nenhum pedido será enviado automaticamente.</p>
+      <fieldset className="client-distributor-filter" aria-label="Distribuidoras para comparação de preços">
+        <legend>Distribuidoras para buscar o melhor preço em {dados.cliente.uf}</legend>
+        <div className="client-distributor-toolbar">
+          <span>{ativas.length} de {distribuidorasDisponiveis.length} selecionadas</span>
+          <button type="button" className="outline-button" onClick={() => { definirDistribuidoras(distribuidorasDisponiveis); }}>Selecionar todas</button>
+          <button type="button" className="outline-button" onClick={() => definirDistribuidoras([])}>Desmarcar todas</button>
+        </div>
+        {distribuidorasDisponiveis.length ? <div className="client-distributor-options">
+          {distribuidorasDisponiveis.map(nome => <label key={nome}>
+            <input type="checkbox" checked={ativas.includes(nome)} onChange={event => definirDistribuidoras(event.target.checked ? [...ativas, nome] : ativas.filter(item => item !== nome))} />
+            <span>{nome}</span>
+          </label>)}
+        </div> : <p>Nenhuma distribuidora com oferta e estoque identificada para esta UF na última extração.</p>}
+        <small>Preços e estoques dependem da última extração do Mercado Farma; os fornecedores desmarcados não entram na comparação nem no envio ao carrinho.</small>
+      </fieldset>
       {dados.avisos.map(aviso => <p className="client-rec-warning" key={aviso}>{aviso}</p>)}
       <div className="client-recommendation-actions">
         <button type="button" className="outline-button" onClick={() => setMarcados(disponiveis.map(item => item.ean))}>Selecionar disponíveis</button>
@@ -80,6 +123,7 @@ export default function ClientPurchaseInsights({ dados, onOpenMarket }: { dados:
       {dados.sugestoes.length === 0 && <p>Não há recomendações calculáveis neste momento. Confira se existem itens de pedidos faturados e produtos cadastrados.</p>}
       <div className="client-recommendations">
         {dados.sugestoes.map(item => {
+          const opcoes = ofertasPara(item)
           const escolhida = oferta(item)
           const qtd = quantidade(item)
           const semEstoque = !escolhida || escolhida.estoque < qtd
@@ -93,9 +137,9 @@ export default function ClientPurchaseInsights({ dados, onOpenMarket }: { dados:
                 <input aria-label={`Quantidade de ${item.produto}`} type="number" min="1" max="99999" value={qtd} onChange={event => setQuantidades(prev => ({ ...prev, [item.ean]: Math.max(1, Math.min(99999, Math.round(Number(event.target.value) || 1))) }))} />
               </label>
               <label>Distribuidora para {dados.cliente.uf}
-                <select aria-label={`Distribuidora de ${item.produto}`} disabled={!item.ofertas.length} value={escolhida?.distribuidora || ''} onChange={event => setDistribuidoras(prev => ({ ...prev, [item.ean]: event.target.value }))}>
-                  {!item.ofertas.length && <option value="">Sem oferta com estoque para esta UF</option>}
-                  {item.ofertas.map(op => <option key={op.distribuidora} value={op.distribuidora}>{op.distribuidora} · {money.format(op.preco)} · estoque {integer.format(op.estoque)}</option>)}
+                <select aria-label={`Distribuidora de ${item.produto}`} disabled={!opcoes.length} value={escolhida?.distribuidora || ''} onChange={event => setDistribuidoras(prev => ({ ...prev, [item.ean]: event.target.value }))}>
+                  {!opcoes.length && <option value="">{item.ofertas.length ? 'Sem oferta nas distribuidoras selecionadas' : 'Sem oferta com estoque para esta UF'}</option>}
+                  {opcoes.map(op => <option key={op.distribuidora} value={op.distribuidora}>{op.distribuidora} · {money.format(op.preco)} · estoque {integer.format(op.estoque)}</option>)}
                 </select>
               </label>
               <div className="client-recommendation-value"><small>Preço unitário</small><strong>{escolhida ? money.format(escolhida.preco) : 'Indisponível'}</strong>{escolhida && <small>Extração: {escolhida.atualizado_em ? new Date(escolhida.atualizado_em).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : 'data não informada'} · Sujeito à confirmação</small>}{escolhida && <small>{semEstoque ? 'Estoque insuficiente' : `Subtotal: ${money.format(escolhida.preco * qtd)}`}</small>}</div>
