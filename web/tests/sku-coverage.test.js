@@ -37,6 +37,7 @@ test('separa apresentações, SKUs distintos, unidades, faltantes e recompra por
 function fixture() {
   const db = new DatabaseSync(':memory:')
   db.exec(`CREATE TABLE produtos(id TEXT,ean TEXT,sku TEXT,descricao TEXT,tipo_mix TEXT,ativo INTEGER);
+    CREATE TABLE desafio_gigantes_metas(sku TEXT,ean TEXT,produto_identificado TEXT,produto_planilha TEXT,escopo TEXT,consultor_id TEXT,ano_mes TEXT);
     CREATE TABLE produtos_mix_sap(sku TEXT,descricao TEXT,tipo_mix TEXT,ativo INTEGER);
     CREATE TABLE clientes(id TEXT,cnpj TEXT,nome_fantasia TEXT,razao_social TEXT,consultor_id TEXT,ativo INTEGER,carteira_importada INTEGER,uf TEXT);
     CREATE TABLE pedidos(id TEXT,cliente_id TEXT,consultor_id TEXT,data_faturamento TEXT,data_pedido TEXT,status TEXT,ativo INTEGER);
@@ -88,4 +89,27 @@ test('inclui SAP sem EAN no denominador e une EANs do mesmo SKU sem duplicar cob
   assert.equal(data.resumo.LANCAMENTO.unidades, 15)
   assert.equal(data.resumo.LANCAMENTO.faltantes, 1)
   assert.equal(data.produtos.find(p => p.codigo_sap === 'SAP2').unidades, 0)
+})
+
+
+test('Desafio usa a campanha do consultor e período, inclui ausentes e não altera catálogo total', async () => {
+  const DB = fixture()
+  DB.exec(`INSERT INTO desafio_gigantes_metas VALUES
+    ('SAP1','111','Produto A','','consultor','me','2026-11'),
+    ('SAP1','111','Produto A','','consultor','me','2026-11'),
+    ('SAP3','333','Produto C','','consultor','me','2026-11'),
+    ('SAP9',NULL,'Produto pendente','','consultor','me','2026-11'),
+    ('SAP2','222','Outro mês','','consultor','me','2026-10'),
+    ('SAP4','444','Outro consultor','','consultor','other','2026-11');`)
+  const response = await onRequestGet({ request: await request('inicio=2026-11-01&fim=2026-11-03'), env: { DB, PAINEL_ADMIN_KEY: secret } })
+  assert.equal(response.status, 200)
+  const data = await response.json()
+  assert.equal(data.resumo.DESAFIO.total, 3)
+  assert.equal(data.resumo.DESAFIO.comprados, 1)
+  assert.equal(data.resumo.DESAFIO.faltantes, 2)
+  assert.equal(data.resumo.DESAFIO.unidades, 12)
+  assert.equal(data.resumo.TOTAL.total, 3)
+  const faltantes = data.produtos.filter(p => p.desafio && p.unidades === 0)
+  assert.deepEqual(faltantes.map(p => p.produto).sort(), ['Produto C', 'Produto pendente'])
+  assert.equal(data.clientes.find(c => c.id === 'c').grupos.DESAFIO.faltantes, 3)
 })
