@@ -33,6 +33,11 @@ def api(route):
         data = dict(database='ok')
     elif path == '/api/dashboard':
         data = dict(filtros=dict(consultores=[], ufs=['TO','MT','PA'], aplicado=dict(rotulo='Homologação fictícia')), atualizado_em=STAMP)
+    elif path == '/api/cobertura-skus':
+        def group(total, bought, units):
+            return dict(total=total, comprados=bought, faltantes=total-bought, percentual=round(bought/total*100, 1), unidades=units)
+        groups = dict(LANCAMENTO=group(52, 18, 243), PRIORITARIO=group(92, 37, 804), TOTAL=group(380, 85, 1942))
+        data = dict(resumo=groups, clientes=[dict(**CLIENT, grupos=groups)], produtos=[dict(sku='ean:'+EAN, ean=EAN, codigo_sap='', produto=ROW['produto'], tipo_mix='LANCAMENTO', unidades=243, clientes=1, clientes_recompra=1, ultima_compra='2026-10-22')], mensal=[dict(mes='2026-10', grupos=groups)], unidades_sem_catalogo=0, criterio='Dados fictícios de homologação.')
     elif path == '/api/clientes':
         data = dict(periodo=dict(rotulo='Homologação fictícia'), resumo=dict(clientes_ativos=1, clientes_com_venda=1, clientes_sem_venda=0, cobertura_percentual=100, faturamento_total=90, ticket_medio_cliente=90, prioridades={}), paginacao=dict(pagina=1, paginas=1, total=1), filtros=dict(consultores=[], ufs=['TO'], cidades=['Palmas']), clientes=[CLIENT])
     elif path == '/api/clientes/detalhe':
@@ -70,6 +75,10 @@ def main():
                 expect(page.get_by_role('heading', name='Olá, Maurício')).to_be_visible()
                 expect(page.get_by_role('heading', name='Visão Geral', exact=True)).to_have_count(0)
                 expect(page.get_by_role('button', name='Baixar app', exact=True)).to_have_count(1)
+                expect(page.get_by_text('18 / 52 SKUs', exact=True)).to_be_visible()
+                expect(page.get_by_text('37 / 92 SKUs', exact=True)).to_be_visible()
+                page.get_by_text('Cobertura de cada cliente (1)', exact=True).click()
+                expect(page.locator('.sku-coverage table').first).to_contain_text(CLIENT['nome'])
                 page.screenshot(path=str(OUT / f'depois-home-{name}.png'), full_page=True)
                 page.get_by_role('button', name='Central de automações', exact=True).click()
                 expect(page.get_by_role('heading', name='Central de Automações', exact=True)).to_be_visible()
@@ -78,6 +87,12 @@ def main():
                 page.get_by_role('button', name='Ver ficha', exact=True).click()
                 dialog = page.get_by_role('dialog')
                 expect(dialog.get_by_role('heading', name='Sugestão de compras', exact=True)).to_be_visible()
+                expect(dialog.get_by_text('18 / 52 SKUs', exact=True)).to_be_visible()
+                expect(dialog.get_by_text('243 unidades faturadas', exact=True)).to_be_visible()
+                dialog.get_by_text('Giro, recompra e produtos que faltam', exact=True).click()
+                expect(dialog.locator('.sku-coverage table').last).to_contain_text(ROW['produto'])
+                dialog.locator('.sku-filters select').nth(1).select_option('FALTANTES')
+                expect(dialog.get_by_text('Nenhum produto para estes filtros.', exact=True)).to_be_visible()
                 box = dialog.bounding_box()
                 assert box['width'] >= width - 2 and box['x'] <= 1, box
                 page.screenshot(path=str(OUT / f'depois-ficha-{name}.png'), full_page=True)
@@ -110,3 +125,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+
