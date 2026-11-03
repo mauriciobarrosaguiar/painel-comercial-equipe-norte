@@ -1,3 +1,4 @@
+import SkuCoverage from './SkuCoverage'
 import { useEffect, useMemo, useState } from 'react'
 import IntegrationSettings from './IntegrationSettings'
 import ConsultantsModule from './ConsultantsModule'
@@ -220,6 +221,8 @@ export default function App({ user, page, onNavigate, onLogout, onInstall }: Pro
             </article>
           </section>
 
+          <SkuCoverage inicio={selected.inicio || undefined} fim={selected.fim || undefined} uf={uf} />
+
           <section className="section-heading"><div><span className="eyebrow">Acesso rápido</span><h2>Módulos do painel</h2></div><span className="development-note">{status}</span></section>
           {[
             ['Vendas e metas', ['Meu desempenho', 'Foco Semanal', 'Desafio de Gigantes', 'Histórico']],
@@ -241,3 +244,4 @@ export default function App({ user, page, onNavigate, onLogout, onInstall }: Pro
     </div>
   )
 }
+
