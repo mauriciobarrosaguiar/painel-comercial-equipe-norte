@@ -49,9 +49,15 @@ export async function onRequestGet({ request, env }) {
           AND DATE(COALESCE(pe.data_faturamento,pe.data_pedido)) IS NOT NULL
           ${inicio ? 'AND DATE(COALESCE(pe.data_faturamento,pe.data_pedido)) BETWEEN DATE(?) AND DATE(?)' : ''}
         GROUP BY 1,2,3`).bind(...binds, session.consultor_id, ...(inicio ? [inicio, fim] : [])),
+      env.DB.prepare(`SELECT TRIM(sku) sku,MAX(NULLIF(TRIM(ean),'')) ean,
+        MAX(COALESCE(NULLIF(TRIM(produto_identificado),''),NULLIF(TRIM(produto_planilha),''),'SAP '||sku)) descricao
+        FROM desafio_gigantes_metas
+        WHERE escopo='consultor' AND consultor_id=? AND TRIM(COALESCE(sku,''))<>''
+          ${inicio ? 'AND ano_mes BETWEEN ? AND ?' : ''}
+        GROUP BY TRIM(sku)`).bind(session.consultor_id, ...(inicio ? [inicio.slice(0, 7), fim.slice(0, 7)] : [])),
     ])
     if (id && !result[1].results?.length) return json({ erro: 'Cliente não encontrado na sua carteira.' }, 404)
-    return json({ ...analisarSkus(result[0].results || [], result[2].results || [], result[1].results || [], inicio, fim),
+    return json({ ...analisarSkus(result[0].results || [], result[2].results || [], result[1].results || [], inicio, fim, result[3].results || []),
       periodo: { inicio, fim },
       criterio: 'Unidades faturadas no Bússola. Catálogo ativo e MIX SAP completo; identificação por SKU SAP, ou EAN quando não há SAP. Cada apresentação é contada separadamente. Recompra: mesmo SKU em pelo menos dois pedidos do cliente no período. Histórico mensal agregado sem produtos não permite identificar SKUs. Compra da farmácia não mede saída ao consumidor.' })
   } catch (error) {
