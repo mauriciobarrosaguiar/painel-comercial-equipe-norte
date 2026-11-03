@@ -91,7 +91,10 @@ def main():
                     expect(sheet).to_contain_text('Nenhum produto para esta busca.')
                     sheet.get_by_role('searchbox').fill('')
                     page.screenshot(path=str(OUT / f'depois-skus-{label.split()[0]}-{name}.png'), full_page=True)
-                    page.keyboard.press('Escape')
+                    if label == 'Desafio de Gigantes':
+                        sheet.get_by_role('button', name='Fechar ficha', exact=True).click()
+                    else:
+                        page.keyboard.press('Escape')
                     expect(sheet).to_have_count(0)
                     expect(card).to_be_focused()
                 page.get_by_text('Cobertura de cada cliente (1)', exact=True).click()
