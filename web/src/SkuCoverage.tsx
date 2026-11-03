@@ -21,7 +21,7 @@ export default function SkuCoverage({ clienteId = '', inicio = '', fim = '', uf 
     setData(null); setError('')
     const params = new URLSearchParams({ id: clienteId, inicio, fim, uf })
     fetch(`/api/cobertura-skus?${params}`, { cache: 'no-store', signal: controller.signal })
-      .then(async response => { const body = await response.json(); if (!response.ok) throw new Error(body.erro || 'Falha na consulta.'); return body })
+      .then(async response => { const body = await response.json(); if (!response.ok || !body.resumo || !Array.isArray(body.produtos)) throw new Error(body.erro || 'Falha na consulta.'); return body })
       .then(setData).catch(reason => { if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : 'Falha na consulta.') })
     return () => controller.abort()
   }, [clienteId, inicio, fim, uf, retry])
