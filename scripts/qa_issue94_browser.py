@@ -15,6 +15,7 @@ OUT = ROOT / 'docs/qa/issue94'
 OUT.mkdir(parents=True, exist_ok=True)
 EAN = '7896004700001'
 STAMP = '2026-10-22T15:00:00-03:00'
+DAILY_GOAL = dict(ativa=True, sem_meta=False, atingida=False, valor=1234.56, falta=23456.64, dias_uteis_restantes=19, inclui_hoje=True, faltas={'80': 10000, '90': 15000, '100': 23456.64})
 USER = dict(login='qa-local', nome='Maurício · HOMOLOGAÇÃO FICTÍCIA', consultor_id='qa')
 CLIENT = dict(id='qa1', cnpj='00000000000191', nome='Farmácia Teste · Dados fictícios', cidade='Palmas', uf='TO', consultor=USER['nome'], gd='', faturamento_atual=90, faturamento_anterior=60, variacao_percentual=50, pedidos_atual=1, ticket_medio=90, produtos_comprados=1, produtos_prioritarios=0, produtos_lancamentos=0, ultima_compra='2026-10-22', dias_sem_comprar=0, prioridade='BAIXA', motivo_prioridade='Fixture')
 ROW = dict(uf='TO', ean=EAN, produto='Produto de homologação', distribuidora='Distribuidora Teste', estoque=20, desconto=.5, pf_distribuidora=20, pf_fabrica=20, preco_com_imposto=12, preco_sem_imposto=10, melhor_preco=10, atualizado_em=STAMP)
@@ -32,7 +33,7 @@ def api(route):
     elif path == '/api/health':
         data = dict(database='ok')
     elif path == '/api/dashboard':
-        data = dict(filtros=dict(consultores=[], ufs=['TO','MT','PA'], aplicado=dict(rotulo='Homologação fictícia')), atualizado_em=STAMP)
+        data = dict(filtros=dict(consultores=[], ufs=['TO','MT','PA'], aplicado=dict(rotulo='Homologação fictícia')), atualizado_em=STAMP, metas_diarias={key: DAILY_GOAL for key in ['ol_sem_combate', 'ol_prioritarios', 'ol_lancamentos']})
     elif path == '/api/cobertura-skus':
         def group(total, bought, units):
             return dict(total=total, comprados=bought, faltantes=total-bought, percentual=round(bought/total*100, 1), unidades=units)
@@ -78,6 +79,8 @@ def main():
                 expect(page.get_by_role('heading', name='Olá, Maurício')).to_be_visible()
                 expect(page.get_by_role('heading', name='Visão Geral', exact=True)).to_have_count(0)
                 expect(page.get_by_role('button', name='Baixar app', exact=True)).to_have_count(1)
+                expect(page.locator('.goal-grid .daily-goal')).to_have_count(3)
+                expect(page.locator('.goal-grid .daily-goal').first).to_contain_text('1.234,56')
                 expect(page.get_by_text('1 / 2 SKUs', exact=True)).to_be_visible()
                 expect(page.get_by_text('0 / 1 SKUs', exact=True)).to_be_visible()
                 for label, missing in [('Lançamentos', 'Lançamento não vendido'), ('Prioritários', 'Prioritário não vendido'), ('Catálogo total', 'Linha não vendida'), ('Desafio de Gigantes', 'Gigante não vendido')]:
@@ -152,4 +155,5 @@ def main():
 
 if __name__ == '__main__':
     main()
+
 

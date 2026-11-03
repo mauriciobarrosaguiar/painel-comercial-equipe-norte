@@ -25,7 +25,7 @@ function MissingProductsDialog({ label, products, periodo, onClose }: { label: s
     onCancel={event => { event.preventDefault(); close() }}
     onKeyDown={event => { if (event.key === 'Escape') { event.stopPropagation(); event.preventDefault(); close() } }}
     onClick={event => { if (event.target === event.currentTarget) close() }}>
-    <div className="sku-dialog-content"><header><div><h2>{label}: produtos não vendidos</h2><p>{periodo} · {num.format(products.length)} SKUs sem faturamento identificado</p></div>
+    <div className="sku-dialog-content"><header><div><h2>{label}: produtos não vendidos</h2><p>{periodo} · {num.format(products.length)} SKUs sem saldo positivo de unidades no período</p></div>
       <button type="button" className="secondary-button" onClick={close} autoFocus>Fechar ficha</button></header>
       <label className="sku-dialog-search">Buscar produto, EAN ou SAP<input type="search" value={search} onChange={e => setSearch(e.target.value)} /></label>
       <div className="sku-scroll"><table><thead><tr><th>Produto</th><th>EAN</th><th>SAP</th></tr></thead><tbody>
@@ -62,7 +62,7 @@ export default function SkuCoverage({ clienteId = '', inicio = '', fim = '', uf 
     return () => controller.abort()
   }, [clienteId, inicio, fim, uf, retry])
   const products = (data?.produtos || []).filter(p => belongsToGroup(p, group)
-    && (status === 'TODOS' || (status === 'COMPRADOS' ? p.unidades > 0 : p.unidades === 0))
+    && (status === 'TODOS' || (status === 'COMPRADOS' ? p.unidades > 0 : p.unidades <= 0))
     && `${p.produto} ${p.sku} ${p.ean}`.toLocaleLowerCase('pt-BR').includes(search.toLocaleLowerCase('pt-BR')))
   return <section className="sku-coverage" aria-label="Cobertura de SKUs e unidades">
     <header><h2>{clienteId ? 'SKUs comprados pelo cliente' : 'Meus SKUs vendidos e unidades'}</h2>
@@ -78,7 +78,7 @@ export default function SkuCoverage({ clienteId = '', inicio = '', fim = '', uf 
       <p className="sku-note">{data.criterio}</p>
       {data.resumo.DESAFIO?.total === 0 && <p className="sku-note">Desafio de Gigantes: não há produtos da campanha cadastrados para o período. Importe as metas da campanha na Administração.</p>}
       {openedGroup && <MissingProductsDialog label={labels.find(([key]) => key === openedGroup)?.[1] || ''} periodo={periodo}
-        products={data.produtos.filter(p => belongsToGroup(p, openedGroup) && p.unidades === 0)} onClose={closeSheet} />}
+        products={data.produtos.filter(p => belongsToGroup(p, openedGroup) && p.unidades <= 0)} onClose={closeSheet} />}
       {data.unidades_sem_catalogo > 0 && <p className="sku-note">O total inclui {num.format(data.unidades_sem_catalogo)} unidades sem correspondência no catálogo ativo; elas não aumentam a cobertura de lançamentos ou prioritários.</p>}
       {!clienteId && <details><summary>Cobertura de cada cliente ({data.clientes.length})</summary><div className="sku-scroll"><table><thead><tr><th>Cliente / CNPJ</th><th>Lançamentos SKUs</th><th>Unidades lanç.</th><th>Prioritários SKUs</th><th>Unidades prior.</th><th>Unidades totais</th></tr></thead><tbody>
         {data.clientes.map(c => <tr key={c.id}><th scope="row">{c.nome}<small>{c.cnpj}</small></th><td>{c.grupos.LANCAMENTO.comprados} / {c.grupos.LANCAMENTO.total}</td><td>{num.format(c.grupos.LANCAMENTO.unidades)}</td><td>{c.grupos.PRIORITARIO.comprados} / {c.grupos.PRIORITARIO.total}</td><td>{num.format(c.grupos.PRIORITARIO.unidades)}</td><td>{num.format(c.grupos.TOTAL.unidades)}</td></tr>)}
@@ -98,3 +98,4 @@ export default function SkuCoverage({ clienteId = '', inicio = '', fim = '', uf 
     </>}
   </section>
 }
+

@@ -1,3 +1,4 @@
+import { diasUteis } from '../../_lib/business-calendar.js'
 import {
   ITEM_FATURADO,
   MIX_SEM_COMBATE,
@@ -15,19 +16,6 @@ const hoje = () => new Intl.DateTimeFormat('en-CA', {
   month: '2-digit',
   day: '2-digit',
 }).format(new Date())
-
-function diasUteis(inicio, fim) {
-  if (!inicio || !fim || inicio > fim) return 0
-  const atual = new Date(`${inicio}T12:00:00Z`)
-  const final = new Date(`${fim}T12:00:00Z`)
-  let total = 0
-  while (atual <= final) {
-    const dia = atual.getUTCDay()
-    if (dia !== 0 && dia !== 6) total += 1
-    atual.setUTCDate(atual.getUTCDate() + 1)
-  }
-  return total
-}
 
 function projetar(valor, inicio, fim) {
   const dataHoje = hoje()
@@ -303,3 +291,4 @@ export async function onRequestGet({ request, env }) {
     }, 500)
   }
 }
+

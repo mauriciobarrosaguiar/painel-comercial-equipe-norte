@@ -38,14 +38,14 @@ export async function onRequestGet({ request, env }) {
           WHEN TRIM(COALESCE(pr.ean,ip.ean,''))<>'' THEN 'ean:'||TRIM(COALESCE(pr.ean,ip.ean))
           WHEN COALESCE(pr.id,ip.produto_id) IS NOT NULL THEN 'id:'||COALESCE(pr.id,ip.produto_id) END sku,
         SUBSTR(DATE(COALESCE(pe.data_faturamento,pe.data_pedido)),1,7) mes,
-        SUM(ip.quantidade_faturada) quantidade,COUNT(DISTINCT pe.id) pedidos,
-        MAX(DATE(COALESCE(pe.data_faturamento,pe.data_pedido))) ultima_compra
+        SUM(ip.quantidade_faturada) quantidade,COUNT(DISTINCT CASE WHEN ip.quantidade_faturada>0 THEN pe.id END) pedidos,
+        MAX(CASE WHEN ip.quantidade_faturada>0 THEN DATE(COALESCE(pe.data_faturamento,pe.data_pedido)) END) ultima_compra
         FROM pedidos pe JOIN clientes cl ON cl.id=pe.cliente_id
         JOIN itens_pedido ip ON ip.pedido_id=pe.id
         LEFT JOIN produtos pr ON pr.id=ip.produto_id OR
           (ip.produto_id IS NULL AND TRIM(COALESCE(ip.ean,''))<>'' AND pr.ean=TRIM(ip.ean))
         WHERE ${where} AND pe.consultor_id=? AND ${ITEM_FATURADO}
-          AND ip.quantidade_faturada>0
+          AND ip.quantidade_faturada<>0
           AND DATE(COALESCE(pe.data_faturamento,pe.data_pedido)) IS NOT NULL
           ${inicio ? 'AND DATE(COALESCE(pe.data_faturamento,pe.data_pedido)) BETWEEN DATE(?) AND DATE(?)' : ''}
         GROUP BY 1,2,3`).bind(...binds, session.consultor_id, ...(inicio ? [inicio, fim] : [])),
@@ -59,8 +59,9 @@ export async function onRequestGet({ request, env }) {
     if (id && !result[1].results?.length) return json({ erro: 'Cliente não encontrado na sua carteira.' }, 404)
     return json({ ...analisarSkus(result[0].results || [], result[2].results || [], result[1].results || [], inicio, fim, result[3].results || []),
       periodo: { inicio, fim },
-      criterio: 'Unidades faturadas no Bússola. Catálogo ativo e MIX SAP completo; identificação por SKU SAP, ou EAN quando não há SAP. Cada apresentação é contada separadamente. Recompra: mesmo SKU em pelo menos dois pedidos do cliente no período. Histórico mensal agregado sem produtos não permite identificar SKUs. Compra da farmácia não mede saída ao consumidor.' })
+      criterio: 'Unidades líquidas faturadas no Bússola, descontando estornos/devoluções negativos registrados. Cobertura exige saldo de unidades positivo no período. Catálogo ativo e MIX SAP completo; identificação por SKU SAP, ou EAN quando não há SAP. Cada apresentação é contada separadamente. Recompra: mesmo SKU em pelo menos dois pedidos do cliente no período. Histórico mensal agregado sem produtos não permite identificar SKUs. Compra da farmácia não mede saída ao consumidor.' })
   } catch (error) {
     return json({ erro: 'Não foi possível calcular a cobertura de SKUs.' }, 500)
   }
 }
+
