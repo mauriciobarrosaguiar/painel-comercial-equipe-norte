@@ -28,7 +28,7 @@ export function gerarInteligencia(catalogo, compras, periodo, limite = 45) {
   const produtos = catalogo.filter(produto => String(produto.ean || '').trim())
   const comprados = produtos.filter(produto => {
     const compra = comprasPorId.get(String(produto.id))
-    return compra && inteiro(compra.linhas_3m) > 0
+    return compra && inteiro(compra.quantidade_3m) > 0
   })
   const cobertura = {
     total: produtos.length,
@@ -45,12 +45,10 @@ export function gerarInteligencia(catalogo, compras, periodo, limite = 45) {
     const compra = comprasPorId.get(String(produto.id))
     const tres = inteiro(compra?.quantidade_3m)
     const seis = inteiro(compra?.quantidade_6m)
-    const linhas3 = inteiro(compra?.linhas_3m)
     const mix = String(produto.tipo_mix || '').toUpperCase()
     const vendidoMesAtual = inteiro(compra?.quantidade_mes_atual)
-    const linhasMesAtual = inteiro(compra?.linhas_mes_atual)
     let tipo, quantidade, justificativa, ordem
-    if (linhas3 > 0) {
+    if (tres > 0) {
       tipo = 'REPOSICAO'
       quantidade = Math.max(1, Math.ceil(tres / 3))
       justificativa = `Comprou ${tres} un. nos 3 meses anteriores; média de ${quantidade} un./mês.`
@@ -60,7 +58,7 @@ export function gerarInteligencia(catalogo, compras, periodo, limite = 45) {
       quantidade = Math.max(1, Math.ceil(seis / 6))
       justificativa = `Já comprou este produto no histórico anterior, porém não faturou nos 3 últimos meses completos.`
       ordem = 0
-    } else if ((mix === 'PRIORITARIO' || mix === 'LANCAMENTO') && linhasMesAtual === 0) {
+    } else if ((mix === 'PRIORITARIO' || mix === 'LANCAMENTO') && vendidoMesAtual === 0) {
       tipo = 'EXPANSAO_MIX'
       quantidade = 1
       justificativa = 'Produto do mix ainda sem compra identificada; quantidade inicial sugerida para avaliação, não previsão de demanda.'
@@ -71,13 +69,13 @@ export function gerarInteligencia(catalogo, compras, periodo, limite = 45) {
     // necessidades parcialmente atendidas ficam com o saldo restante.
     const quantidadeBase = quantidade
     const quantidadePendente = Math.max(0, quantidadeBase - vendidoMesAtual)
-    if (!quantidadePendente || (tipo === 'EXPANSAO_MIX' && linhasMesAtual > 0)) continue
+    if (!quantidadePendente || (tipo === 'EXPANSAO_MIX' && vendidoMesAtual > 0)) continue
     justificativa += ` Em ${periodo.inicio_mes_atual.slice(0, 7)}: ${vendidoMesAtual} un. já faturadas; saldo sugerido: ${quantidadePendente} un.`
 
     sugestoes.push({
       id: String(produto.id), ean: String(produto.ean), produto: String(produto.descricao),
       tipo_mix: mix, tipo, quantidade_sugerida: quantidadePendente, quantidade_base: quantidadeBase,
-      quantidade_mes_atual: vendidoMesAtual, ja_faturado_mes_atual: linhasMesAtual > 0, justificativa,
+      quantidade_mes_atual: vendidoMesAtual, ja_faturado_mes_atual: vendidoMesAtual > 0, justificativa,
       quantidade_3m: tres, quantidade_6m: seis,
       ultima_compra: compra?.ultima_compra || null,
       pedidos_3m: inteiro(compra?.pedidos_3m), ordem,
@@ -86,3 +84,4 @@ export function gerarInteligencia(catalogo, compras, periodo, limite = 45) {
   sugestoes.sort((a, b) => a.ordem - b.ordem || b.quantidade_3m - a.quantidade_3m || b.quantidade_6m - a.quantidade_6m || a.produto.localeCompare(b.produto, 'pt-BR'))
   return { cobertura, sugestoes: sugestoes.slice(0, limite).map(({ ordem, ...resto }) => resto) }
 }
+

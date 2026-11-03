@@ -29,6 +29,13 @@ test('cobertura conta somente os EANs faturados nos três meses, e sugere reposi
   assert.equal(sugestoes.find(item => item.id === 'p2').tipo, 'EXPANSAO_MIX')
   assert.equal(sugestoes.find(item => item.id === 'p3').tipo, 'REATIVACAO')
 })
+test('compra totalmente estornada não vira reposição mínima artificial', () => {
+  const periodo = mesesReferencia(new Date('2026-11-03T15:00:00Z'))
+  const data = gerarInteligencia([{ id: 'p', ean: '111', descricao: 'Linha', tipo_mix: 'LINHA' }],
+    [{ id: 'p', linhas_3m: 2, quantidade_3m: 0, quantidade_6m: 0 }], periodo)
+  assert.equal(data.cobertura.comprados, 0)
+  assert.equal(data.sugestoes.length, 0)
+})
 
 test('sugestão usa a média dos três meses fechados e desconta vendas do mês corrente', () => {
   const periodo = mesesReferencia(new Date('2026-10-27T13:00:00Z'))
@@ -95,4 +102,5 @@ test('análise exige sessão da carteira e oferece somente UF do cliente com est
   const forjado = await inteligencia({ request: new Request('https://painel.local/api/clientes/inteligencia?id=cl-nao-autorizado', { headers }), env: { DB, PAINEL_ADMIN_KEY: segredo } })
   assert.equal(forjado.status, 404)
 })
+
 

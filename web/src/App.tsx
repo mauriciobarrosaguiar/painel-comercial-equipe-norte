@@ -1,3 +1,4 @@
+import DailyGoal from './DailyGoal'
 import SkuCoverage from './SkuCoverage'
 import { useEffect, useMemo, useState } from 'react'
 import IntegrationSettings from './IntegrationSettings'
@@ -211,6 +212,7 @@ export default function App({ user, page, onNavigate, onLogout, onInstall }: Pro
               <strong>{state === 'carregando' ? '—' : money.format(dashboard[key] || 0)}</strong>
               <div className="goal-details"><span>Meta</span><b>{money.format(dashboard[meta] || 0)}</b></div>
               <div className="goal-details"><span>Projeção do mês</span><b>{dashboard.projecao?.ativa ? money.format(dashboard.projecao[key] || 0) : 'Período concluído'}</b></div>
+              <DailyGoal goal={state === 'carregando' ? undefined : dashboard.metas_diarias?.[key]} />
               <small>{dashboard.projecao?.ativa ? `${pct.format(dashboard.projecao[`resultado_${key}`] || 0)}% projetado · ${dashboard.projecao.dias_uteis_decorridos}/${dashboard.projecao.dias_uteis_total} dias úteis` : filter}</small>
             </article>)}
             <article className="goal-card">
@@ -244,4 +246,5 @@ export default function App({ user, page, onNavigate, onLogout, onInstall }: Pro
     </div>
   )
 }
+
 

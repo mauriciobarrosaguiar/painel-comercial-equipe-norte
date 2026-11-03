@@ -72,7 +72,7 @@ export async function onRequestGet({ request, env }) {
 
     const [summaryResult, rowsResult, ufsResult, distributorsResult, extractionResult, clientsResult] = await env.DB.batch([
       env.DB.prepare(`SELECT COUNT(*) registros,COUNT(DISTINCT ean) produtos,COUNT(DISTINCT uf) ufs,COUNT(DISTINCT distribuidora) distribuidoras,MAX(atualizado_em) atualizado_em,COALESCE(SUM(CASE WHEN estoque>0 THEN 1 ELSE 0 END),0) com_estoque FROM mercado_farma_precos WHERE ${where}`).bind(...binds),
-      env.DB.prepare(`SELECT uf,ean,produto,distribuidora,estoque,desconto,pf_distribuidora,pf_fabrica,preco_com_imposto,preco_sem_imposto,status,erro,atualizado_em,MIN(CASE WHEN estoque>0 THEN preco_sem_imposto END) OVER(PARTITION BY uf,ean) melhor_preco FROM mercado_farma_precos WHERE ${where} ORDER BY produto COLLATE NOCASE,CASE WHEN estoque>0 AND preco_sem_imposto>0 THEN preco_sem_imposto ELSE 999999999 END,distribuidora COLLATE NOCASE LIMIT ?`).bind(...binds, limit),
+      env.DB.prepare(`SELECT uf,ean,produto,distribuidora,estoque,desconto,pf_distribuidora,pf_fabrica,preco_com_imposto,preco_sem_imposto,status,erro,atualizado_em,MIN(CASE WHEN estoque>0 AND UPPER(TRIM(COALESCE(status,'OK')))='OK' THEN CASE WHEN preco_sem_imposto>0 THEN preco_sem_imposto WHEN preco_com_imposto>0 THEN preco_com_imposto END END) OVER(PARTITION BY uf,ean) melhor_preco FROM mercado_farma_precos WHERE ${where} ORDER BY produto COLLATE NOCASE,CASE WHEN estoque>0 AND preco_sem_imposto>0 THEN preco_sem_imposto ELSE 999999999 END,distribuidora COLLATE NOCASE LIMIT ?`).bind(...binds, limit),
       env.DB.prepare("SELECT DISTINCT UPPER(TRIM(uf)) uf FROM mercado_farma_precos WHERE TRIM(COALESCE(uf,''))<>'' ORDER BY uf"),
       env.DB.prepare(`SELECT DISTINCT distribuidora FROM mercado_farma_precos ${distributorWhere} ${distributorWhere ? 'AND' : 'WHERE'} TRIM(COALESCE(distribuidora,''))<>'' ORDER BY distribuidora COLLATE NOCASE`).bind(...distributorBinds),
       env.DB.prepare("SELECT status,total_registros,mensagem,erro,iniciado_em,finalizado_em,criado_em FROM extracoes WHERE tipo='MERCADO_FARMA' ORDER BY criado_em DESC LIMIT 1"),
@@ -121,3 +121,4 @@ export async function onRequestGet({ request, env }) {
     return json({ erro: 'Não foi possível carregar o Mercado Farma.', detalhe: error instanceof Error ? error.message : String(error) }, 500)
   }
 }
+

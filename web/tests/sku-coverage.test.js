@@ -11,6 +11,21 @@ const catalog = [
   { id: 'p3', ean: '333', descricao: 'Produto 20mg 60cp', tipo_mix: 'PRIORITARIO' },
 ]
 const clients = [{ id: 'a', nome: 'A' }, { id: 'b', nome: 'B' }, { id: 'c', nome: 'Sem compras' }]
+test('estorno em outro mês reduz unidades e retira SKU totalmente devolvido da cobertura', () => {
+  const rows = [
+    { cliente_id: 'a', sku: '111', mes: '2026-10', quantidade: 10, pedidos: 1 },
+    { cliente_id: 'a', sku: '111', mes: '2026-11', quantidade: -10, pedidos: 0 },
+    { cliente_id: 'a', sku: '222', mes: '2026-11', quantidade: 5, pedidos: 2 },
+    { cliente_id: 'a', sku: '222', mes: '2026-11', quantidade: -2, pedidos: 0 },
+  ]
+  const data = analisarSkus(catalog, rows, clients)
+  assert.equal(data.resumo.TOTAL.unidades, 3)
+  assert.equal(data.resumo.LANCAMENTO.comprados, 0)
+  assert.equal(data.resumo.PRIORITARIO.comprados, 1)
+  assert.equal(data.produtos.find(p => p.sku === '111').clientes, 0)
+  assert.equal(data.produtos.find(p => p.sku === '222').unidades, 3)
+  assert.equal(data.mensal.find(m => m.mes === '2026-11').grupos.LANCAMENTO.unidades, -10)
+})
 test('separa apresentações, SKUs distintos, unidades, faltantes e recompra por cliente', () => {
   const rows = [
     { cliente_id: 'a', sku: '111', mes: '2026-09', quantidade: 5, pedidos: 2 },
@@ -67,6 +82,14 @@ test('SQL real respeita período, carteira, pedidos e itens ativos, e correspond
   assert.equal(data.clientes.length, 2)
   assert.equal(data.produtos.find(p => p.sku === 'ean:111').clientes_recompra, 1)
 })
+test('API inclui estornos faturados e exclui pedidos de devolução da recompra', async () => {
+  const DB = fixture()
+  DB.exec("INSERT INTO itens_pedido VALUES('return','o2','p1','111',-12,1)")
+  const data = await (await onRequestGet({ request: await request('inicio=2026-11-01&fim=2026-11-03'), env: { DB, PAINEL_ADMIN_KEY: secret } })).json()
+  assert.equal(data.resumo.LANCAMENTO.unidades, 0)
+  assert.equal(data.resumo.LANCAMENTO.comprados, 0)
+  assert.equal(data.produtos.find(p => p.sku === 'ean:111').clientes_recompra, 0)
+})
 test('nega acesso sem sessão e a cliente de outro consultor; valida datas', async () => {
   const env = { DB: fixture(), PAINEL_ADMIN_KEY: secret }
   assert.equal((await onRequestGet({ request: await request('', false), env })).status, 401)
@@ -113,3 +136,4 @@ test('Desafio usa a campanha do consultor e período, inclui ausentes e não alt
   assert.deepEqual(faltantes.map(p => p.produto).sort(), ['Produto C', 'Produto pendente'])
   assert.equal(data.clientes.find(c => c.id === 'c').grupos.DESAFIO.faltantes, 3)
 })
+

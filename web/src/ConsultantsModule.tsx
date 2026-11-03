@@ -1,3 +1,4 @@
+import DailyGoal, { type DailyGoalData } from './DailyGoal'
 import { useEffect, useMemo, useState } from 'react'
 import ConsultantPerformanceReport from './ConsultantPerformanceReport'
 import './consultants.css'
@@ -10,6 +11,7 @@ type PendingMixValues = {
   combate: number
 }
 type Row = {
+  metas_diarias?: Record<string, DailyGoalData>
   id: string
   nome: string
   setor: string
@@ -531,16 +533,19 @@ export default function ConsultantsModule({ onBack }: { onBack: () => void }) {
                     <span>Sem combate</span>
                     <strong>{money.format(consultant.ol_sem_combate)}</strong>
                     <small>Meta {money.format(consultant.meta_ol_sem_combate)} · <b className={cls(consultant.resultado_meta_ol)}>{pct.format(consultant.resultado_meta_ol)}%</b></small>
+                    <DailyGoal goal={consultant.metas_diarias?.ol_sem_combate} showGaps />
                   </div>
                   <div className="consultant-metric">
                     <span>Prioritários</span>
                     <strong>{money.format(consultant.ol_prioritarios)}</strong>
                     <small>Meta {money.format(consultant.meta_ol_prioritarios)} · <b className={cls(ratio(consultant.ol_prioritarios, consultant.meta_ol_prioritarios))}>{pct.format(ratio(consultant.ol_prioritarios, consultant.meta_ol_prioritarios))}%</b></small>
+                    <DailyGoal goal={consultant.metas_diarias?.ol_prioritarios} showGaps />
                   </div>
                   <div className="consultant-metric">
                     <span>Lançamentos</span>
                     <strong>{money.format(consultant.ol_lancamentos)}</strong>
                     <small>Meta {money.format(consultant.meta_ol_lancamentos)} · <b className={cls(ratio(consultant.ol_lancamentos, consultant.meta_ol_lancamentos))}>{pct.format(ratio(consultant.ol_lancamentos, consultant.meta_ol_lancamentos))}%</b></small>
+                    <DailyGoal goal={consultant.metas_diarias?.ol_lancamentos} showGaps />
                   </div>
                   <div className="consultant-metric consultant-pending-metric">
                     <span>Atendidos e ainda não faturados</span>
@@ -609,3 +614,4 @@ export default function ConsultantsModule({ onBack }: { onBack: () => void }) {
     </main>
   )
 }
+

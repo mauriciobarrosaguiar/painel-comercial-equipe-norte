@@ -1,3 +1,4 @@
+import { metasDiarias } from '../_lib/business-calendar.js'
 import {
   ITEM_ATIVO,
   MIX_SEM_COMBATE,
@@ -83,6 +84,13 @@ export async function onRequestGet({ request, env }) {
         FROM metas WHERE escopo='consultor' AND ${metaCond}
         GROUP BY consultor_id
       ),
+      saldos_clientes AS (
+        SELECT pe.cliente_id, SUM(ip.valor_faturado) saldo
+        FROM pedidos pe JOIN itens_pedido ip ON ip.pedido_id=pe.id AND ${ITEM_ATIVO}
+        WHERE ${PEDIDO_FATURADO}
+          ${faixa.inicio ? 'AND DATE(COALESCE(pe.data_faturamento,pe.data_pedido)) BETWEEN DATE(?) AND DATE(?)' : ''}
+        GROUP BY pe.cliente_id
+      ),
       pendentes_periodo AS (
         SELECT cl.consultor_id,
           COUNT(DISTINCT pe.id) pedidos_nao_faturados,
@@ -100,7 +108,7 @@ export async function onRequestGet({ request, env }) {
       )
       SELECT c.id,c.nome,MIN(NULLIF(TRIM(cl.setor_rep),'')) AS setor_carteira,
         COUNT(DISTINCT cl.id) AS clientes_ativos,
-        COUNT(DISTINCT CASE WHEN pe.id IS NOT NULL AND COALESCE(ip.valor_faturado,0)>0 THEN cl.id END) AS clientes_com_venda,
+        COUNT(DISTINCT CASE WHEN COALESCE(sc.saldo,0)>0 THEN cl.id END) AS clientes_com_venda,
         COUNT(DISTINCT CASE WHEN pe.id IS NOT NULL AND COALESCE(ip.valor_faturado,0)>0 THEN pe.id END) AS pedidos_faturados,
         COALESCE(SUM(ip.valor_faturado),0) AS ol_total_faturado,
         COALESCE(SUM(CASE WHEN ${MIX_SEM_COMBATE} THEN ip.valor_faturado ELSE 0 END),0) AS ol_sem_combate,
@@ -122,6 +130,7 @@ export async function onRequestGet({ request, env }) {
       LEFT JOIN pedidos pe ON ${pedidoJoin.join(' AND ')}
       LEFT JOIN itens_pedido ip ON ip.pedido_id=pe.id AND ${ITEM_ATIVO}
       LEFT JOIN produtos pr ON pr.id=ip.produto_id
+      LEFT JOIN saldos_clientes sc ON sc.cliente_id=cl.id
       LEFT JOIN metas_periodo m ON m.consultor_id=c.id
       LEFT JOIN pendentes_periodo pd ON pd.consultor_id=c.id
       WHERE c.ativo=1 AND c.origem='PAINEL_EQUIPE'
@@ -132,7 +141,7 @@ export async function onRequestGet({ request, env }) {
     const gerenteSql = `SELECT COALESCE(SUM(ol_sem_combate),0) ol_sem_combate,COALESCE(SUM(ol_prioritarios),0) ol_prioritarios,COALESCE(SUM(ol_lancamentos),0) ol_lancamentos,COALESCE(SUM(clientes_positivados),0) clientes_positivados FROM metas WHERE escopo='gerente' AND ${metaCond}`
 
     const [rankingResult, gerenteResult, ufsResult, extracaoResult] = await env.DB.batch([
-      env.DB.prepare(rankingSql).bind(...metaParams, ...pendingParams, ...clienteParams, ...pedidoParams),
+      env.DB.prepare(rankingSql).bind(...metaParams, ...pedidoParams, ...pendingParams, ...clienteParams, ...pedidoParams),
       env.DB.prepare(gerenteSql).bind(...metaParams),
       env.DB.prepare("SELECT DISTINCT UPPER(TRIM(uf)) AS uf FROM clientes WHERE carteira_importada=1 AND ativo=1 AND LENGTH(TRIM(COALESCE(uf,'')))=2 ORDER BY uf"),
       env.DB.prepare("SELECT finalizado_em FROM extracoes WHERE tipo='BUSSOLA' AND status='concluido' AND finalizado_em IS NOT NULL ORDER BY finalizado_em DESC LIMIT 1"),
@@ -163,6 +172,9 @@ export async function onRequestGet({ request, env }) {
         ol_prioritarios: olPrioritarios, ol_lancamentos: olLancamentos,
         meta_ol_sem_combate: metaOlSemCombate, meta_ol_prioritarios: numero(item.meta_ol_prioritarios),
         meta_ol_lancamentos: numero(item.meta_ol_lancamentos), meta_clientes: numero(item.meta_clientes),
+        metas_diarias: metasDiarias(faixa,
+          { ol_sem_combate: olSemCombate, ol_prioritarios: olPrioritarios, ol_lancamentos: olLancamentos },
+          { ol_sem_combate: metaOlSemCombate, ol_prioritarios: numero(item.meta_ol_prioritarios), ol_lancamentos: numero(item.meta_ol_lancamentos) }),
         resultado_meta_ol: percentual(olSemCombate, metaOlSemCombate),
         resultado_meta_clientes: percentual(clientesComVenda, item.meta_clientes),
         participacao_prioritarios: percentual(olPrioritarios, olSemCombate),
@@ -224,3 +236,4 @@ export async function onRequestGet({ request, env }) {
     return json({ erro: 'Não foi possível carregar o módulo de consultores.', detalhe }, detalhe.includes('data inicial') || detalhe.includes('data final') ? 400 : 500)
   }
 }
+

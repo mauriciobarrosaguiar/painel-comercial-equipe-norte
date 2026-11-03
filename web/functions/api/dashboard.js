@@ -1,3 +1,4 @@
+import { calendarioDoPeriodo, metasDiarias, diasUteis, hojeSaoPaulo } from '../_lib/business-calendar.js'
 import {
   ITEM_FATURADO,
   MIX_SEM_COMBATE,
@@ -44,7 +45,7 @@ function filtros(params) {
   const faixa = periodo(params)
   const consultor = 'cons-1ee6626b98906f06c399a6ad350c'
   const uf = String(params.get('uf') || '').trim().toUpperCase().slice(0, 2)
-  const cond = [ITEM_FATURADO]
+  const cond = [ITEM_FATURADO, 'cl.ativo=1']
   const valores = []
 
   if (faixa.inicio && faixa.fim) {
@@ -55,7 +56,7 @@ function filtros(params) {
   if (consultor) { cond.push('cl.consultor_id=?'); valores.push(consultor) }
   if (uf) { cond.push("UPPER(TRIM(COALESCE(cl.uf,'')))=?"); valores.push(uf) }
 
-  const condClientesVenda = [ITEM_FATURADO, 'cl.carteira_importada=1', 'cl.ativo=1', 'ip.valor_faturado>0']
+  const condClientesVenda = [ITEM_FATURADO, 'cl.carteira_importada=1', 'cl.ativo=1']
   const valoresClientesVenda = []
   if (faixa.inicio && faixa.fim) {
     condClientesVenda.push('DATE(COALESCE(pe.data_faturamento,pe.data_pedido)) BETWEEN DATE(?) AND DATE(?)')
@@ -87,69 +88,9 @@ function filtros(params) {
   }
 }
 
-function pascoa(ano) {
-  const a = ano % 19
-  const b = Math.floor(ano / 100)
-  const c = ano % 100
-  const d = Math.floor(b / 4)
-  const e = b % 4
-  const f = Math.floor((b + 8) / 25)
-  const g = Math.floor((b - f + 1) / 3)
-  const h = (19 * a + b - d - g + 15) % 30
-  const i = Math.floor(c / 4)
-  const k = c % 4
-  const l = (32 + 2 * e + 2 * i - h - k) % 7
-  const m = Math.floor((a + 11 * h + 22 * l) / 451)
-  const mes = Math.floor((h + l - 7 * m + 114) / 31)
-  const dia = ((h + l - 7 * m + 114) % 31) + 1
-  return new Date(Date.UTC(ano, mes - 1, dia))
-}
-
-function adicionarDias(data, dias) {
-  const nova = new Date(data)
-  nova.setUTCDate(nova.getUTCDate() + dias)
-  return nova
-}
-
-function chaveData(data) {
-  return `${data.getUTCFullYear()}-${String(data.getUTCMonth() + 1).padStart(2, '0')}-${String(data.getUTCDate()).padStart(2, '0')}`
-}
-
-function feriadosComerciais(ano) {
-  const fixos = ['01-01','04-21','05-01','09-07','10-12','11-02','11-15','11-20','12-25']
-  const datas = new Set(fixos.map((item) => `${ano}-${item}`))
-  const domingoPascoa = pascoa(ano)
-  ;[-48, -47, -2, 60].forEach((dias) => datas.add(chaveData(adicionarDias(domingoPascoa, dias))))
-  return datas
-}
-
-function diasUteis(inicio, fim, limite = fim) {
-  if (!inicio || !fim) return 0
-  const dataInicio = new Date(`${inicio}T12:00:00Z`)
-  const dataFim = new Date(`${fim}T12:00:00Z`)
-  const dataLimite = new Date(`${limite}T12:00:00Z`)
-  const final = dataLimite < dataFim ? dataLimite : dataFim
-  const feriadosPorAno = new Map()
-  let total = 0
-  for (let atual = new Date(dataInicio); atual <= final; atual.setUTCDate(atual.getUTCDate() + 1)) {
-    const diaSemana = atual.getUTCDay()
-    if (diaSemana === 0 || diaSemana === 6) continue
-    const ano = atual.getUTCFullYear()
-    if (!feriadosPorAno.has(ano)) feriadosPorAno.set(ano, feriadosComerciais(ano))
-    if (!feriadosPorAno.get(ano).has(chaveData(atual))) total += 1
-  }
-  return total
-}
-
-function hojeSaoPaulo() {
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit',
-  }).format(new Date())
-}
-
 function montarProjecao(filtro, valores) {
   const hoje = hojeSaoPaulo()
-  const ativo = filtro.tipo === 'mes-atual' && filtro.inicio && filtro.fim && hoje >= filtro.inicio && hoje <= filtro.fim
+  const ativo = calendarioDoPeriodo(filtro).ativa
   const totalDias = filtro.inicio && filtro.fim ? diasUteis(filtro.inicio, filtro.fim) : 0
   const decorridos = ativo ? diasUteis(filtro.inicio, filtro.fim, hoje) : totalDias
   const fator = ativo && decorridos > 0 ? totalDias / decorridos : 1
@@ -200,7 +141,7 @@ export async function onRequestGet({ request, env }) {
       stmt(env, `SELECT COALESCE(SUM(ip.valor_faturado),0) total ${JOINS} WHERE ${filtro.where} AND ${MIX_SEM_COMBATE}`, filtro.valores),
       stmt(env, `SELECT COALESCE(SUM(ip.valor_faturado),0) total ${JOINS} WHERE ${filtro.where} AND UPPER(COALESCE(pr.tipo_mix,''))='PRIORITARIO'`, filtro.valores),
       stmt(env, `SELECT COALESCE(SUM(ip.valor_faturado),0) total ${JOINS} WHERE ${filtro.where} AND UPPER(COALESCE(pr.tipo_mix,''))='LANCAMENTO'`, filtro.valores),
-      stmt(env, `SELECT COUNT(DISTINCT pe.cliente_id) total ${JOINS} WHERE ${filtro.clientSaleWhere}`, filtro.clientSaleValues),
+      stmt(env, `SELECT COUNT(*) total FROM (SELECT pe.cliente_id ${JOINS} WHERE ${filtro.clientSaleWhere} GROUP BY pe.cliente_id HAVING SUM(ip.valor_faturado)>0)`, filtro.clientSaleValues),
       stmt(env, `SELECT COUNT(*) total FROM clientes cl WHERE ${filtro.clientWhere}`, filtro.clientValues),
       stmt(env, "SELECT COUNT(*) total FROM consultores WHERE ativo=1 AND origem='PAINEL_EQUIPE'"),
       stmt(env, `SELECT COALESCE(SUM(ip.valor_faturado),0) total ${JOINS} WHERE ${filtro.where}`, filtro.valores),
@@ -264,6 +205,7 @@ export async function onRequestGet({ request, env }) {
       resultado_ol_sem_combate: percentual(semCombate, metas.ol_sem_combate),
       resultado_ol_prioritarios: percentual(prioritarios, metas.ol_prioritarios),
       resultado_ol_lancamentos: percentual(lancamentos, metas.ol_lancamentos),
+      metas_diarias: metasDiarias(filtro, { ol_sem_combate: semCombate, ol_prioritarios: prioritarios, ol_lancamentos: lancamentos }, metas),
       projecao: {
         ...projecao,
         resultado_ol_sem_combate: percentual(projecao.ol_sem_combate, metas.ol_sem_combate),
@@ -322,3 +264,4 @@ export async function onRequestGet({ request, env }) {
     return json({ erro: 'Não foi possível carregar os indicadores.', detalhe }, detalhe.includes('data inicial') || detalhe.includes('data final') ? 400 : 500)
   }
 }
+
