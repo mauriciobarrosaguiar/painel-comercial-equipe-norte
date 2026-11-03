@@ -54,7 +54,9 @@ test('sugestão usa a média dos três meses fechados e desconta vendas do mês 
   assert.equal(sugestoes.find(item => item.ean === '444').quantidade_sugerida, 1)
 })
 
-test('análise exige sessão da carteira e oferece somente UF do cliente com estoque', async () => {
+test('análise exige sessão da carteira e oferece somente UF do cliente com estoque', async (t) => {
+  // O fixture possui compras em julho: fixe o relógio para não mudar a janela a cada mês.
+  t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-10-22T18:02:00Z') })
   const DB = await personalDatabase()
   const periodo = mesesReferencia()
   const hoje = periodo.fim
@@ -93,3 +95,4 @@ test('análise exige sessão da carteira e oferece somente UF do cliente com est
   const forjado = await inteligencia({ request: new Request('https://painel.local/api/clientes/inteligencia?id=cl-nao-autorizado', { headers }), env: { DB, PAINEL_ADMIN_KEY: segredo } })
   assert.equal(forjado.status, 404)
 })
+
