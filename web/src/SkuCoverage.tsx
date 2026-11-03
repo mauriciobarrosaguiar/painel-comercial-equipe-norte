@@ -13,20 +13,20 @@ const labels = [['LANCAMENTO', 'Lançamentos'], ['PRIORITARIO', 'Prioritários']
 function MissingProductsDialog({ label, products, periodo, onClose }: { label: string; products: Product[]; periodo: string; onClose: () => void }) {
   const dialog = useRef<HTMLDialogElement>(null)
   const [search, setSearch] = useState('')
+  const close = () => { dialog.current?.close(); onClose() }
   useEffect(() => {
     const previous = document.body.style.overflow
-    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null
     document.body.style.overflow = 'hidden'
     dialog.current?.showModal()
-    return () => { document.body.style.overflow = previous; previousFocus?.focus({ preventScroll: true }) }
+    return () => { document.body.style.overflow = previous }
   }, [])
   const filtered = products.filter(p => `${p.produto} ${p.ean} ${p.codigo_sap}`.toLocaleLowerCase('pt-BR').includes(search.toLocaleLowerCase('pt-BR')))
   return createPortal(<dialog ref={dialog} className="sku-dialog" aria-label={`${label}: produtos não vendidos`}
-    onCancel={event => { event.preventDefault(); onClose() }}
-    onKeyDown={event => { if (event.key === 'Escape') { event.stopPropagation(); event.preventDefault(); onClose() } }}
-    onClick={event => { if (event.target === event.currentTarget) onClose() }}>
+    onCancel={event => { event.preventDefault(); close() }}
+    onKeyDown={event => { if (event.key === 'Escape') { event.stopPropagation(); event.preventDefault(); close() } }}
+    onClick={event => { if (event.target === event.currentTarget) close() }}>
     <div className="sku-dialog-content"><header><div><h2>{label}: produtos não vendidos</h2><p>{periodo} · {num.format(products.length)} SKUs sem faturamento identificado</p></div>
-      <button type="button" className="secondary-button" onClick={onClose} autoFocus>Fechar ficha</button></header>
+      <button type="button" className="secondary-button" onClick={close} autoFocus>Fechar ficha</button></header>
       <label className="sku-dialog-search">Buscar produto, EAN ou SAP<input type="search" value={search} onChange={e => setSearch(e.target.value)} /></label>
       <div className="sku-scroll"><table><thead><tr><th>Produto</th><th>EAN</th><th>SAP</th></tr></thead><tbody>
         {filtered.map(p => <tr key={p.sku}><th scope="row">{p.produto}</th><td>{p.ean || 'Não vinculado'}</td><td>{p.codigo_sap || 'Não informado'}</td></tr>)}
@@ -46,6 +46,11 @@ export default function SkuCoverage({ clienteId = '', inicio = '', fim = '', uf 
   const [search, setSearch] = useState('')
   const [retry, setRetry] = useState(0)
   const [openedGroup, setOpenedGroup] = useState<string | null>(null)
+  const trigger = useRef<HTMLButtonElement | null>(null)
+  const closeSheet = () => {
+    setOpenedGroup(null)
+    requestAnimationFrame(() => trigger.current?.focus({ preventScroll: true }))
+  }
   const periodo = inicio && fim ? `${inicio.split('-').reverse().join('/')} a ${fim.split('-').reverse().join('/')}` : 'Todo o histórico disponível'
   useEffect(() => {
     const controller = new AbortController()
@@ -65,7 +70,7 @@ export default function SkuCoverage({ clienteId = '', inicio = '', fim = '', uf 
     {error ? <p role="alert">{error} <button type="button" className="secondary-button" onClick={() => setRetry(n => n + 1)}>Tentar novamente</button></p> : !data ? <p role="status">Calculando SKUs e unidades…</p> : <>
       <div className="sku-cards">{labels.map(([key, label]) => {
         const g = data.resumo[key] || { total: 0, comprados: 0, faltantes: 0, percentual: 0, unidades: 0 }
-        return <article key={key}><button type="button" className="sku-card-button" aria-label={`Ver produtos não vendidos: ${label}`} onClick={() => setOpenedGroup(key)}><span className="sku-card-title">{label}</span><strong>{num.format(g.comprados)} / {num.format(g.total)} SKUs</strong>
+        return <article key={key}><button type="button" className="sku-card-button" aria-label={`Ver produtos não vendidos: ${label}`} onClick={event => { trigger.current = event.currentTarget; setOpenedGroup(key) }}><span className="sku-card-title">{label}</span><strong>{num.format(g.comprados)} / {num.format(g.total)} SKUs</strong>
           <progress value={g.comprados} max={g.total || 1} aria-label={`${label}: ${g.percentual}% de cobertura`} />
           <span>{num.format(g.percentual)}% de cobertura · faltam {num.format(g.faltantes)}</span>
           <b>{num.format(g.unidades)} unidades faturadas</b><span className="sku-card-action">Ver produtos não vendidos →</span></button></article>
@@ -73,7 +78,7 @@ export default function SkuCoverage({ clienteId = '', inicio = '', fim = '', uf 
       <p className="sku-note">{data.criterio}</p>
       {data.resumo.DESAFIO?.total === 0 && <p className="sku-note">Desafio de Gigantes: não há produtos da campanha cadastrados para o período. Importe as metas da campanha na Administração.</p>}
       {openedGroup && <MissingProductsDialog label={labels.find(([key]) => key === openedGroup)?.[1] || ''} periodo={periodo}
-        products={data.produtos.filter(p => belongsToGroup(p, openedGroup) && p.unidades === 0)} onClose={() => setOpenedGroup(null)} />}
+        products={data.produtos.filter(p => belongsToGroup(p, openedGroup) && p.unidades === 0)} onClose={closeSheet} />}
       {data.unidades_sem_catalogo > 0 && <p className="sku-note">O total inclui {num.format(data.unidades_sem_catalogo)} unidades sem correspondência no catálogo ativo; elas não aumentam a cobertura de lançamentos ou prioritários.</p>}
       {!clienteId && <details><summary>Cobertura de cada cliente ({data.clientes.length})</summary><div className="sku-scroll"><table><thead><tr><th>Cliente / CNPJ</th><th>Lançamentos SKUs</th><th>Unidades lanç.</th><th>Prioritários SKUs</th><th>Unidades prior.</th><th>Unidades totais</th></tr></thead><tbody>
         {data.clientes.map(c => <tr key={c.id}><th scope="row">{c.nome}<small>{c.cnpj}</small></th><td>{c.grupos.LANCAMENTO.comprados} / {c.grupos.LANCAMENTO.total}</td><td>{num.format(c.grupos.LANCAMENTO.unidades)}</td><td>{c.grupos.PRIORITARIO.comprados} / {c.grupos.PRIORITARIO.total}</td><td>{num.format(c.grupos.PRIORITARIO.unidades)}</td><td>{num.format(c.grupos.TOTAL.unidades)}</td></tr>)}
