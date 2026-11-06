@@ -67,11 +67,14 @@ export default function HistoryModule({ onBack, onAutomations }: { onBack: () =>
   ]
   const mesImportado = atual?.origem === 'IMPORTADO' || atual?.resultado?.origem === 'IMPORTADO'
 
+  const mixDisponivel = atual?.resultado?.mix_disponivel !== false
+
   const celulaMeta = (item: Item, realizadoKey: string, metaKey: string, resultadoKey: string) => {
     const meta = valor(item, metaKey)
+    const disponivel = item.resultado?.mix_disponivel !== false
     return <>
-      <strong>{money.format(valor(item, realizadoKey))}</strong>
-      {meta > 0 && <small>Meta {money.format(meta)} · {pct.format(valor(item, resultadoKey))}%</small>}
+      <strong>{disponivel ? money.format(valor(item, realizadoKey)) : '—'}</strong>
+      {meta > 0 && <small>Meta {money.format(meta)}{disponivel && <> · {pct.format(valor(item, resultadoKey))}%</>}</small>}
     </>
   }
 
@@ -88,23 +91,26 @@ export default function HistoryModule({ onBack, onAutomations }: { onBack: () =>
       <label><span>Mês fechado</span><select value={selected} onChange={e => setSelected(e.target.value)}><option value="">Selecione</option>{data.meses.map(x => <option key={x.ano_mes} value={x.ano_mes}>{mes(x.ano_mes)} · {x.origem === 'IMPORTADO' ? 'planilha importada' : `versão ${x.versao}`}</option>)}</select></label>
       <label><span>Detalhamento</span><select value={scope} onChange={e => setScope(e.target.value)}><option value="CONSULTOR">Consultores</option><option value="GD">GD / Gerente</option><option value="UF">UF</option><option value="SIP">SIP</option></select></label>
     </section>
+    {atual?.resultado?.faturamento_importado && <div className="alert alert-success">OL total e clientes com venda recuperados da planilha importada. As metas do fechamento foram preservadas. O detalhamento por mix não está disponível nessa importação.</div>}
     {mesImportado && <div className="alert alert-success">Mês carregado da planilha histórica. O OL total, pedidos, clientes e positivação estão disponíveis; o mix de produtos e as metas congeladas dependem do fechamento mensal do painel.</div>}
     {!selected && !loading ? <div className="history-empty"><h2>Nenhum mês fechado</h2><p>Anexe os meses anteriores ou aguarde o fechamento automático após a virada do mês.</p></div> : <>
       <section className="history-summary">
         {metricas.map(item => {
+          const disponivel = !item.metaKey || mixDisponivel
+          const comparar = disponivel && (!item.metaKey || anterior?.resultado?.mix_disponivel !== false)
           const vari = variacao(item.key)
           const meta = item.metaKey ? valor(atual, item.metaKey) : 0
           return <article key={item.key}>
             <span>{item.label}</span>
-            <strong>{loading ? '—' : money.format(valor(atual, item.key))}</strong>
+            <strong>{loading || !disponivel ? '—' : money.format(valor(atual, item.key))}</strong>
             <small className={vari < 0 ? 'variation-negative' : 'variation-positive'}>
-              {meta > 0 && item.resultadoKey && <>Meta fechada: {money.format(meta)} · {pct.format(valor(atual, item.resultadoKey))}% · </>}
-              {vari >= 0 ? '+' : ''}{pct.format(vari)}% versus {mes(anterior?.ano_mes || 'mês anterior')}
+              {meta > 0 && item.resultadoKey && <>Meta fechada: {money.format(meta)}{disponivel && <> · {pct.format(valor(atual, item.resultadoKey))}%</>} </>}
+              {comparar && <>{meta > 0 && ' · '}{vari >= 0 ? '+' : ''}{pct.format(vari)}% versus {mes(anterior?.ano_mes || 'mês anterior')}</>}
             </small>
           </article>
         })}
         <article><span>Clientes com venda</span><strong>{num.format(valor(atual, 'clientes_com_venda'))}</strong><small>{valor(atual, 'meta_clientes') > 0 && <>Meta fechada: {num.format(valor(atual, 'meta_clientes'))} · {pct.format(valor(atual, 'resultado_meta_clientes'))}% · </>}{num.format(valor(atual, 'clientes_sem_venda'))} sem venda · {pct.format(valor(atual, 'positivacao_percentual'))}%</small></article>
-        <article><span>Atingimento da meta principal</span><strong>{pct.format(valor(atual, 'resultado_meta_ol'))}%</strong><small>Meta fechada: {money.format(valor(atual, 'meta_ol_sem_combate'))}</small></article>
+        <article><span>Atingimento da meta principal</span><strong>{mixDisponivel ? `${pct.format(valor(atual, 'resultado_meta_ol'))}%` : '—'}</strong><small>Meta fechada: {money.format(valor(atual, 'meta_ol_sem_combate'))}</small></article>
       </section>
       <section className="operations-list">
         <div className="operations-heading"><h2>Resultado por {scope === 'CONSULTOR' ? 'consultor' : scope}</h2><span>{linhas.length} registros</span></div>
