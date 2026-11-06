@@ -202,9 +202,39 @@ export async function onRequestGet({ request, env }) {
       consultoresResult.results || [],
       sipsResult.results || [],
     )
-    const existentes = new Set(
-      fechados.map((item) => `${item.ano_mes}|${item.escopo}|${item.referencia_id}`),
-    )
+    const chaveMensal = (item) => `${item.ano_mes}|${item.escopo}|${item.referencia_id}`
+    const importadosPorChave = new Map(importados.map((item) => [chaveMensal(item), item.resultado]))
+    const fechadosComImportacao = fechados.map((item) => {
+      const fechado = item.resultado
+      const referencia = item.escopo === 'GERAL' ? fechadosPessoais.find((row) => row.ano_mes === item.ano_mes) : item
+      const importado = referencia && importadosPorChave.get(chaveMensal(referencia))
+      if (!importado || importado.ol_total <= 0 || numero(fechado.ol_total) !== 0 ||
+          numero(fechado.pedidos) !== 0 || numero(fechado.clientes_com_venda) !== 0) return item
+
+      const clientesAtivos = fechado.clientes_ativos ?? importado.clientes_ativos
+      const clientesComVenda = importado.clientes_com_venda
+      const metaClientes = numero(fechado.meta_clientes)
+      return {
+        ...item,
+        resultado: {
+          ...fechado,
+          mix_disponivel: false,
+          faturamento_importado: true,
+          ol_total: importado.ol_total,
+          pedidos: importado.pedidos,
+          produtos: importado.produtos,
+          quantidade: importado.quantidade,
+          clientes_ativos: clientesAtivos,
+          clientes_com_venda: clientesComVenda,
+          clientes_sem_venda: Math.max(0, clientesAtivos - clientesComVenda),
+          positivacao_percentual: clientesAtivos > 0 ? clientesComVenda / clientesAtivos * 100 : 0,
+          resultado_meta_clientes: metaClientes > 0 ? clientesComVenda / metaClientes * 100 : 0,
+          ticket_medio_cliente: importado.ticket_medio_cliente,
+          ticket_medio_pedido: importado.ticket_medio_pedido,
+        },
+      }
+    })
+    const existentes = new Set(fechados.map(chaveMensal))
     const referenciaNormalizada = referencia.toUpperCase()
     const sinteticos = importados.filter((item) => {
       if (existentes.has(`${item.ano_mes}|${item.escopo}|${item.referencia_id}`)) return false
@@ -219,7 +249,7 @@ export async function onRequestGet({ request, env }) {
       }
       return true
     })
-    const itens = [...fechados, ...sinteticos]
+    const itens = [...fechadosComImportacao, ...sinteticos]
       .sort(
         (a, b) =>
           b.ano_mes.localeCompare(a.ano_mes) ||
