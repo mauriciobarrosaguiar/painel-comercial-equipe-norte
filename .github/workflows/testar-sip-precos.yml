@@ -1,0 +1,36 @@
+name: Testar exportacao de precos SIP
+
+on:
+  pull_request:
+    paths:
+      - 'web/**'
+      - '.github/workflows/testar-sip-precos.yml'
+  push:
+    branches:
+      - 'feat/sip-download-mercadofarma-precos'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verificar:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - name: Baixar repositorio
+        uses: actions/checkout@v4
+      - name: Preparar Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Instalar pacotes
+        run: npm ci --ignore-scripts
+      - name: Testar privacidade e escopo da SIP
+        run: node --test tests/sip-precos-exportar.test.js tests/sips-phase4.test.js
+      - name: Validar compilacao do site
+        run: npm run build

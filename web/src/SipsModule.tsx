@@ -40,6 +40,13 @@ type Detail = SipDetail & {
   periodo: { inicio: string; fim: string }
   link_publico: string
   link_exportacao: string
+  link_precos: string
+  precos: {
+    ufs: string[]
+    registros: number
+    atualizado_em: string | null
+    por_uf: { uf: string; registros: number; atualizado_em: string | null }[]
+  }
 }
 
 const money = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
@@ -67,6 +74,17 @@ function monthRange(month: string) {
     inicio: `${month}-01`,
     fim: `${month}-${String(lastDay).padStart(2, '0')}`,
   }
+}
+
+function extractionDate(value: string | null) {
+  if (!value) return 'Data não informada'
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return value.slice(0, 16).replace('T', ' ')
+  return new Intl.DateTimeFormat('pt-BR', {
+    timeZone: 'America/Sao_Paulo',
+    day: '2-digit', month: '2-digit', year: 'numeric',
+    hour: '2-digit', minute: '2-digit',
+  }).format(parsed)
 }
 
 function monthLabel(month: string) {
@@ -297,6 +315,17 @@ export default function SipsModule({ onBack, publicId }: { onBack: () => void; p
             {monthFilter('sip-public-month')}
             <span>{detail?.periodo.inicio?.split('-').reverse().join('/')} a {detail?.periodo.fim?.split('-').reverse().join('/')}</span>
             {detail && <a className="secondary-button sip-download" href={detail.link_exportacao}>Baixar vendas detalhadas</a>}
+            {detail && detail.precos?.registros > 0 && (
+              <div className="sip-price-download">
+                <a className="secondary-button sip-download" href={detail.link_precos}>Baixar Preços</a>
+                <small className="sip-price-update">
+                  <strong>Última extração Mercado Farma</strong>
+                  {detail.precos.por_uf.filter((item) => item.registros > 0).map((item) => (
+                    <span key={item.uf}>{item.uf}: {extractionDate(item.atualizado_em)}</span>
+                  ))}
+                </small>
+              </div>
+            )}
           </div>
         </section>
         {error && <div className="alert alert-error">{error}</div>}
