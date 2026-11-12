@@ -6,6 +6,7 @@ import {
   VALOR_ITEM_NAO_FATURADO,
 } from '../../_lib/commercial.js'
 import { json } from '../../_lib/credentials.js'
+import { resumoPrecosSip, ufsVinculadasSip } from '../../_lib/sip-precos.js'
 
 const texto = (valor) => String(valor ?? '').trim()
 const numero = (valor) => Number.isFinite(Number(valor)) ? Number(valor) : 0
@@ -251,6 +252,7 @@ export async function onRequestGet({ request, env }) {
     const meta = metaCadastrada > 0 ? metaCadastrada : totais.objetivo
     const projetado = projetar(totais.ol_sem_combate, inicio, fim)
     const origin = new URL(request.url).origin
+    const precos = await resumoPrecosSip(env.DB, await ufsVinculadasSip(env.DB, id))
     const modoPublico = publico ? '1' : '0'
     const parametrosResumo = `id=${encodeURIComponent(id)}&inicio=${inicio}&fim=${fim}&publico=${modoPublico}`
 
@@ -279,6 +281,8 @@ export async function onRequestGet({ request, env }) {
       clientes,
       produtos,
       pendentes_por_consultor: pendentesPorConsultor,
+      precos,
+      link_precos: `${origin}/api/sips/precos-exportar?publico=${modoPublico}&sip_id=${encodeURIComponent(id)}`,
       link_publico: `${origin}/?sip=${encodeURIComponent(id)}`,
       link_exportacao: `${origin}/api/exportar?tipo=sip_detalhado&formato=csv&publico=${modoPublico}&sip_id=${encodeURIComponent(id)}&inicio=${inicio}&fim=${fim}`,
       link_resumo_excel: `${origin}/api/sips/resumo-exportar?${parametrosResumo}&formato=xls`,
