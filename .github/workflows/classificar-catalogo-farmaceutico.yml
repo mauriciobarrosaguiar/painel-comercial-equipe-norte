@@ -1,0 +1,49 @@
+name: Preencher classificação farmacêutica no Turso
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "data/classificacao/**"
+      - "scripts/preencher_classificacao_turso.py"
+      - ".github/workflows/classificar-catalogo-farmaceutico.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: classificacao-farmaceutica-turso
+  cancel-in-progress: false
+
+jobs:
+  classificar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+      TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+    steps:
+      - name: Ler versão aprovada do catálogo
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Instalar dependência para Turso
+        run: python -m pip install 'requests>=2.32,<3'
+
+      - name: Validar classificações e apresentações sentinela
+        shell: bash
+        run: |
+          python -m py_compile scripts/preencher_classificacao_turso.py
+          python - <<'PY'
+          from scripts.preencher_classificacao_turso import carregar_planilha
+          linhas = carregar_planilha()
+          print(f'Planilha validada: {len(linhas)} EANs auditados.')
+          PY
+
+      - name: Sincronizar classificações na base principal Turso
+        run: python scripts/preencher_classificacao_turso.py
