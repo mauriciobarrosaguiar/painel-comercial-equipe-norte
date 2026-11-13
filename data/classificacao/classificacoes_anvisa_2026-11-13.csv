@@ -21,7 +21,7 @@ EAN;PRODUTO;CATEGORIA;FONTE;JUSTIFICATIVA
 7896004700953;Pentoxifilina 400 mg Caixa 20 Comprimidos Revestidos;PRESCRICAO;TRIAGEM_PRESCRICAO_CONFERIR_BULA;Prescricao provável, conferir bula/tarja da apresentacao antes de usar como dado regulatorio definitivo
 7896004700984;Cetoconazol 20 mg/g Frasco 100 ml Shampoo Anticaspa;NAO_CLASSIFICADO;REVISAO_PENDENTE;Requer conferencia do registro/bula desta apresentacao
 7896004700991;Claritromicina 500 mg Caixa 14 Comprimidos Revestidos;ANTIMICROBIANO;ANVISA_IN_360_2025;Substancia: claritromicina
-7896004701035;Terbinafina 10 mg/g Bisnaga 20 g Creme;NAO_CLASSIFICADO;REVISAO_PENDENTE;Requer conferencia do registro/bula desta apresentacao
+7896004701035;Terbinafina 10 mg/g Bisnaga 20 g Creme;OTC;ANVISA_IN_285_2024;Terbinafina creme dermatologico 10 mg/g conforme LMIP
 7896004701172;Claritromicina 500 mg Caixa 10 Comprimidos Revestidos;ANTIMICROBIANO;ANVISA_IN_360_2025;Substancia: claritromicina
 7896004701233;Bromoprida 4 mg/ml Frasco 20 ml Gotas;PRESCRICAO;TRIAGEM_PRESCRICAO_CONFERIR_BULA;Prescricao provável, conferir bula/tarja da apresentacao antes de usar como dado regulatorio definitivo
 7896004701288;Hidróxido De Alumínio 61.5 mg/ml Frasco 240 ml Suspensão Oral;NAO_CLASSIFICADO;REVISAO_PENDENTE;Exige confirmacao de indicacao/forma/embalagem para EAN
@@ -39,7 +39,7 @@ EAN;PRODUTO;CATEGORIA;FONTE;JUSTIFICATIVA
 7896004703336;Fluconazol 150 mg Caixa 1 Cápsula;PRESCRICAO;TRIAGEM_PRESCRICAO_CONFERIR_BULA;Prescricao provável, conferir bula/tarja da apresentacao antes de usar como dado regulatorio definitivo
 7896004703343;Fluconazol 150 mg Caixa 2 Cápsulas;PRESCRICAO;TRIAGEM_PRESCRICAO_CONFERIR_BULA;Prescricao provável, conferir bula/tarja da apresentacao antes de usar como dado regulatorio definitivo
 7896004703381;Diclofenaco Resinato 15 mg/ml Frasco 20 ml Gotas;PRESCRICAO;TRIAGEM_PRESCRICAO_CONFERIR_BULA;Prescricao provável, conferir bula/tarja da apresentacao antes de usar como dado regulatorio definitivo
-7896004703398;Dipirona Monoidratada 500 mg Display 240 Comprimidos;OTC;ANVISA_IN_285_2024;Comprimido <=1000mg ou solucao oral <=500mg/ml
+7896004703398;Dipirona Monoidratada 500 mg Display 240 Comprimidos;NAO_CLASSIFICADO;REVISAO_PENDENTE;Apresentacao display com 240 comprimidos; confirmar enquadramento e indicacao no registro
 7896004703404;Amoxicilina + Clavulanato 500+125 mg Caixa 12 Comprimidos Revestidos;ANTIMICROBIANO;ANVISA_IN_360_2025;Substancia: amoxicilina
 7896004703411;Amoxicilina + Clavulanato 500+125 mg Caixa 18 Comprimidos Revestidos;ANTIMICROBIANO;ANVISA_IN_360_2025;Substancia: amoxicilina
 7896004703428;Amoxicilina + Clavulanato 250+62.5mg/5ml Frasco 75 ml Pó P/ Susp. Oral + Copo;ANTIMICROBIANO;ANVISA_IN_360_2025;Substancia: amoxicilina
@@ -51,14 +51,14 @@ EAN;PRODUTO;CATEGORIA;FONTE;JUSTIFICATIVA
 7896004703596;Paracetamol 750 mg Caixa 20 Comprimidos Revestidos;OTC;ANVISA_IN_285_2024;Comprimido <=750mg ou gotas conforme LMN
 7896004703633;Lansoprazol 30 mg Caixa 28 Cápsulas de Liberação Retardada;PRESCRICAO;TRIAGEM_PRESCRICAO_CONFERIR_BULA;Prescricao provável, conferir bula/tarja da apresentacao antes de usar como dado regulatorio definitivo
 7896004703732;Sulfametoxazol+Trimetoprima 200+40mg/5ml Frasco 100 ml Susp. Oral + Copo;ANTIMICROBIANO;ANVISA_IN_360_2025;Substancia: sulfametoxazol
-7896004703794;Terbinafina 250 mg Caixa 14 Comprimidos;NAO_CLASSIFICADO;REVISAO_PENDENTE;Requer conferencia do registro/bula desta apresentacao
+7896004703794;Terbinafina 250 mg Caixa 14 Comprimidos;PRESCRICAO;TRIAGEM_PRESCRICAO_CONFERIR_BULA;Terbinafina oral 250 mg nao e a apresentacao de uso topico da LMIP; conferir bula
 7896004704036;Nimesulida 100 mg Caixa 12 Comprimidos;PRESCRICAO;TRIAGEM_PRESCRICAO_CONFERIR_BULA;Prescricao provável, conferir bula/tarja da apresentacao antes de usar como dado regulatorio definitivo
 7896004704043;Nimesulida 50 mg/ml Frasco 15 ml Gotas;PRESCRICAO;TRIAGEM_PRESCRICAO_CONFERIR_BULA;Prescricao provável, conferir bula/tarja da apresentacao antes de usar como dado regulatorio definitivo
 7896004704210;Carbamazepina 400 mg Caixa 20 Comprimidos;CONTROLADO;ANVISA_RDC_1036_2026;Lista C1: Carbamazepina
 7896004704326;Captopril 25 mg Caixa 30 Comprimidos;PRESCRICAO;TRIAGEM_PRESCRICAO_CONFERIR_BULA;Prescricao provável, conferir bula/tarja da apresentacao antes de usar como dado regulatorio definitivo
 7896004704364;Cefalexina 250mg/5ml Frasco 100 ml Suspensão Oral + Copo;ANTIMICROBIANO;ANVISA_IN_360_2025;Substancia: cefalexina
 7896004704593;Amoxicilina 400mg/5ml Frasco 100 ml Pó Para Suspensão Oral + Seringa;ANTIMICROBIANO;ANVISA_IN_360_2025;Substancia: amoxicilina
-7896004704623;Dexclorfeniramina + Betametasona 0.4+0.05 mg/ml Frasco 120 ml Xarope;NAO_CLASSIFICADO;REVISAO_PENDENTE;Requer conferencia do registro/bula desta apresentacao
+7896004704623;Dexclorfeniramina + Betametasona 0.4+0.05 mg/ml Frasco 120 ml Xarope;PRESCRICAO;TRIAGEM_PRESCRICAO_CONFERIR_BULA;Associacao com betametasona por via oral, nao aplicar MIP de dexclorfeniramina isolada
 7896004704692;Cefalexina 500 mg Caixa 10 Comprimidos Revestidos;ANTIMICROBIANO;ANVISA_IN_360_2025;Substancia: cefalexina
 7896004704999;Dexclorfeniramina 2mg/5ml Frasco 120 ml Solução Oral;OTC;ANVISA_IN_285_2024;Comprimido <=2mg, creme <=10mg/g ou solucao oral <=2.8mg/ml
 7896004705057;Diclofenaco Dietilamônio 11.6 mg/g Bisnaga 60 g Gel;OTC;ANVISA_IN_285_2024;Gel 11.6mg/g
@@ -121,9 +121,9 @@ EAN;PRODUTO;CATEGORIA;FONTE;JUSTIFICATIVA
 7896004711195;Nistatina + Óxido De Zinco 100.000ui+200mg/g Bisnaga 60 g Pomada;OTC;ANVISA_IN_285_2024;Pomada dermatologica 100000UI/g+200mg/g
 7896004711232;Glimepirida 4 mg Caixa 30 Comprimidos;PRESCRICAO;TRIAGEM_PRESCRICAO_CONFERIR_BULA;Prescricao provável, conferir bula/tarja da apresentacao antes de usar como dado regulatorio definitivo
 7896004711287;Dexclorfeniramina 2 mg Caixa 20 Comprimidos;OTC;ANVISA_IN_285_2024;Comprimido <=2mg, creme <=10mg/g ou solucao oral <=2.8mg/ml
-7896004711423;Clotrimazol 10 mg/g Bisnaga 35 g Creme Vaginal + 6 Aplicadores;NAO_CLASSIFICADO;REVISAO_PENDENTE;Requer conferencia do registro/bula desta apresentacao
+7896004711423;Clotrimazol 10 mg/g Bisnaga 35 g Creme Vaginal + 6 Aplicadores;OTC;ANVISA_IN_285_2024;Clotrimazol creme vaginal 10 mg/g conforme LMIP
 7896004711454;Amilorida + Hidroclorotiazida 5+50 mg Caixa 30 Comprimidos;PRESCRICAO;TRIAGEM_PRESCRICAO_CONFERIR_BULA;Prescricao provável, conferir bula/tarja da apresentacao antes de usar como dado regulatorio definitivo
-7896004711485;Dexclorfeniramina + Betametasona 2+0.25 mg Caixa 20 Comprimidos;NAO_CLASSIFICADO;REVISAO_PENDENTE;Requer conferencia do registro/bula desta apresentacao
+7896004711485;Dexclorfeniramina + Betametasona 2+0.25 mg Caixa 20 Comprimidos;PRESCRICAO;TRIAGEM_PRESCRICAO_CONFERIR_BULA;Associacao com betametasona, nao aplicar MIP de dexclorfeniramina isolada
 7896004711539;Diclofenaco Colestiramina 70 mg Caixa 14 Cápsulas;PRESCRICAO;TRIAGEM_PRESCRICAO_CONFERIR_BULA;Prescricao provável, conferir bula/tarja da apresentacao antes de usar como dado regulatorio definitivo
 7896004711690;Betametasona + Gentamicina 0.5+1 mg/g Bisnaga 30 g Creme;PRESCRICAO;ANVISA_EXCECAO_TOPICA;Antimicrobiano topico associado a corticoide, conferir regras especificas
 7896004711744;Tramadol 50 mg Caixa 10 Cápsulas;CONTROLADO;ANVISA_RDC_1036_2026;Lista A2: Tramadol
@@ -170,8 +170,8 @@ EAN;PRODUTO;CATEGORIA;FONTE;JUSTIFICATIVA
 7896004716299;Paracetamol Bebê 100 mg/ml Frasco 15 ml Gotas;OTC;ANVISA_LMN_BAIXO_RISCO;Comprimido <=750mg ou gotas conforme LMN
 7896004716343;Finasterida 1 mg Caixa 60 Comprimidos Revestidos;PRESCRICAO;TRIAGEM_PRESCRICAO_CONFERIR_BULA;Prescricao provável, conferir bula/tarja da apresentacao antes de usar como dado regulatorio definitivo
 7896004718446;Dipirona Monoidratada 500 mg/ml Frasco 20 ml Gotas;OTC;ANVISA_IN_285_2024;Comprimido <=1000mg ou solucao oral <=500mg/ml
-7896004718453;Clotrimazol 10 mg/g Bisnaga 20 g Creme;NAO_CLASSIFICADO;REVISAO_PENDENTE;Requer conferencia do registro/bula desta apresentacao
-7896004718460;Cetoconazol 20 mg/g Bisnaga 30 g Creme;NAO_CLASSIFICADO;REVISAO_PENDENTE;Requer conferencia do registro/bula desta apresentacao
+7896004718453;Clotrimazol 10 mg/g Bisnaga 20 g Creme;OTC;ANVISA_IN_285_2024;Clotrimazol creme dermatologico 10 mg/g conforme LMIP
+7896004718460;Cetoconazol 20 mg/g Bisnaga 30 g Creme;OTC;ANVISA_IN_285_2024;Cetoconazol creme dermatologico 20 mg/g conforme LMIP
 7896004718804;Alprazolam 0.50 mg Caixa 30 Comprimidos;CONTROLADO;ANVISA_RDC_1036_2026;Lista B1: Alprazolam
 7896004718811;Alprazolam 0.25 mg Caixa 30 Comprimidos;CONTROLADO;ANVISA_RDC_1036_2026;Lista B1: Alprazolam
 7896004718828;Alprazolam 1 mg Caixa 30 Comprimidos;CONTROLADO;ANVISA_RDC_1036_2026;Lista B1: Alprazolam
@@ -309,9 +309,9 @@ EAN;PRODUTO;CATEGORIA;FONTE;JUSTIFICATIVA
 7896004754949;Duloxetina 30 mg Caixa 30 Cápsulas de Liberação Retardada;CONTROLADO;ANVISA_RDC_1036_2026;Lista C1: Duloxetina
 7896004755342;Rosuvastatina Cálcica 5 mg Caixa 60 Comprimidos Revestidos;PRESCRICAO;TRIAGEM_PRESCRICAO_CONFERIR_BULA;Prescricao provável, conferir bula/tarja da apresentacao antes de usar como dado regulatorio definitivo
 7896004755878;Drospirenona + Etinilestradiol 3+0.03 mg Caixa 63 Comprimidos Revestidos;PRESCRICAO;TRIAGEM_PRESCRICAO_CONFERIR_BULA;Prescricao provável, conferir bula/tarja da apresentacao antes de usar como dado regulatorio definitivo
-7896004756417;Paracetamol + Codeína 500+30 mg Caixa 12 Comprimidos;NAO_CLASSIFICADO;REVISAO_PENDENTE;Exige confirmacao de indicacao/forma/embalagem para EAN
-7896004756424;Paracetamol + Codeína 500+30 mg Caixa 24 Comprimidos;NAO_CLASSIFICADO;REVISAO_PENDENTE;Exige confirmacao de indicacao/forma/embalagem para EAN
-7896004756431;Paracetamol + Codeína 500+30 mg Caixa 36 Comprimidos;NAO_CLASSIFICADO;REVISAO_PENDENTE;Exige confirmacao de indicacao/forma/embalagem para EAN
+7896004756417;Paracetamol + Codeína 500+30 mg Caixa 12 Comprimidos;CONTROLADO;ANVISA_RDC_1036_2026;Codeina associada, lista A2 da Portaria 344 atualizada
+7896004756424;Paracetamol + Codeína 500+30 mg Caixa 24 Comprimidos;CONTROLADO;ANVISA_RDC_1036_2026;Codeina associada, lista A2 da Portaria 344 atualizada
+7896004756431;Paracetamol + Codeína 500+30 mg Caixa 36 Comprimidos;CONTROLADO;ANVISA_RDC_1036_2026;Codeina associada, lista A2 da Portaria 344 atualizada
 7896004756875;Clonixinato De Lisina + Ciclobenzaprina 125+5 mg Caixa 15 Comprimidos Revestidos;PRESCRICAO;TRIAGEM_PRESCRICAO_CONFERIR_BULA;Prescricao provável, conferir bula/tarja da apresentacao antes de usar como dado regulatorio definitivo
 7896004757353;Levocetirizina 5 mg Caixa 10 Comprimidos Revestidos;OTC;ANVISA_IN_285_2024;Comprimido <=5mg
 7896004758114;Mirtazapina 15 mg Caixa 30 Comprimidos Orodispersíveis;CONTROLADO;ANVISA_RDC_1036_2026;Lista C1: Mirtazapina
