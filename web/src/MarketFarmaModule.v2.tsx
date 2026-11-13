@@ -4,10 +4,21 @@ import './market-phase4.css'
 import './market-cart.css'
 import './market-client-search.css'
 
+type Categoria = 'OTC' | 'PRESCRICAO' | 'CONTROLADO' | 'ANTIMICROBIANO' | 'NAO_CLASSIFICADO'
+const CATEGORIAS: { value: Categoria; label: string }[] = [
+  { value: 'OTC', label: 'OTC / MIP' },
+  { value: 'PRESCRICAO', label: 'Sob prescrição' },
+  { value: 'CONTROLADO', label: 'Controlados' },
+  { value: 'ANTIMICROBIANO', label: 'Antimicrobianos' },
+  { value: 'NAO_CLASSIFICADO', label: 'A classificar' },
+]
+const categoriaLabel = (value: string) => CATEGORIAS.find(item => item.value === value)?.label || 'A classificar'
+
 type Row = {
   uf: string
   ean: string
   produto: string
+  categoria_farmaceutica: Categoria
   distribuidora: string
   estoque: number
   desconto: number
@@ -88,6 +99,11 @@ export default function MarketFarmaModule({ onBack, onAutomations }: { onBack: (
   const [dist, setDist] = useState('')
   const [search, setSearch] = useState('')
   const [stock, setStock] = useState(false)
+  const [categoria, setCategoria] = useState('')
+  const [classificacoesCsv, setClassificacoesCsv] = useState('')
+  const [salvandoClasse, setSalvandoClasse] = useState('')
+  const [importandoClasses, setImportandoClasses] = useState(false)
+  const [classeAviso, setClasseAviso] = useState('')
   const [data, setData] = useState<Data | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -121,6 +137,7 @@ export default function MarketFarmaModule({ onBack, onAutomations }: { onBack: (
         if (dist) params.set('distribuidora', dist)
         if (search.trim()) params.set('busca', search.trim())
         if (stock) params.set('estoque', '1')
+        if (categoria) params.set('categoria', categoria)
         const response = await fetch(`/api/mercado-farma?${params}`, { cache: 'no-store', signal: controller.signal })
         const json = await response.json()
         if (!response.ok) throw new Error(json.detalhe || json.erro || 'Falha ao carregar Mercado Farma')
@@ -135,7 +152,7 @@ export default function MarketFarmaModule({ onBack, onAutomations }: { onBack: (
       }
     }, search ? 250 : 0)
     return () => { controller.abort(); window.clearTimeout(timer) }
-  }, [uf, dist, search, stock, reload, clientCnpj])
+  }, [uf, dist, search, stock, categoria, reload, clientCnpj])
 
   const storageKey = data?.usuario?.login ? `mercado-farma-carrinho:${data.usuario.login}` : ''
   useEffect(() => {
@@ -374,8 +391,53 @@ export default function MarketFarmaModule({ onBack, onAutomations }: { onBack: (
     } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)) } finally { setExporting(false) }
   }
 
+  async function enviarClassificacoes(itens: Array<{ ean: string; categoria: string; fonte: string }>) {
+    const response = await fetch('/api/mercado-farma-classificacao', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ itens }),
+    })
+    const body = await response.json() as { sucesso?: boolean; atualizados?: number; erro?: string; detalhe?: string }
+    if (!response.ok) throw new Error(body.erro || body.detalhe || 'Não foi possível salvar a classificação.')
+    setReload(value => value + 1)
+    return body.atualizados || 0
+  }
+
+  async function classificarProduto(ean: string, tipo: Categoria) {
+    setSalvandoClasse(ean)
+    setClasseAviso('')
+    try {
+      await enviarClassificacoes([{ ean, categoria: tipo, fonte: 'CONFERENCIA_MANUAL' }])
+      setClasseAviso('Classificação atualizada por EAN. Verifique a referência sanitária utilizada.')
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason))
+    } finally { setSalvandoClasse('') }
+  }
+
+  async function importarClassificacoes() {
+    const linhas = classificacoesCsv.replace(/^\uFEFF/, '').split(/\r?\n/).map(line => line.trim()).filter(Boolean)
+    const itens = linhas.map(line => {
+      const campos = line.split(/[;\t]/).map(value => value.trim().replace(/^"|"$/g, ''))
+      return { ean: campos[0], categoria: campos[1] || '', fonte: campos[2] || 'CONFERENCIA_MANUAL' }
+    }).filter(item => !/^EAN$/i.test(item.ean))
+    if (!itens.length) { setError('Cole a lista EAN;CATEGORIA;FONTE.'); return }
+    if (itens.length > 500) { setError('Importe no máximo 500 EANs por vez.'); return }
+    setImportandoClasses(true)
+    setClasseAviso('')
+    setError('')
+    try {
+      const total = await enviarClassificacoes(itens)
+      setClassificacoesCsv('')
+      setClasseAviso(`${total} EAN(s) classificados com sucesso.`)
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason))
+    } finally { setImportandoClasses(false) }
+  }
+
   const summary = data?.resumo
-  const excelHref = `/api/mercado-farma-excel${effectiveUf ? `?uf=${encodeURIComponent(effectiveUf)}` : ''}`
+  const excelParams = new URLSearchParams()
+  if (effectiveUf) excelParams.set('uf', effectiveUf)
+  if (categoria) excelParams.set('categoria', categoria)
+  const excelHref = `/api/mercado-farma-excel${excelParams.size ? `?${excelParams}` : ''}`
   return <main className="content operations-page">
     <button className="back-button" onClick={onBack}>← Voltar ao painel</button>
     <section className="operations-hero">
@@ -402,9 +464,19 @@ export default function MarketFarmaModule({ onBack, onAutomations }: { onBack: (
     <section className="filters market-filters">
       <label><span>UF</span><select value={effectiveUf} disabled={!!selectedClient} onChange={event => setUf(event.target.value)}><option value="">Todas</option>{(data?.filtros.ufs || []).map(value => <option key={value}>{value}</option>)}</select>{selectedClient && <small>Definida pelo CNPJ selecionado</small>}</label>
       <label><span>Distribuidora</span><select value={dist} onChange={event => setDist(event.target.value)}><option value="">Todas que atendem {effectiveUf || 'as UFs'}</option>{(data?.filtros.distribuidoras || []).map(value => <option key={value}>{value}</option>)}</select></label>
+      <label><span>Tipo de medicamento</span><select value={categoria} onChange={event => setCategoria(event.target.value)}><option value="">Todos os tipos</option>{CATEGORIAS.map(tipo => <option value={tipo.value} key={tipo.value}>{tipo.label}</option>)}</select></label>
       <label><span>Produto ou EAN</span><input value={search} placeholder="Ex.: Amitriptilina 75 ou EAN" onChange={event => setSearch(event.target.value)} /></label>
       <label className="stock-check"><input type="checkbox" checked={stock} onChange={event => setStock(event.target.checked)} /><span>Com estoque</span></label>
     </section>
+    <details className="market-classification-management">
+      <summary>Classificar medicamentos por EAN (individualmente ou em lote)</summary>
+      <p>A classificação sanitária é independente do MIX. Confira cada apresentação conforme a Anvisa antes de classificar. EANs ainda não verificados ficam como “A classificar”.</p>
+      <label htmlFor="market-classification-paste">Importação em lote — EAN;CATEGORIA;FONTE</label>
+      <textarea id="market-classification-paste" rows={4} value={classificacoesCsv} onChange={event => setClassificacoesCsv(event.target.value)} placeholder={"EAN;CATEGORIA;FONTE\\n7890000000000;OTC;LMIP conferida"} />
+      <button type="button" className="secondary-button" disabled={importandoClasses} onClick={() => void importarClassificacoes()}>{importandoClasses ? "Importando…" : "Importar classificações"}</button>
+      <small>Categorias válidas: OTC, PRESCRICAO, CONTROLADO, ANTIMICROBIANO e NAO_CLASSIFICADO.</small>
+    </details>
+    {classeAviso && <div className="alert alert-success">{classeAviso}</div>}
     {error && <div className="alert alert-error">{error}<button className="error-action" onClick={onAutomations}>Automações</button></div>}
     {status && !queueing && <div className="alert alert-success">{status}</div>}
     {ultimoRelatorio && <section className="market-extraction-report" aria-label="Último relatório da extração por UF">
@@ -429,7 +501,7 @@ export default function MarketFarmaModule({ onBack, onAutomations }: { onBack: (
         const menuOpen = openBuybox === product.key
         return <article className={`mef-product-card ${menuOpen ? 'is-open' : ''}`} key={product.key}>
           <div className="mef-card-top"><span className="mef-discount">{discount(selected?.desconto || 0)}</span><button className="mef-info" type="button" title={`Atualizado em ${date(selected?.atualizado_em)} · atende ${selected?.uf || effectiveUf}`}>i</button></div>
-          <div className="mef-product-info"><h2>{product.produto}</h2><div className="mef-brand-ean"><span>EMS Genéricos</span><button type="button" onClick={() => copyEan(product.ean)} title="Copiar EAN">{product.ean || 'EAN não informado'} <b>▣</b></button></div></div>
+          <div className="mef-product-info"><h2>{product.produto}</h2><span className={`market-classification-tag type-${selected?.categoria_farmaceutica || "NAO_CLASSIFICADO"}`}>{categoriaLabel(selected?.categoria_farmaceutica || "NAO_CLASSIFICADO")}</span><div className="mef-brand-ean"><span>EMS Genéricos</span><button type="button" onClick={() => copyEan(product.ean)} title="Copiar EAN">{product.ean || 'EAN não informado'} <b>▣</b></button></div></div>
           {selected && <div className="mef-buybox-wrap">
             <button className="mef-buybox" type="button" aria-expanded={menuOpen} onClick={() => setOpenBuybox(menuOpen ? '' : product.key)}>
               <span className="mef-buybox-distributor"><strong>{distributorLabel(selected)}</strong><small>{num.format(selected.estoque)} un. disponíveis · atende {selected.uf}</small></span>
@@ -443,6 +515,7 @@ export default function MarketFarmaModule({ onBack, onAutomations }: { onBack: (
               </button>
             })}</div>}
           </div>}
+          <label className="market-card-classify"><span>Classificação sanitária</span><select aria-label={`Classificação de ${product.produto}`} value={selected?.categoria_farmaceutica || "NAO_CLASSIFICADO"} disabled={salvandoClasse === product.ean} onChange={event => void classificarProduto(product.ean, event.target.value as Categoria)}>{CATEGORIAS.map(tipo => <option key={tipo.value} value={tipo.value}>{tipo.label}</option>)}</select></label>
           <div className="mef-quantity"><button type="button" disabled={quantity === 0} onClick={() => changeQuantity(product.key, -1)}>−</button><input aria-label="Quantidade" value={quantity} onChange={event => { const value = Number(event.target.value.replace(/\D/g, '')); setQuantities(current => ({ ...current, [product.key]: Math.max(0, Math.min(99999, value || 0)) })) }} /><button type="button" onClick={() => changeQuantity(product.key, 1)}>+</button></div>
           <button className="mef-cart-total" type="button" disabled={quantity === 0 || !selectedClient} onClick={() => addToCart(product, selected, quantity)}>🛒 {quantity ? `Adicionar · ${money.format(total)}` : money.format(0)}</button>
         </article>
