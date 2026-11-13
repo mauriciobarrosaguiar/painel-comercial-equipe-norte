@@ -43,3 +43,19 @@
 @media(max-width:1220px){.market-product-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.market-hero-actions{min-width:0;width:100%}}
 @media(max-width:760px){.market-hero-actions{grid-template-columns:1fr}.market-product-grid{grid-template-columns:1fr}.mef-product-card{min-height:305px}}
 @media(max-width:420px){.mef-buybox{grid-template-columns:minmax(0,1fr) 18px}.mef-buybox-price{grid-column:1/-1;align-items:flex-start;text-align:left}.mef-chevron{grid-column:2;grid-row:1}.mef-buybox-option{grid-template-columns:1fr}.mef-option-price{align-items:flex-start;text-align:left}}
+
+/* Classificacao sanitaria (independente do MIX comercial). */
+.market-classification-management{margin-top:12px;padding:14px 17px;border:1px solid #dbe4eb;border-radius:12px;background:#fff}
+.market-classification-management summary{font-size:.84rem;font-weight:700;color:#225676;cursor:pointer}
+.market-classification-management p,.market-classification-management small{display:block;margin:9px 0;color:#667680;font-size:.78rem;line-height:1.5}
+.market-classification-management label{display:block;margin:12px 0 7px;font-size:.8rem;font-weight:700}
+.market-classification-management textarea{display:block;width:100%;min-height:90px;padding:10px;border:1px solid #d4dfe7;border-radius:10px;font-family:ui-monospace,monospace;font-size:.78rem;resize:vertical}
+.market-classification-management button{margin-top:10px}
+.market-classification-tag{display:inline-flex;width:max-content;max-width:100%;padding:3px 9px;border-radius:6px;background:#f0f3f6;color:#4b5d70;font-size:.7rem;font-weight:800}
+.market-classification-tag.type-CONTROLADO{background:#fff0e7;color:#8f3c12}
+.market-classification-tag.type-OTC{background:#e4f6eb;color:#14683e}
+.market-classification-tag.type-PRESCRICAO{background:#e8f0fc;color:#305c92}
+.market-classification-tag.type-ANTIMICROBIANO{background:#f2eafa;color:#70418c}
+.market-card-classify{display:flex;align-items:center;justify-content:space-between;gap:7px;font-size:.72rem;color:#566879}
+.market-card-classify select{min-width:0;max-width:65%;padding:6px 8px;border:1px solid #d3e0e8;border-radius:8px;background:#fff;font-size:.75rem}
+@media(max-width:650px){.market-card-classify{align-items:stretch;flex-direction:column}.market-card-classify select{max-width:100%}}
