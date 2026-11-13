@@ -1,4 +1,5 @@
 import { readSession } from '../_lib/credentials.js'
+import { categoriaFarmaceutica } from '../_lib/classificacao-farmaceutica.js'
 
 const HEADERS = { 'content-type': 'application/json; charset=UTF-8', 'cache-control': 'no-store,no-cache,must-revalidate' }
 const json = (data, status = 200) => new Response(JSON.stringify(data), { status, headers: HEADERS })
@@ -56,6 +57,9 @@ export async function onRequestGet({ request, env }) {
     const distributor = text(params.get('distribuidora')).slice(0, 120)
     const search = text(params.get('busca')).slice(0, 160)
     const withStock = params.get('estoque') === '1'
+    const categoriaParam = text(params.get('categoria'))
+    const categoria = categoriaParam ? categoriaFarmaceutica(categoriaParam) : null
+    if (categoriaParam && !categoria) return json({ erro: 'Categoria farmacêutica inválida.' }, 400)
     const limit = Math.min(5000, Math.max(20, Number(params.get('limite') || 1000)))
     const conditions = ['1=1']
     const binds = []
@@ -63,6 +67,10 @@ export async function onRequestGet({ request, env }) {
     if (distributor) { conditions.push('distribuidora=?'); binds.push(distributor) }
     if (search) addSearchConditions(conditions, binds, search)
     if (withStock) conditions.push('COALESCE(estoque,0)>0')
+    if (categoria) {
+      conditions.push("COALESCE((SELECT cf.categoria FROM produto_classificacao_farmaceutica cf WHERE cf.ean=mercado_farma_precos.ean),'NAO_CLASSIFICADO')=?")
+      binds.push(categoria)
+    }
     const where = conditions.join(' AND ')
 
     const clientCondition = session?.consultor_id ? 'AND cl.consultor_id=?' : 'AND 1=0'
@@ -72,7 +80,7 @@ export async function onRequestGet({ request, env }) {
 
     const [summaryResult, rowsResult, ufsResult, distributorsResult, extractionResult, clientsResult] = await env.DB.batch([
       env.DB.prepare(`SELECT COUNT(*) registros,COUNT(DISTINCT ean) produtos,COUNT(DISTINCT uf) ufs,COUNT(DISTINCT distribuidora) distribuidoras,MAX(atualizado_em) atualizado_em,COALESCE(SUM(CASE WHEN estoque>0 THEN 1 ELSE 0 END),0) com_estoque FROM mercado_farma_precos WHERE ${where}`).bind(...binds),
-      env.DB.prepare(`SELECT uf,ean,produto,distribuidora,estoque,desconto,pf_distribuidora,pf_fabrica,preco_com_imposto,preco_sem_imposto,status,erro,atualizado_em,MIN(CASE WHEN estoque>0 AND UPPER(TRIM(COALESCE(status,'OK')))='OK' THEN CASE WHEN preco_sem_imposto>0 THEN preco_sem_imposto WHEN preco_com_imposto>0 THEN preco_com_imposto END END) OVER(PARTITION BY uf,ean) melhor_preco FROM mercado_farma_precos WHERE ${where} ORDER BY produto COLLATE NOCASE,CASE WHEN estoque>0 AND preco_sem_imposto>0 THEN preco_sem_imposto ELSE 999999999 END,distribuidora COLLATE NOCASE LIMIT ?`).bind(...binds, limit),
+      env.DB.prepare(`SELECT uf,ean,produto,distribuidora,estoque,desconto,pf_distribuidora,pf_fabrica,preco_com_imposto,preco_sem_imposto,status,erro,atualizado_em,COALESCE((SELECT cf.categoria FROM produto_classificacao_farmaceutica cf WHERE cf.ean=mercado_farma_precos.ean),'NAO_CLASSIFICADO') categoria_farmaceutica,MIN(CASE WHEN estoque>0 AND UPPER(TRIM(COALESCE(status,'OK')))='OK' THEN CASE WHEN preco_sem_imposto>0 THEN preco_sem_imposto WHEN preco_com_imposto>0 THEN preco_com_imposto END END) OVER(PARTITION BY uf,ean) melhor_preco FROM mercado_farma_precos WHERE ${where} ORDER BY produto COLLATE NOCASE,CASE WHEN estoque>0 AND preco_sem_imposto>0 THEN preco_sem_imposto ELSE 999999999 END,distribuidora COLLATE NOCASE LIMIT ?`).bind(...binds, limit),
       env.DB.prepare("SELECT DISTINCT UPPER(TRIM(uf)) uf FROM mercado_farma_precos WHERE TRIM(COALESCE(uf,''))<>'' ORDER BY uf"),
       env.DB.prepare(`SELECT DISTINCT distribuidora FROM mercado_farma_precos ${distributorWhere} ${distributorWhere ? 'AND' : 'WHERE'} TRIM(COALESCE(distribuidora,''))<>'' ORDER BY distribuidora COLLATE NOCASE`).bind(...distributorBinds),
       env.DB.prepare("SELECT status,total_registros,mensagem,erro,iniciado_em,finalizado_em,criado_em FROM extracoes WHERE tipo='MERCADO_FARMA' ORDER BY criado_em DESC LIMIT 1"),
