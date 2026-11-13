@@ -20,7 +20,7 @@ test('Excel do Mercado Farma gera XML válido, percentual numérico e colunas da
   for (const expected of ['NOME DO PRODUTO', 'DESCONTO (%)', 'PF DIST. (R$)', 'PREÇO FINAL (R$)', 'SEM IMPOSTO (R$)', '0.00%']) {
     assert.ok(archive.includes(expected), expected)
   }
-  const filter = archive.indexOf('<autoFilter ref="A3:K')
+  const filter = archive.indexOf('<autoFilter ref="A3:L')
   const merges = archive.indexOf('<mergeCells count="1">')
   assert.ok(filter > 0 && merges > filter, 'autoFilter deve vir antes de mergeCells no XML da planilha')
 })
