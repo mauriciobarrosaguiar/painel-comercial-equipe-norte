@@ -150,3 +150,6 @@ details.market-sales-explanation{
   .market-mini-symbol,.market-mini-status{font-size:.73rem}
   .market-sales-months{gap:4px}
 }
+
+/* UX mobile: filtros recolhidos e resumo de 2 colunas. */
+@media(max-width:760px){.market-summary{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:10px}.market-summary article{padding:12px}.market-summary strong{margin-top:4px;font-size:1.17rem}}
