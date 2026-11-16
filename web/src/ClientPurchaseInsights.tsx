@@ -90,8 +90,8 @@ export default function ClientPurchaseInsights({ dados, onOpenMarket }: { dados:
   }
 
   return <>
-    <section className="detail-section client-intelligence">
-      <div className="client-insights-heading"><div><span className="eyebrow">3 meses completos anteriores</span><h3>Cobertura do nosso catálogo</h3></div><strong>{dados.cobertura.percentual.toLocaleString('pt-BR')}%</strong></div>
+    <details className="detail-section client-intelligence client-collapsible">
+      <summary className="client-collapsible-summary"><h3>Cobertura do nosso catálogo</h3><strong>{dados.cobertura.percentual.toLocaleString('pt-BR')}%</strong></summary><p className="eyebrow">3 meses completos anteriores</p>
       <div className="client-coverage-metrics">
         <article><span>Catálogo ativo com EAN</span><b>{integer.format(dados.cobertura.total)}</b></article>
         <article><span>Produtos comprados</span><b>{integer.format(dados.cobertura.comprados)}</b></article>
@@ -99,9 +99,9 @@ export default function ClientPurchaseInsights({ dados, onOpenMarket }: { dados:
       </div>
       <div className="client-coverage-track" role="progressbar" aria-label="Cobertura do catálogo" aria-valuenow={dados.cobertura.percentual} aria-valuemin={0} aria-valuemax={100}><span style={{ width: `${dados.cobertura.percentual}%` }} /></div>
       <small>Período: {dados.cobertura.inicio.split('-').reverse().join('/')} a {dados.cobertura.fim.split('-').reverse().join('/')}. {dados.cobertura.criterio}</small>
-    </section>
-    <section className="detail-section client-intelligence">
-      <div className="client-insights-heading"><div><span className="eyebrow">Recomendação baseada no giro</span><h3>Sugestão de compras</h3></div><strong>{integer.format(disponiveis.length)} com oferta</strong></div>
+    </details>
+    <details className="detail-section client-intelligence client-collapsible">
+      <summary className="client-collapsible-summary"><h3>Sugestão de compras</h3><strong>{integer.format(disponiveis.length)} com oferta</strong></summary><p className="eyebrow">Recomendação baseada no giro</p>
       <p>Escolha as distribuidoras que deseja consultar, depois confirme as quantidades. O painel encontra o menor preço com estoque suficiente somente entre as selecionadas para <b>{dados.cliente.uf}</b>. Nenhum pedido será enviado automaticamente.</p>
       <fieldset className="client-distributor-filter" aria-label="Distribuidoras para comparação de preços">
         <legend>Distribuidoras para buscar o melhor preço em {dados.cliente.uf}</legend>
@@ -159,6 +159,6 @@ export default function ClientPurchaseInsights({ dados, onOpenMarket }: { dados:
       <div className="client-recommendation-footer"><span>{integer.format(marcados.length)} selecionados · estimativa {money.format(total)}</span><button className="primary-action" type="button" disabled={!selecionados.length} onClick={enviar}>Enviar selecionados ao carrinho do Mercado Farma →</button></div>
       <small>Somente ofertas disponíveis na UF do cliente são elegíveis. Preço e estoque deverão ser confirmados novamente no carrinho antes de gerar o pedido.</small>
       </div>
-    </section>
+    </details>
   </>
 }
