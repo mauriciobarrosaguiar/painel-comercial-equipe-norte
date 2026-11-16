@@ -100,7 +100,7 @@ export async function onRequestGet({ request, env }) {
              COALESCE((SELECT cf.categoria FROM produto_classificacao_farmaceutica cf WHERE cf.ean=mercado_farma_precos.ean),'NAO_CLASSIFICADO') categoria_farmaceutica
       FROM mercado_farma_precos
       WHERE (?='' OR UPPER(TRIM(uf))=?)
-        AND (?='' OR distribuIdora=?)
+        AND (?='' OR distribuidora=?)
         AND (?=0 OR COALESCE(estoque,0)>0)
         AND (?='' OR ${MIX_POR_EAN}=?)
         AND (?='' OR COALESCE((SELECT cf.categoria FROM produto_classificacao_farmaceutica cf WHERE cf.ean=mercado_farma_precos.ean),'NAO_CLASSIFICADO')=?)
