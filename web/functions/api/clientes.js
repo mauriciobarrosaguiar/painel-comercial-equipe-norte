@@ -125,7 +125,7 @@ export async function onRequestGet({ request, env }) {
     if (consultor) { where.push('cl.consultor_id=?'); binds.push(consultor) }
     if (uf) { where.push("UPPER(TRIM(COALESCE(cl.uf,'')))=?"); binds.push(uf) }
     if (cidade) { where.push("UPPER(TRIM(COALESCE(cl.cidade,'')))=UPPER(?)"); binds.push(cidade) }
-    if (busca) {
+    if (busca && !selecaoAtiva) {
       where.push("(UPPER(COALESCE(cl.nome_fantasia,'')) LIKE UPPER(?) OR COALESCE(cl.cnpj,'') LIKE ? OR UPPER(COALESCE(cl.cidade,'')) LIKE UPPER(?))")
       const termo = `%${busca}%`
       binds.push(termo, termo.replace(/\D/g, ''), termo)
