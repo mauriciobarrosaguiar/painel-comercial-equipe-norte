@@ -142,6 +142,7 @@ export default function MarketFarmaModule({ onBack, onAutomations }: { onBack: (
   const [trackingStart, setTrackingStart] = useState(0)
   const [janelaAberta, setJanelaAberta] = useState(extracaoPermitidaAgora)
   const [ultimoRelatorio, setUltimoRelatorio] = useState<{ status: string; mensagem: string; erro: string; finalizado_em?: string } | null>(null)
+  const [painelAuxiliar, setPainelAuxiliar] = useState<'classificar' | 'execucao' | null>(null)
   const [openBuybox, setOpenBuybox] = useState('')
   const [selectedRows, setSelectedRows] = useState<Record<string, string>>({})
   const [quantities, setQuantities] = useState<Record<string, number>>({})
@@ -510,22 +511,39 @@ export default function MarketFarmaModule({ onBack, onAutomations }: { onBack: (
       <span>Ranking por média mensal de vendas faturadas na Bússola (somatório dos três meses dividido por 3), com devoluções descontadas. O mês atual é parcial. É venda às farmácias, não ao consumidor.</span>
       {!!data?.ranking?.meses_sem_registro?.length && <span className="market-sales-warning">Atenção: sem registros do Bússola em {data.ranking.meses_sem_registro.map(mesCurto).join(', ')}. A média de 3 meses pode estar subestimada até a inclusão desses dados.</span>}
     </div>}
-    <details className="market-classification-management">
-      <summary>Classificar medicamentos por EAN (individualmente ou em lote)</summary>
-      <p>A classificação sanitária é independente do MIX. Confira cada apresentação conforme a Anvisa antes de classificar. EANs ainda não verificados ficam como “A classificar”.</p>
+    <section className="market-mini-tools" aria-label="Classificação e relatórios do Mercado Farma">
+      <button type="button" className={`market-mini-tool ${painelAuxiliar === 'classificar' ? 'is-active' : ''}`}
+        aria-expanded={painelAuxiliar === 'classificar'} aria-controls="market-classification-panel"
+        onClick={() => setPainelAuxiliar(current => current === 'classificar' ? null : 'classificar')}>
+        <span className="market-mini-symbol" aria-hidden="true">▣</span>
+        <span className="market-mini-label">Classificar EAN</span>
+        <span className="market-mini-toggle" aria-hidden="true">{painelAuxiliar === 'classificar' ? '−' : '+'}</span>
+      </button>
+      <button type="button" className={`market-mini-tool ${painelAuxiliar === 'execucao' ? 'is-active' : ''}`}
+        aria-expanded={painelAuxiliar === 'execucao'} aria-controls="market-execution-panel"
+        onClick={() => setPainelAuxiliar(current => current === 'execucao' ? null : 'execucao')}>
+        <span className={`market-mini-status ${ultimoRelatorio?.status === 'erro' ? 'has-error' : ultimoRelatorio?.status === 'concluido' ? 'has-success' : ''}`} aria-hidden="true">●</span>
+        <span className="market-mini-label">Última execução</span>
+        <span className="market-mini-toggle" aria-hidden="true">{painelAuxiliar === 'execucao' ? '−' : '+'}</span>
+      </button>
+    </section>
+    {painelAuxiliar === 'classificar' && <section id="market-classification-panel" className="market-classification-management market-mini-content" aria-label="Classificar medicamentos por EAN">
+      <p>Classificação por EAN, independente do MIX. Confira cada apresentação na Anvisa antes de classificar. EANs não verificados permanecem como “A classificar”.</p>
       <label htmlFor="market-classification-paste">Importação em lote — EAN;CATEGORIA;FONTE</label>
       <textarea id="market-classification-paste" rows={4} value={classificacoesCsv} onChange={event => setClassificacoesCsv(event.target.value)} placeholder={"EAN;CATEGORIA;FONTE\\n7890000000000;OTC;LMIP conferida"} />
       <button type="button" className="secondary-button" disabled={importandoClasses} onClick={() => void importarClassificacoes()}>{importandoClasses ? "Importando…" : "Importar classificações"}</button>
-      <small>Categorias válidas: OTC, PRESCRICAO, CONTROLADO, ANTIMICROBIANO e NAO_CLASSIFICADO.</small>
-    </details>
+      <small>Categorias: OTC, PRESCRICAO, CONTROLADO, ANTIMICROBIANO e NAO_CLASSIFICADO.</small>
+    </section>}
+    {painelAuxiliar === 'execucao' && <section id="market-execution-panel" className="market-extraction-report market-mini-content" aria-label="Última execução do Mercado Farma">
+      {ultimoRelatorio ? <>
+        <strong>Última execução — {ultimoRelatorio.status === 'concluido' ? 'Concluída' : ultimoRelatorio.status === 'erro' ? 'Falha parcial ou total' : 'Em andamento'}</strong>
+        <pre>{[ultimoRelatorio.mensagem, ultimoRelatorio.erro].filter(Boolean).join('\\n')}</pre>
+      </> : <p>Ainda não há relatório de execução disponível.</p>}
+      <button type="button" className="outline-button" onClick={onAutomations}>Ver detalhes das automações</button>
+    </section>}
     {classeAviso && <div className="alert alert-success">{classeAviso}</div>}
     {error && <div className="alert alert-error">{error}<button className="error-action" onClick={onAutomations}>Automações</button></div>}
     {status && !queueing && <div className="alert alert-success">{status}</div>}
-    {ultimoRelatorio && <section className="market-extraction-report" aria-label="Último relatório da extração por UF">
-      <strong>Última execução do Mercado Farma — {ultimoRelatorio.status === 'concluido' ? 'Concluída' : ultimoRelatorio.status === 'erro' ? 'Falha parcial ou total' : 'Em andamento'}</strong>
-      <pre>{[ultimoRelatorio.mensagem, ultimoRelatorio.erro].filter(Boolean).join('\n')}</pre>
-      <button type="button" className="outline-button" onClick={onAutomations}>Ver detalhes das automações</button>
-    </section>}
     <section className="market-summary">
       <article><span>Produtos</span><strong>{loading ? '—' : num.format(groups.length)}</strong></article>
       <article><span>Registros</span><strong>{num.format(search ? visibleRows : summary?.registros || 0)}</strong></article>
@@ -546,7 +564,7 @@ export default function MarketFarmaModule({ onBack, onAutomations }: { onBack: (
           <div className="mef-product-info"><h2>{product.produto}</h2><div className="market-product-badges"><span className={`market-classification-tag type-${selected?.categoria_farmaceutica || "NAO_CLASSIFICADO"}`}>{categoriaLabel(selected?.categoria_farmaceutica || "NAO_CLASSIFICADO")}</span><span className="market-mix-tag">{MIX_ROTULOS[selected?.tipo_mix || ''] || 'MIX não informado'}</span></div>{maisVendidos && selected?.ranking_mes && <div className="market-sales-badge">
             <strong>#{selected.ranking_mes} · {mediaNum.format(selected.unidades_media_mensal || 0)} un./mês (média 3m)</strong>
             <small>{money.format(selected.valor_media_mensal || 0)}/mês</small>
-            <span className="market-sales-months">{(selected.vendas_por_mes || []).map(item => <small key={item.mes}>{mesCurto(item.mes)}: {num.format(item.unidades)} un.</small>)}</span>
+            <span className="market-sales-months">{(selected.vendas_por_mes || []).map(item => <small key={item.mes} title={mesCurto(item.mes)}><span>{item.mes.slice(5, 7)}/{item.mes.slice(2, 4)}</span><b>{num.format(item.unidades)} un.</b></small>)}</span>
           </div>}<div className="mef-brand-ean"><span>EMS Genéricos</span><button type="button" onClick={() => copyEan(product.ean)} title="Copiar EAN">{product.ean || 'EAN não informado'} <b>▣</b></button></div></div>
           {selected && <div className="mef-buybox-wrap">
             <button className="mef-buybox" type="button" aria-expanded={menuOpen} onClick={() => setOpenBuybox(menuOpen ? '' : product.key)}>
