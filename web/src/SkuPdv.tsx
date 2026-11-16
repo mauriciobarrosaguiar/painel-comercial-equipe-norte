@@ -6,16 +6,17 @@ type Data = {disponivel:boolean;mes:string;atualizado_em:string|null;mensagem:st
 const currentMonth = () => { const parts = new Intl.DateTimeFormat('en-CA',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit'}).formatToParts(new Date()); return `${parts.find(p=>p.type==='year')?.value}-${parts.find(p=>p.type==='month')?.value}` }
 export default function SkuPdv({ refresh }: { refresh: number }) {
   const [filters,setFilters] = useState(() => { try { return {...{mes:currentMonth(),busca:'',situacao:'todos',ordem:'sem_combate',direcao:'asc'},...JSON.parse(sessionStorage.getItem('sku-pdv-filtros') || '{}')} } catch { return {mes:currentMonth(),busca:'',situacao:'todos',ordem:'sem_combate',direcao:'asc'} } })
-  const [page,setPage]=useState(1),[retry,setRetry]=useState(0),[data,setData]=useState<Data|null>(null),[error,setError]=useState(''),[loading,setLoading]=useState(false)
+  const [page,setPage]=useState(1),[retry,setRetry]=useState(0),[storedData,setData]=useState<Data|null>(null),[error,setError]=useState(''),[loading,setLoading]=useState(false)
   const update = (key:string,value:string) => { setFilters((f:typeof filters)=>({...f,[key]:value}));setPage(1) }
   const params = new URLSearchParams({...filters,pagina:String(page)})
   useEffect(()=>{
     try { sessionStorage.setItem('sku-pdv-filtros',JSON.stringify(filters)) } catch { /* Storage is optional. */ }
-    const controller=new AbortController(); setLoading(true);setError('');setData(null)
+    const controller=new AbortController(); setLoading(true);setError('')
     const timer=setTimeout(()=>fetch(`/api/sku-pdv?${new URLSearchParams({...filters,pagina:String(page)})}`,{cache:'no-store',signal:controller.signal}).then(async r=>{const b=await r.json();if(!r.ok)throw new Error(b.erro);return b}).then(setData).catch(e=>{if(!controller.signal.aborted)setError(e.message)}).finally(()=>{if(!controller.signal.aborted)setLoading(false)}),250)
     return ()=>{clearTimeout(timer);controller.abort()}
   },[filters,page,retry,refresh])
   useEffect(()=>{ const timer=window.setInterval(()=>{ if(document.visibilityState==='visible')setRetry(v=>v+1) },300000); const focus=()=>setRetry(v=>v+1); window.addEventListener('focus',focus);return ()=>{clearInterval(timer);window.removeEventListener('focus',focus)} },[])
+  const data = !error && storedData?.mes===filters.mes ? storedData : null
   const s=data?.resumo
   return <section className="sku-pdv" aria-label="SKU por ponto de venda"><header><h2>SKU/PDV — Produtividade de Mix por Cliente</h2><p>Vendas exclusivamente do mês selecionado ÷ todos os CNPJs da carteira pessoal atual.</p></header>
     <div className="sku-filters"><label>Mês analisado<input type="month" value={filters.mes} onChange={e=>update('mes',e.target.value)}/></label><button type="button" className="secondary-button" onClick={()=>setRetry(v=>v+1)}>Atualizar SKU/PDV</button></div>
