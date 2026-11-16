@@ -129,6 +129,8 @@ export default function MarketFarmaModule({ onBack, onAutomations }: { onBack: (
   const [categoria, setCategoria] = useState('')
   const [mix, setMix] = useState('')
   const [maisVendidos, setMaisVendidos] = useState('')
+  const [filtersOpen, setFiltersOpen] = useState(() => typeof window !== 'undefined' && window.matchMedia('(min-width: 901px)').matches)
+  const [visibleCount, setVisibleCount] = useState(24)
   const [classificacoesCsv, setClassificacoesCsv] = useState('')
   const [salvandoClasse, setSalvandoClasse] = useState('')
   const [importandoClasses, setImportandoClasses] = useState(false)
@@ -330,6 +332,9 @@ export default function MarketFarmaModule({ onBack, onAutomations }: { onBack: (
     return [...map.values()].map(item => ({ ...item, rows: [...item.rows].sort((a, b) => priceOrder(a) - priceOrder(b)) })).filter(item => item.rows.length)
   }, [data?.resultados, selectedClient?.uf])
   const groups = useMemo(() => allGroups.filter(product => matchesProduct(product, search)), [allGroups, search])
+  const visibleGroups = useMemo(() => groups.slice(0, visibleCount), [groups, visibleCount])
+  const filterLabels = [effectiveUf ? `UF ${effectiveUf}` : '', dist, categoria ? categoriaLabel(categoria) : '', mix ? MIX_ROTULOS[mix] : '', maisVendidos ? 'Mais vendidos' : '', stock ? 'Em estoque' : ''].filter(Boolean)
+  useEffect(() => { setVisibleCount(24) }, [effectiveUf, dist, categoria, mix, maisVendidos, stock, search, clientCnpj])
   const visibleRows = useMemo(() => groups.reduce((sum, group) => sum + group.rows.length, 0), [groups])
   const visibleStock = useMemo(() => groups.reduce((sum, group) => sum + group.rows.filter(row => row.estoque > 0).length, 0), [groups])
 
@@ -555,7 +560,7 @@ export default function MarketFarmaModule({ onBack, onAutomations }: { onBack: (
     <section className="market-product-grid">
       {loading && <div className="operations-empty">Carregando…</div>}
       {!loading && !groups.length && <div className="operations-empty">{maisVendidos ? 'Nenhum produto com unidades faturadas na Bússola no período de três meses para esta combinação de filtros.' : 'Nenhum produto encontrado para os filtros informados.'}</div>}
-      {groups.map(product => {
+      {visibleGroups.map(product => {
         const selectedKey = selectedRows[product.key]
         const selected = product.rows.find(row => rowKey(row) === selectedKey) || product.rows[0]
         const quantity = quantities[product.key] || 0
@@ -587,6 +592,7 @@ export default function MarketFarmaModule({ onBack, onAutomations }: { onBack: (
         </article>
       })}
     </section>
+    {groups.length > visibleGroups.length && <button className="market-show-more" type="button" onClick={() => setVisibleCount(value => value + 24)}>Mostrar mais produtos <span>({num.format(visibleGroups.length)} de {num.format(groups.length)})</span></button>}
 
     {cartOpen && <div className="market-cart-overlay" onMouseDown={event => { if (event.target === event.currentTarget) setCartOpen(false) }}><aside className="market-cart-drawer" role="dialog" aria-modal="true">
       <header><div><span>PEDIDO MERCADO FARMA</span><h2>Carrinho</h2></div><button type="button" onClick={() => setCartOpen(false)}>×</button></header>
