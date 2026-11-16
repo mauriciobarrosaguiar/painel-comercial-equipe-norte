@@ -161,3 +161,42 @@ export function buildXlsx({ sheetName, title, worksheetXml, stylesXml }) {
     { name: 'xl/worksheets/sheet1.xml', content: worksheetXml },
   ])
 }
+
+
+/**
+ * Gera XLSX multiabas sem dependências binárias (Cloudflare Workers).
+ * Cada sheet recebe XML de worksheet válido. Nomes são saneados, únicos e <=31.
+ */
+export function buildMultiSheetXlsx({ sheets, title, stylesXml }) {
+  if (!Array.isArray(sheets) || !sheets.length || sheets.length > 220) throw new Error('Quantidade inválida de abas.')
+  const used = new Set()
+  const named = sheets.map((sheet, index) => {
+    const base = String(sheet.name || `Cliente ${index + 1}`).replace(/[\[\]:*?/\\]/g, '-').replace(/[\u0000-\u001F]/g, '').replace(/^'+|'+$/g, '').trim() || `Cliente ${index + 1}`
+    let name = base.slice(0, 31)
+    let suffix = 2
+    while (used.has(name.toLowerCase())) {
+      const end = ` (${suffix++})`
+      name = base.slice(0, 31 - end.length) + end
+    }
+    used.add(name.toLowerCase())
+    return { name, content: String(sheet.xml || '') }
+  })
+  const now = new Date().toISOString()
+  const sheetList = named.map((s, index) =>
+    `<sheet name="${xmlEscape(s.name)}" sheetId="${index + 1}" r:id="rId${index + 1}"/>`).join('')
+  const sheetRels = named.map((_, index) =>
+    `<Relationship Id="rId${index + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${index + 1}.xml"/>`).join('')
+  const sheetTypes = named.map((_, index) =>
+    `<Override PartName="/xl/worksheets/sheet${index + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join('')
+  const files = [
+    { name: '[Content_Types].xml', content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>${sheetTypes}<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/><Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/><Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/></Types>` },
+    { name: '_rels/.rels', content: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/></Relationships>' },
+    { name: 'docProps/core.xml', content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><dc:creator>Painel Comercial Equipe Norte</dc:creator><dc:title>${xmlEscape(title || 'Carteira de Clientes - MIX')}</dc:title><dcterms:created xsi:type="dcterms:W3CDTF">${now}</dcterms:created><dcterms:modified xsi:type="dcterms:W3CDTF">${now}</dcterms:modified></cp:coreProperties>` },
+    { name: 'docProps/app.xml', content: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties"><Application>Painel Comercial Equipe Norte</Application></Properties>' },
+    { name: 'xl/workbook.xml', content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><bookViews><workbookView activeTab="0"/></bookViews><sheets>${sheetList}</sheets><calcPr calcId="191029" fullCalcOnLoad="1"/></workbook>` },
+    { name: 'xl/_rels/workbook.xml.rels', content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${sheetRels}<Relationship Id="rId${named.length + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>` },
+    { name: 'xl/styles.xml', content: stylesXml },
+    ...named.map((sheet, index) => ({ name: `xl/worksheets/sheet${index + 1}.xml`, content: sheet.content })),
+  ]
+  return zip(files)
+}
