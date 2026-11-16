@@ -92,3 +92,43 @@
   .clients-list-actions{justify-content:space-between;width:100%}
   .clients-export-mix{white-space:normal;text-align:center}
 }
+
+
+/* Seletor múltiplo de PDVs — pesquisa e checkboxes com CNPJ visível. */
+.client-pdv-multiselect{position:relative;grid-column:1/-1;min-width:0;display:block}
+.client-pdv-multiselect>label{display:block;margin-bottom:6px;font-weight:700;color:#3d5064;font-size:.75rem}
+.client-pdv-searchbox{position:relative;display:flex;width:100%;min-width:0}
+.client-pdv-searchbox input{width:100%;min-width:0;padding-right:40px}
+.client-pdv-clear-search{position:absolute;right:7px;top:50%;transform:translateY(-50%);border:0;background:transparent;color:#47687b;font-size:1.4rem;cursor:pointer;width:33px;height:33px}
+.client-pdv-options{position:relative;z-index:8;width:100%;box-sizing:border-box;margin-top:8px;background:#fff;border:1px solid #bdcfda;border-radius:12px;box-shadow:0 9px 24px #102b4217;overflow:hidden}
+.client-pdv-options-heading{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;padding:11px 13px;border-bottom:1px solid #e3eaf0;background:#f2f7fb;font-size:.82rem;color:#173a57}
+.client-pdv-options-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.client-pdv-options-actions button{border:1px solid #bdd4dc;background:#fff;color:#166682;border-radius:8px;padding:7px 10px;font-size:.75rem;font-weight:750;cursor:pointer}
+.client-pdv-options-actions button:first-child{background:#e2f5ed;color:#116946;border-color:#abd9c5}
+.client-pdv-options-actions button:disabled{opacity:.45;cursor:not-allowed}
+.client-pdv-option-list{max-height:294px;overflow-y:auto;overscroll-behavior:contain}
+.client-pdv-option{display:flex;align-items:center;gap:11px;padding:11px 13px;border-bottom:1px solid #edf1f4;cursor:pointer;min-width:0}
+.client-pdv-option:hover{background:#f2f8fa}
+.client-pdv-option:last-child{border-bottom:0}
+.client-pdv-option input[type="checkbox"]{width:19px;height:19px;min-height:19px;flex:none;margin:0;padding:0;accent-color:#0d8b61}
+.client-pdv-option>span{display:flex;min-width:0;flex-direction:column;gap:4px}
+.client-pdv-option strong{font-size:.78rem;color:#243f58;overflow-wrap:anywhere}
+.client-pdv-option small{font-size:.7rem;color:#687f91}
+.client-pdv-hint,.client-pdv-error{padding:10px 13px;margin:0;font-size:.75rem;color:#64798a}
+.client-pdv-error{color:#a83232;background:#fff2ef}
+.client-pdv-help{display:block;margin-top:7px;font-size:.7rem;color:#547189;line-height:1.4}
+.client-pdv-selection{display:block;margin-top:9px;padding:10px 12px;background:#f0f9f5;border:1px solid #c2e6d2;border-radius:10px}
+.client-pdv-selection-heading{display:flex;gap:9px;align-items:center;flex-wrap:wrap;justify-content:space-between;margin-bottom:6px}
+.client-pdv-selection-heading strong{font-size:.76rem;color:#176946}
+.client-pdv-selection-heading button{border:0;background:transparent;font-size:.72rem;font-weight:700;color:#176c83;cursor:pointer}
+.client-pdv-selection>small{font-size:.72rem;color:#647a88}
+.client-pdv-selected-chips{display:flex;flex-wrap:wrap;gap:6px;max-height:122px;overflow-y:auto}
+.client-pdv-selected-chips button{display:flex;min-width:0;max-width:100%;gap:6px;align-items:center;padding:4px 8px;border-radius:8px;border:1px solid #bcddcc;background:#fff;color:#315c49;cursor:pointer;font-size:.68rem}
+.client-pdv-selected-chips button span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.client-pdv-selected-chips button b{flex:none;font-size:1rem;color:#ba4747}
+@media(max-width:650px){
+ .client-pdv-options-heading{align-items:flex-start}
+ .client-pdv-options-actions{width:100%}
+ .client-pdv-option-list{max-height:280px}
+ .client-pdv-selected-chips{max-height:115px}
+}
