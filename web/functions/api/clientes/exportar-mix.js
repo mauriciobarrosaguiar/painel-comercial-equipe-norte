@@ -1,7 +1,7 @@
 import { readSession } from '../../_lib/credentials.js'
 import { onRequestGet as consultarClientes } from '../clientes.js'
 import { periodoTresMesesBrasilia } from '../../_lib/mercado-farma-comercial.js'
-import { prepararCatalogoMix, comporPlanilhaClientes, workbookClientesMix } from '../../_lib/clientes-mix-excel.js'
+import { prepararCatalogoMix, comporPlanilhaClientes, aplicarEstoquePorDistribuidora, workbookClientesMix } from '../../_lib/clientes-mix-excel.js'
 
 const MAX_CNPJS = 100
 const errors = (message, status=400) => new Response(message,{status,headers:{'content-type':'text/plain; charset=UTF-8','cache-control':'no-store'}})
@@ -95,12 +95,60 @@ export async function onRequestGet({request,env}) {
 
     const ordenados = filtrados.filter(c=>cnpjs.includes(onlyDigits(c.cnpj)))
     const unicos = [...new Map(ordenados.map(c=>[onlyDigits(c.cnpj),c])).values()]
-    const planilhas = comporPlanilhaClientes(unicos,catalogo,compras,periodo)
+    const ufs = [...new Set(unicos.map(item=>String(item.uf || '').trim().toUpperCase()).filter(uf=>/^[A-Z]{2}$/.test(uf)))]
+    if (!ufs.length) return errors('Clientes sem UF válida para consulta de estoque.',422)
+    const ufIn = ufs.map(()=>'?').join(',')
+    // Sempre oferecer somente distribuidoras que atendem a UF dos clientes.
+    const existentes = await env.DB.prepare(`
+      SELECT DISTINCT TRIM(distribuidora) nome FROM mercado_farma_precos
+      WHERE UPPER(TRIM(COALESCE(uf,''))) IN (${ufIn})
+        AND TRIM(COALESCE(distribuidora,''))<>''
+      ORDER BY nome COLLATE NOCASE
+    `).bind(...ufs).all()
+    const disponiveis = (existentes.results || []).map(item=>String(item.nome || '')).filter(Boolean)
+    const explicit = params.has('distribuidora')
+    const selecionadas = explicit
+      ? [...new Set(params.getAll('distribuidora').map(item=>String(item).trim()).filter(Boolean))]
+      : disponiveis
+    if (!selecionadas.length) return errors('Selecione pelo menos uma distribuidora para exportar o estoque.',422)
+    if (selecionadas.length > 20) return errors('Selecione até 20 distribuidoras por arquivo.',422)
+    if (selecionadas.some(item=>!disponiveis.includes(item))) return errors('A seleção contém distribuidoras fora das UFs dos clientes.',422)
+
+    // Evita somar snapshots: última linha por UF/EAN/distribuidora. Somente
+    // o status OK possui estoque válido; ausência de cotação fica em branco.
+    const eans = [...new Set(catalogo.map(prod=>String(prod.ean || '').trim()).filter(Boolean))]
+    const precos = []
+    for (let i=0; i<eans.length; i+=120) {
+      const bloco = eans.slice(i,i+120)
+      const eansIn = bloco.map(()=>'?').join(',')
+      const distIn = selecionadas.map(()=>'?').join(',')
+      const linhas = await env.DB.prepare(`
+        SELECT uf,ean,distribuidora,
+               CASE WHEN UPPER(TRIM(COALESCE(status,'')))='OK'
+                         AND estoque IS NOT NULL THEN MAX(0,estoque)
+                    ELSE NULL END estoque,
+               atualizado_em
+        FROM (
+          SELECT UPPER(TRIM(uf)) uf,TRIM(ean) ean,
+                 TRIM(distribuidora) distribuidora,estoque,status,atualizado_em,
+                 ROW_NUMBER() OVER(
+                   PARTITION BY UPPER(TRIM(uf)),TRIM(ean),TRIM(distribuidora)
+                   ORDER BY COALESCE(atualizado_em,'') DESC,id DESC
+                 ) numero
+          FROM mercado_farma_precos
+          WHERE UPPER(TRIM(COALESCE(uf,''))) IN (${ufIn})
+            AND TRIM(COALESCE(ean,'')) IN (${eansIn})
+            AND TRIM(COALESCE(distribuidora,'')) IN (${distIn})
+        ) WHERE numero=1
+      `).bind(...ufs,...bloco,...selecionadas).all()
+      precos.push(...(linhas.results||[]))
+    }
+    const planilhas = aplicarEstoquePorDistribuidora(comporPlanilhaClientes(unicos,catalogo,compras,periodo),precos,selecionadas)
     const bytes = workbookClientesMix(planilhas,periodo,{
       busca:params.get('busca')||'',uf:params.get('uf')||'',
       cidade:params.get('cidade')||'',prioridade:params.get('prioridade')||'',
       periodo:lista.periodo?.rotulo||'',
-    })
+    },selecionadas)
     return new Response(bytes,{headers:{
       'content-type':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       'content-disposition':`attachment; filename="carteira-mix-${periodo.meses[0]}-a-${periodo.mes}-${cnpjs.length}-cnpjs.xlsx"`,

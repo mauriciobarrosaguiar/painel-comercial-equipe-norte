@@ -132,3 +132,35 @@
  .client-pdv-option-list{max-height:280px}
  .client-pdv-selected-chips{max-height:115px}
 }
+
+
+/* Distribuidoras no Excel: seleção múltipla em lista suspensa, sem perder espaço. */
+.clients-distributors{min-width:0;grid-column:1/-1;border:1px solid #ccdfe3;border-radius:11px;background:#f6fafb}
+.clients-distributors>summary{
+  cursor:pointer;display:flex;align-items:center;justify-content:space-between;
+  gap:10px;padding:11px 13px;font-size:.8rem;font-weight:750;color:#194763
+}
+.clients-distributors>summary strong{font-size:.72rem;font-weight:750;color:#237656;white-space:nowrap}
+.clients-distributors-menu{padding:0 12px 12px}
+.clients-distributors-menu>p{margin:0 0 8px;line-height:1.4;font-size:.73rem;color:#4d6678}
+.clients-distributors-menu>small{display:block;color:#a93c39;margin:5px 0;font-size:.7rem}
+.clients-distributors-actions{display:flex;gap:8px;margin:8px 0;flex-wrap:wrap}
+.clients-distributors-actions button{
+  border:1px solid #bad7d5;border-radius:8px;background:#fff;color:#176a62;
+  padding:6px 11px;font-weight:700;font-size:.73rem;cursor:pointer
+}
+.clients-distributors-options{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;max-height:210px;overflow-y:auto}
+.clients-distributors-options label{
+  min-width:0;display:flex;align-items:center;gap:8px;
+  border:1px solid #e0e9e9;border-radius:8px;background:#fff;padding:7px 8px;cursor:pointer
+}
+.clients-distributors-options input[type="checkbox"]{
+  flex:none;width:18px;height:18px;min-height:18px;padding:0;margin:0;accent-color:#188560
+}
+.clients-distributors-options label span{min-width:0;font-size:.74rem;font-weight:700;overflow-wrap:anywhere}
+.clients-distributors-options label small{display:block;color:#6e8594;font-size:.65rem;font-weight:400}
+@media(max-width:860px){.clients-distributors-options{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:560px){
+ .clients-distributors>summary{align-items:flex-start;flex-direction:column;gap:4px}
+ .clients-distributors-options{grid-template-columns:1fr}
+}
