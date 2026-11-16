@@ -38,3 +38,53 @@ test('separa apresentações e compara os últimos três meses líquidos', () =>
   assert.match(data,/UN. 09\/26/)
   assert.match(data,/UN. 11\/26/)
 })
+
+
+test('XLSX multiabas respeita a sequência CT_Worksheet do Excel', () => {
+  const clients = [
+    { cnpj:'11111111000111',nome:'Farmácia & Filial <Centro>',cidade:'Palmas',uf:'TO' },
+    { cnpj:'22222222000122',nome:'Filial 02',cidade:'Gurupi',uf:'TO' },
+    { cnpj:'33333333000133',nome:'Filial 03',cidade:'Araguaína',uf:'TO' },
+  ]
+  const workbook = workbookClientesMix(comporPlanilhaClientes(clients,catalogo,[],p),p)
+  const raw = new TextDecoder().decode(workbook)
+  assert.equal(raw.slice(0,2),'PK')
+  // Ordem obrigatória do tipo CT_Worksheet no ISO/IEC 29500-1:
+  // sheetData -> autoFilter -> mergeCells -> pageMargins -> pageSetup.
+  const pages = [...raw.matchAll(/<worksheet xmlns="http:\/\/schemas\.openxmlformats\.org\/spreadsheetml\/2006\/main">([\s\S]*?)<\/worksheet>/g)]
+  assert.equal(pages.length, 4) // RESUMO + três CNPJs
+  for (const [, xml] of pages) {
+    const offsets = ['<sheetData>', '<autoFilter ', '<mergeCells ', '<pageMargins ', '<pageSetup '].map(tag => xml.indexOf(tag))
+    assert.ok(offsets.every(index => index >= 0), 'Worksheet deve conter todas as seções')
+    assert.deepEqual(offsets,[...offsets].sort((a,b)=>a-b),'A ordem OOXML deve ser estritamente respeitada')
+    assert.ok(!xml.includes('Farmácia & Filial <Centro>'), 'Caracteres especiais não podem quebrar XML')
+    assert.ok(!xml.includes('<t>Farmácia & Filial'), 'O ampersand precisa estar escapado')
+  }
+  assert.ok(raw.includes('Farmácia &amp; Filial &lt;Centro&gt;'))
+})
+
+test('pasta XLSX abre todas as abas por CNPJ sem precisar reparar o conteúdo', async () => {
+  const { default: readXlsxFile, readSheetNames } = await import('read-excel-file/node')
+  const clients = [
+    { cnpj:'11111111000111',nome:'Farmácia A',cidade:'Palmas',uf:'TO' },
+    { cnpj:'22222222000122',nome:'Drogaria B',cidade:'Gurupi',uf:'TO' },
+  ]
+  const purchases = [
+    { cnpj:clients[0].cnpj,ean:'7891111111111',mes:'2026-09',quantidade:8,pedidos:1,ultima_compra:'2026-09-20' },
+    { cnpj:clients[1].cnpj,ean:'7892222222222',mes:'2026-11',quantidade:3,pedidos:1,ultima_compra:'2026-11-12' },
+  ]
+  const bytes = workbookClientesMix(comporPlanilhaClientes(clients,catalogo,purchases,p),p)
+  const buffer = Buffer.from(bytes)
+  const names = await readSheetNames(buffer)
+  assert.deepEqual(names,['RESUMO','01 11111111000111','02 22222222000122'])
+  const summary = await readXlsxFile(buffer,{ sheet:'RESUMO' })
+  const client1 = await readXlsxFile(buffer,{ sheet:names[1] })
+  const client2 = await readXlsxFile(buffer,{ sheet:names[2] })
+  assert.equal(summary[0][0],'PAINEL COMERCIAL  |  COBERTURA DE MIX POR CLIENTE')
+  assert.equal(client1[7][0],'TIPO MIX')
+  assert.equal(client2[7][0],'TIPO MIX')
+  assert.ok(client1.flat().some(value => String(value).includes('COMPROU')))
+  assert.ok(client2.flat().some(value => String(value).includes('COMPROU')))
+  assert.ok(client1.flat().includes(8))
+  assert.ok(client2.flat().includes(3))
+})
