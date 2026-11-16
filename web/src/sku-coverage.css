@@ -80,3 +80,10 @@
   .sku-pdv .sku-pdv-pagination > * { flex:0 1 auto; }
   .sku-pdv-pagination button { padding:10px 12px; }
 }
+
+.sku-pdv-client-row { cursor:pointer; }
+.sku-pdv-client-link,.sku-pdv-client-cnpj { color:inherit; text-decoration:none; }
+.sku-pdv-client-link { display:inline-block; padding-block:4px; }
+.sku-pdv-client-link span { color:#7890a9; font-size:.8em; }
+.sku-pdv-client-link:hover,.sku-pdv-client-cnpj:hover { color:#145f99; text-decoration:underline; text-underline-offset:3px; }
+.sku-pdv-client-row:hover .sku-pdv-client-link { color:#145f99; }

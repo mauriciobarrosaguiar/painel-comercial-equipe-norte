@@ -65,6 +65,7 @@ export function pageUrl(page: AppPage, href = window.location.href) {
   const slug = PAGE_SLUG[page]
   if (slug) url.searchParams.set('pagina', slug)
   else url.searchParams.delete('pagina')
+  if (page !== 'clientes') url.searchParams.delete('cliente')
   return `${url.pathname}${url.search}${url.hash}`
 }
 

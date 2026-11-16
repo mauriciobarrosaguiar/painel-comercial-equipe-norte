@@ -1,5 +1,5 @@
 import SkuCoverage from './SkuCoverage'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import ClientPurchaseInsights, { type InteligenciaCliente } from './ClientPurchaseInsights'
 import './clients.css'
 
@@ -52,6 +52,11 @@ function priorityLabel(value: string) {
 }
 
 export default function ClientsModule({ onBack, onOpenMarket }: Props) {
+  const [linkedClient] = useState(() => {
+    const cnpj = new URLSearchParams(window.location.search).get('cliente')?.replace(/\D/g, '') || ''
+    return /^\d{14}$/.test(cnpj) ? cnpj : ''
+  })
+  const linkedClientOpened = useRef(false)
   const currentMonth = monthBounds(0)
   const [period, setPeriod] = useState<PeriodOption>('mes-atual')
   const [customStart, setCustomStart] = useState(currentMonth.inicio)
@@ -59,14 +64,15 @@ export default function ClientsModule({ onBack, onOpenMarket }: Props) {
   const [consultant, setConsultant] = useState('')
   const [uf, setUf] = useState('')
   const [city, setCity] = useState('')
-  const [search, setSearch] = useState('')
+  const [search, setSearch] = useState(linkedClient)
   const [pdvOptions, setPdvOptions] = useState<PdvOption[]>([])
   const [pdvOptionsOpen, setPdvOptionsOpen] = useState(false)
   const [pdvOptionsLoading, setPdvOptionsLoading] = useState(false)
   const [pdvOptionsTruncated, setPdvOptionsTruncated] = useState(false)
   const [pdvOptionsError, setPdvOptionsError] = useState('')
-  const [selectionMode, setSelectionMode] = useState(false)
-  const [selectedPdvs, setSelectedPdvs] = useState<PdvOption[]>([])
+  const [selectionMode, setSelectionMode] = useState(Boolean(linkedClient))
+  const [selectedPdvs, setSelectedPdvs] = useState<PdvOption[]>(() => linkedClient
+    ? [{ cnpj: linkedClient, nome: 'Cliente selecionado', cidade: '', uf: '' }] : [])
   const [priority, setPriority] = useState('')
   const [sort, setSort] = useState('prioridade')
   const [page, setPage] = useState(1)
@@ -287,6 +293,17 @@ export default function ClientsModule({ onBack, onOpenMarket }: Props) {
     } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)) }
     finally { setDetailLoading(false) }
   }
+
+  useEffect(() => {
+    if (!linkedClient || linkedClientOpened.current || loading || !data) return
+    const client = data.clientes.find(item => item.cnpj.replace(/\D/g, '') === linkedClient)
+    linkedClientOpened.current = true
+    if (client) {
+      setSelectedPdvs([{ cnpj: client.cnpj.replace(/\D/g, ''), nome: client.nome, cidade: client.cidade, uf: client.uf }])
+      void openDetail(client)
+    }
+    else setError('O cliente selecionado não foi encontrado na carteira atual.')
+  }, [linkedClient, data, loading])
 
   const resumo = data?.resumo
   const mesesRecentes = (detail?.historico || []).slice(-12).reverse()
