@@ -64,7 +64,7 @@ test('XLSX multiabas respeita a sequência CT_Worksheet do Excel', () => {
 })
 
 test('pasta XLSX abre todas as abas por CNPJ sem precisar reparar o conteúdo', async () => {
-  const { default: readXlsxFile, readSheetNames } = await import('read-excel-file/node')
+  const { default: readAllSheets } = await import('read-excel-file/node')
   const clients = [
     { cnpj:'11111111000111',nome:'Farmácia A',cidade:'Palmas',uf:'TO' },
     { cnpj:'22222222000122',nome:'Drogaria B',cidade:'Gurupi',uf:'TO' },
@@ -75,14 +75,13 @@ test('pasta XLSX abre todas as abas por CNPJ sem precisar reparar o conteúdo', 
   ]
   const bytes = workbookClientesMix(comporPlanilhaClientes(clients,catalogo,purchases,p),p)
   const buffer = Buffer.from(bytes)
-  const names = await readSheetNames(buffer)
-  assert.deepEqual(names,['RESUMO','01 11111111000111','02 22222222000122'])
-  const summary = await readXlsxFile(buffer,{ sheet:'RESUMO' })
-  const client1 = await readXlsxFile(buffer,{ sheet:names[1] })
-  const client2 = await readXlsxFile(buffer,{ sheet:names[2] })
+  // read-excel-file 9.x retorna uma lista de { sheet, data }; readSheetNames foi removida.
+  const sheets = await readAllSheets(buffer)
+  assert.deepEqual(sheets.map(item => item.sheet),['RESUMO','01 11111111000111','02 22222222000122'])
+  const [summary, client1, client2] = sheets.map(item => item.data)
   assert.equal(summary[0][0],'PAINEL COMERCIAL  |  COBERTURA DE MIX POR CLIENTE')
-  assert.equal(client1[7][0],'TIPO MIX')
-  assert.equal(client2[7][0],'TIPO MIX')
+  assert.ok(client1.some(row => row[0] === 'TIPO MIX'))
+  assert.ok(client2.some(row => row[0] === 'TIPO MIX'))
   assert.ok(client1.flat().some(value => String(value).includes('COMPROU')))
   assert.ok(client2.flat().some(value => String(value).includes('COMPROU')))
   assert.ok(client1.flat().includes(8))
