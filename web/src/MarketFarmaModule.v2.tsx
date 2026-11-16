@@ -600,9 +600,15 @@ export default function MarketFarmaModule({ onBack, onAutomations }: { onBack: (
               </button>
             })}</div>}
           </div>}
-          <label className="market-card-classify"><span>Classificação sanitária</span><select aria-label={`Classificação de ${product.produto}`} value={selected?.categoria_farmaceutica || "NAO_CLASSIFICADO"} disabled={salvandoClasse === product.ean} onChange={event => void classificarProduto(product.ean, event.target.value as Categoria)}>{CATEGORIAS.map(tipo => <option key={tipo.value} value={tipo.value}>{tipo.label}</option>)}</select></label>
-          <div className="mef-quantity"><button type="button" disabled={quantity === 0} onClick={() => changeQuantity(product.key, -1)}>−</button><input aria-label="Quantidade" value={quantity} onChange={event => { const value = Number(event.target.value.replace(/\D/g, '')); setQuantities(current => ({ ...current, [product.key]: Math.max(0, Math.min(99999, value || 0)) })) }} /><button type="button" onClick={() => changeQuantity(product.key, 1)}>+</button></div>
-          <button className="mef-cart-total" type="button" disabled={quantity === 0 || !selectedClient} onClick={() => addToCart(product, selected, quantity)}>🛒 {quantity ? `Adicionar · ${money.format(total)}` : money.format(0)}</button>
+          <details className="market-card-extra">
+            <summary>Informações e classificação <span aria-hidden="true">⌄</span></summary>
+            <label className="market-card-classify"><span>Classificação sanitária</span><select aria-label={`Classificação de ${product.produto}`} value={selected?.categoria_farmaceutica || "NAO_CLASSIFICADO"} disabled={salvandoClasse === product.ean} onChange={event => void classificarProduto(product.ean, event.target.value as Categoria)}>{CATEGORIAS.map(tipo => <option key={tipo.value} value={tipo.value}>{tipo.label}</option>)}</select></label>
+            <small>PF distribuidora: {money.format(selected?.pf_distribuidora || 0)} · Sem imposto: {money.format(selected?.preco_sem_imposto || 0)}</small>
+          </details>
+          <div className="mef-card-actions">
+            <div className="mef-quantity"><button type="button" disabled={quantity === 0} onClick={() => changeQuantity(product.key, -1)}>−</button><input aria-label={`Quantidade de ${product.produto}`} value={quantity} onChange={event => { const value = Number(event.target.value.replace(/\D/g, '')); setQuantities(current => ({ ...current, [product.key]: Math.max(0, Math.min(99999, value || 0)) })) }} /><button type="button" onClick={() => changeQuantity(product.key, 1)}>+</button></div>
+            <button className="mef-cart-total" type="button" disabled={quantity === 0 || !selectedClient} onClick={() => addToCart(product, selected, quantity)} title={quantity ? `Adicionar ${quantity} unidades: ${money.format(total)}` : 'Selecione o cliente e a quantidade'}>🛒 {quantity ? money.format(total) : 'Adicionar'}</button>
+          </div>
         </article>
       })}
     </section>
