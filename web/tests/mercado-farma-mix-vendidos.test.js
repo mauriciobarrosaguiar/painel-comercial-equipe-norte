@@ -19,7 +19,7 @@ async function setup() {
   const periodo = periodoTresMesesBrasilia()
   const anterior = `${periodo.meses[1]}-15`
   const anteanterior = `${periodo.meses[0]}-15`
-  const foraJanela = new Date(Date.UTC(Number(atual.mes.slice(0,4)), Number(atual.mes.slice(5,7)) - 3, 15)).toISOString().slice(0,10)
+  const foraJanela = new Date(Date.UTC(Number(atual.mes.slice(0,4)), Number(atual.mes.slice(5,7)) - 4, 15)).toISOString().slice(0,10)
   async function pedido(id, ean, units, valor, data, status='FATURADO', origem='BUSSOLA', ativo=1) {
     await DB.prepare("INSERT INTO pedidos(id,pedido_origem,nota_fiscal,cliente_id,consultor_id,data_pedido,data_faturamento,status,valor_faturado,origem,ativo,atualizado_em) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)")
       .bind(id,id,id,'cl1','co1',data,data,status,valor,origem,ativo,data).run()
