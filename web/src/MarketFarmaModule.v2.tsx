@@ -461,6 +461,8 @@ export default function MarketFarmaModule({ onBack, onAutomations }: { onBack: (
   if (categoria) excelParams.set('categoria', categoria)
   if (mix) excelParams.set('mix', mix)
   if (maisVendidos) excelParams.set('mais_vendidos', maisVendidos)
+  if (dist) excelParams.set('distribuidora', dist)
+  if (stock) excelParams.set('estoque', '1')
   const excelHref = `/api/mercado-farma-excel${excelParams.size ? `?${excelParams}` : ''}`
   return <main className="content operations-page">
     <button className="back-button" onClick={onBack}>← Voltar ao painel</button>
