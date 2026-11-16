@@ -81,6 +81,9 @@ export default function ClientsModule({ onBack, onOpenMarket }: Props) {
   const [distribuidorasEscolhidas, setDistribuidorasEscolhidas] = useState<string[] | null>(null)
   const [distribuidorasLoading, setDistribuidorasLoading] = useState(false)
   const [distribuidorasError, setDistribuidorasError] = useState('')
+  // Aberto inicialmente para tornar a lista e suas caixas de seleção visíveis.
+  const [distribuidorasAberto, setDistribuidorasAberto] = useState(true)
+  const [buscaDistribuidora, setBuscaDistribuidora] = useState('')
   const [error, setError] = useState('')
 
   const selectedCnpjs = useMemo(() => selectedPdvs.map(item => item.cnpj).join(','), [selectedPdvs])
@@ -89,6 +92,10 @@ export default function ClientsModule({ onBack, onOpenMarket }: Props) {
     distribuidorasEscolhidas === null ? distribuidoresDisponiveis
       : distribuidorasEscolhidas.filter(item=>distribuidoresDisponiveis.includes(item)),
   [distribuidorasEscolhidas,distribuidoresDisponiveis])
+  const distribuidorasFiltradas = useMemo(() => distribuidoras.filter(item =>
+    item.nome.toLocaleLowerCase('pt-BR').includes(buscaDistribuidora.trim().toLocaleLowerCase('pt-BR')) ||
+    item.ufs.some(ufAtendida => ufAtendida.toLocaleLowerCase('pt-BR').includes(buscaDistribuidora.trim().toLocaleLowerCase('pt-BR')))
+  ), [distribuidoras,buscaDistribuidora])
 
   function alterarDistribuidora(nome: string) {
     setDistribuidorasEscolhidas(current => {
@@ -304,25 +311,49 @@ export default function ClientsModule({ onBack, onOpenMarket }: Props) {
       <label><span>Cidade</span><select value={city} onChange={(event) => setCity(event.target.value)}><option value="">Todas</option>{(data?.filtros.cidades || []).map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
       <label><span>Prioridade</span><select value={priority} onChange={(event) => setPriority(event.target.value)}><option value="">Todas</option><option value="CRITICA">Crítica</option><option value="ALTA">Alta</option><option value="MEDIA">Média</option><option value="BAIXA">Baixa</option><option value="NOVO">Novo</option></select></label>
       <label><span>Ordenar</span><select value={sort} onChange={(event) => setSort(event.target.value)}><option value="prioridade">Maior prioridade</option><option value="dias_sem_comprar">Mais dias sem comprar</option><option value="maior_queda">Maior queda</option><option value="maior_faturamento">Maior faturamento</option><option value="menor_faturamento">Menor faturamento</option><option value="nome">Nome</option></select></label>
-      <details className="clients-distributors" aria-label="Selecionar distribuidoras para o Excel">
-        <summary>Estoque por distribuidora no Excel <strong>{distribuidorasLoading ? 'Carregando...' : `${distribuidoresAtivos.length} de ${distribuidoras.length} selecionadas`}</strong></summary>
-        <div className="clients-distributors-menu">
-          <p>Selecione quais distribuidoras terão colunas no RESUMO e em cada aba por CNPJ. O estoque é do distribuidor, por UF, e não do PDV.</p>
-          <div className="clients-distributors-actions">
-            <button type="button" onClick={() => setDistribuidorasEscolhidas(null)}>Selecionar todas</button>
-            <button type="button" onClick={() => setDistribuidorasEscolhidas([])}>Limpar seleção</button>
+      <section className="clients-distributors clients-distributors-visible" aria-label="Selecionar distribuidoras para o Excel">
+        <button type="button" className="clients-distributors-trigger"
+          aria-expanded={distribuidorasAberto} aria-controls="clientes-distribuidoras-lista"
+          onClick={() => setDistribuidorasAberto(aberto => !aberto)}>
+          <span className="clients-distributors-trigger-copy">
+            <strong>Distribuidoras para o Excel</strong>
+            <small>Escolha quais estoques aparecerão nas colunas da planilha</small>
+          </span>
+          <span className="clients-distributors-trigger-right">
+            <span className="clients-distributors-count">{distribuidorasLoading ? 'Carregando…' : `${distribuidoresAtivos.length} de ${distribuidoras.length} selecionadas`}</span>
+            <span className="clients-distributors-chevron" aria-hidden="true">{distribuidorasAberto ? '▴' : '▾'}</span>
+          </span>
+        </button>
+        {distribuidorasAberto && <div id="clientes-distribuidoras-lista" className="clients-distributors-menu">
+          <div className="clients-distributors-toolbar">
+            <label className="clients-distributors-search" htmlFor="clientes-buscar-distribuidora">
+              <span>Filtrar distribuidoras</span>
+              <input id="clientes-buscar-distribuidora" type="search" value={buscaDistribuidora}
+                onChange={event => setBuscaDistribuidora(event.target.value)}
+                placeholder="Nome da distribuidora ou UF" />
+            </label>
+            <div className="clients-distributors-actions">
+              <button type="button" onClick={() => setDistribuidorasEscolhidas(null)}>Selecionar todas</button>
+              <button type="button" onClick={() => setDistribuidorasEscolhidas([])}>Desmarcar todas</button>
+            </div>
           </div>
-          {distribuidorasError && <small role="alert">{distribuidorasError}</small>}
+          {distribuidorasError && <small role="alert" className="clients-distributors-error">{distribuidorasError}</small>}
           {!distribuidorasLoading && !distribuidoras.length && <small>Sem distribuidoras disponíveis para a UF.</small>}
-          <div className="clients-distributors-options">
-            {distribuidoras.map(item => <label key={item.nome}>
+          <div className="clients-distributors-options" role="group" aria-label="Distribuidoras disponíveis">
+            {distribuidorasFiltradas.map(item => <label key={item.nome}>
               <input type="checkbox" checked={distribuidoresAtivos.includes(item.nome)}
                 onChange={() => alterarDistribuidora(item.nome)} />
-              <span>{item.nome}<small>{item.ufs.join(' / ')}</small></span>
+              <span>{item.nome}<small>Atende {item.ufs.join(' / ')}</small></span>
             </label>)}
           </div>
-        </div>
-      </details>
+          {!distribuidorasLoading && distribuidoras.length > 0 && !distribuidorasFiltradas.length &&
+            <small>Nenhuma distribuidora corresponde à pesquisa.</small>}
+          <div className="clients-distributors-footer">
+            <small>{distribuidoresAtivos.length ? 'Somente as distribuidoras marcadas entrarão no Excel.' : 'Marque ao menos uma distribuidora para habilitar o Excel.'}</small>
+            <button type="button" onClick={() => setDistribuidorasAberto(false)}>Concluir seleção</button>
+          </div>
+        </div>}
+      </section>
       <div className="client-search client-pdv-multiselect">
         <label htmlFor="client-pdv-search"><span>Buscar e selecionar PDVs por nome, CNPJ ou cidade</span></label>
         <div className="client-pdv-searchbox">
