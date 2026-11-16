@@ -7,8 +7,12 @@
 .client-detail header{padding:4px 58px 24px 0}
 .client-detail header h2{font-size:clamp(1.5rem,2.5vw,2.25rem);line-height:1.2}
 .client-detail .detail-close{position:fixed;top:20px;right:28px;z-index:90;box-shadow:0 3px 16px #10253a24}
-.client-detail .detail-section{margin-top:20px;padding:24px}
-.client-detail .detail-section h3{font-size:1.08rem}
+.client-detail .detail-section{margin-top:20px;padding:24px;border:1px solid #aabed1;box-shadow:0 3px 12px #1735520a}
+.client-detail .detail-section h3{font-size:1.08rem;padding-bottom:14px;margin-bottom:14px;border-bottom:2px solid #c6d5e3}
+.client-detail .detail-row{border-bottom:1px solid #c6d5e3;padding:14px 0}
+.client-detail .detail-row:last-child{border-bottom:0}
+.client-detail .detail-row>div:first-child{flex:1;min-width:0;padding-right:16px;border-right:1px solid #d3dfe9}
+.client-detail .detail-row>b{flex-shrink:0;max-width:30%;overflow-wrap:anywhere}
 .client-detail .detail-section>p,.client-intelligence>p{line-height:1.6;font-size:.86rem}
 .client-ficha-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:start}
 .client-ficha-grid .detail-section{margin-top:18px}
