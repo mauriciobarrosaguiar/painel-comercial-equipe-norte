@@ -75,7 +75,7 @@ export default function ClientMixOpportunities({ cliente, produtos, onOpenMarket
           <label>Quantidade<input aria-label={`Quantidade de ${item.produto}`} type="number" min="1" max="99999" step="1" value={quantity(item.ean)} onChange={event => setQuantities(values => ({ ...values, [item.ean]: Math.max(1, Math.min(99999, Math.floor(Number(event.target.value) || 1))) }))} /></label>
         </div>
         <div className="client-mix-price"><div><small>Preço unitário</small><strong>{offer ? money.format(offer.preco) : 'Indisponível'}</strong>{offer && <small>Total: {money.format(offer.preco * quantity(item.ean))} · Estoque: {offer.estoque}</small>}</div>
-          <button type="button" className="primary-action" disabled={!canAdd} onClick={() => addToCart([item])}>Adicionar ao carrinho</button></div>
+          <button type="button" className="primary-action" aria-label={`Adicionar ${item.produto} ao carrinho`} title="Adicionar ao carrinho" disabled={!canAdd} onClick={() => addToCart([item])}>Adicionar</button></div>
         {offer && <small className="client-mix-date">Extração: {offer.atualizado_em ? new Date(offer.atualizado_em).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : 'data não informada'}{!canAdd ? ' · Estoque insuficiente para esta quantidade' : ''}</small>}
       </article>
     })}</div>

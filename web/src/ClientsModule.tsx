@@ -465,8 +465,8 @@ export default function ClientsModule({ onBack, onOpenMarket }: Props) {
         <SkuCoverage key={detail.cliente.id} clienteId={detail.cliente.id} inicio={selectedPeriod.inicio} fim={selectedPeriod.fim} />
         {insights ? <ClientPurchaseInsights dados={insights} onOpenMarket={onOpenMarket} /> : <section className="detail-section"><h3>Cobertura e sugestões</h3><p>{insightsError || 'Carregando análise de compras por produto…'}</p></section>}
         <div className="client-ficha-grid"><div><section className="detail-section"><h3>Produtos mais comprados</h3>{detail.produtos.slice(0, 12).map((item) => <div className="detail-row" key={`${item.ean}-${item.produto}`}><div><strong>{item.produto}</strong><span>{item.ean} · {item.tipo_mix}</span></div><b>{currency.format(item.faturamento)}</b></div>)}</section>
-        <ClientMixOpportunities key={detail.cliente.id} cliente={detail.cliente} produtos={detail.oportunidades} onOpenMarket={onOpenMarket} />
         </div><div><section className="detail-section"><h3>Últimos pedidos</h3>{detail.pedidos.slice(0, 15).map((item) => <div className="detail-row" key={item.id}><div><strong>Pedido {item.pedido_origem}</strong><span>{formatDate(item.data)} · NF {item.nota_fiscal || 'não informada'} · {item.itens} itens</span></div><b>{currency.format(item.valor)}</b></div>)}</section></div></div>
+        <ClientMixOpportunities key={detail.cliente.id} cliente={detail.cliente} produtos={detail.oportunidades} onOpenMarket={onOpenMarket} />
       </>}
     </section></div>}
   </main>
