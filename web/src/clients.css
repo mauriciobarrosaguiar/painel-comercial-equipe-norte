@@ -74,3 +74,21 @@
   .client-recommendation-value{grid-column:auto}
   .detail-metrics{grid-template-columns:1fr 1fr}
 }
+
+
+/* Exportação da carteira filtrada: cabeçalho compacto, acessível em tablet/celular. */
+.clients-list-actions{display:flex;align-items:center;justify-content:flex-end;gap:12px;flex-wrap:wrap}
+.clients-list-actions>span{color:#62748b;font-size:.76rem;white-space:nowrap}
+.clients-export-mix{
+  min-height:38px;padding:8px 14px;border:1px solid #a6d2c4;border-radius:10px;
+  background:#e4f5ee;color:#086747;font-size:.78rem;font-weight:800;cursor:pointer;
+  white-space:nowrap;transition:background .15s ease
+}
+.clients-export-mix:hover:not(:disabled){background:#c9ebdc}
+.clients-export-mix:focus-visible{outline:2px solid #075e4a;outline-offset:2px}
+.clients-export-mix:disabled{opacity:.56;cursor:not-allowed}
+@media(max-width:720px){
+  .clients-list-heading{align-items:flex-start;flex-wrap:wrap;gap:9px}
+  .clients-list-actions{justify-content:space-between;width:100%}
+  .clients-export-mix{white-space:normal;text-align:center}
+}

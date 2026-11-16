@@ -66,6 +66,7 @@ export default function ClientsModule({ onBack, onOpenMarket }: Props) {
   const [insightsError, setInsightsError] = useState('')
   const [loading, setLoading] = useState(true)
   const [detailLoading, setDetailLoading] = useState(false)
+  const [exportandoMix, setExportandoMix] = useState(false)
   const [error, setError] = useState('')
 
   const selectedPeriod = useMemo(() => {
@@ -101,6 +102,42 @@ export default function ClientsModule({ onBack, onOpenMarket }: Props) {
     }, search ? 350 : 0)
     return () => { controller.abort(); window.clearTimeout(timer) }
   }, [period, customStart, customEnd, selectedPeriod.inicio, selectedPeriod.fim, consultant, uf, city, search, priority, sort, page])
+
+  async function exportarMixFiltrado() {
+    if (exportandoMix || loading || !data?.paginacao.total) return
+    setExportandoMix(true)
+    setError('')
+    try {
+      const params = new URLSearchParams({ periodo: period, ordenar: sort })
+      if (selectedPeriod.inicio && selectedPeriod.fim) {
+        params.set('inicio', selectedPeriod.inicio)
+        params.set('fim', selectedPeriod.fim)
+      }
+      if (consultant) params.set('consultor', consultant)
+      if (uf) params.set('uf', uf)
+      if (city) params.set('cidade', city)
+      if (search) params.set('busca', search)
+      if (priority) params.set('prioridade', priority)
+      const response = await fetch(`/api/clientes/exportar-mix?${params}`, { credentials: 'same-origin', cache: 'no-store' })
+      if (!response.ok) {
+        const reason = await response.text()
+        throw new Error(reason || 'Falha ao gerar relatório de MIX.')
+      }
+      const blob = await response.blob()
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `carteira-mix-clientes-${new Date().toISOString().slice(0,10)}.xlsx`
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.setTimeout(() => URL.revokeObjectURL(url), 3000)
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason))
+    } finally {
+      setExportandoMix(false)
+    }
+  }
 
   async function openDetail(client: ClientRow) {
     setDetailLoading(true); setDetail(null); setInsights(null); setInsightsError(''); setError('')
@@ -160,7 +197,17 @@ export default function ClientsModule({ onBack, onOpenMarket }: Props) {
     </section>
 
     <section className="clients-list-card">
-      <div className="clients-list-heading"><div><span className="eyebrow">Prioridades</span><h2>Carteira organizada</h2></div><span>{integer.format(data?.paginacao.total || 0)} clientes encontrados</span></div>
+      <div className="clients-list-heading">
+        <div><span className="eyebrow">Prioridades</span><h2>Carteira organizada</h2></div>
+        <div className="clients-list-actions">
+          <span>{integer.format(data?.paginacao.total || 0)} clientes encontrados</span>
+          <button type="button" className="clients-export-mix" disabled={loading || exportandoMix || !(data?.paginacao.total)}
+            onClick={() => void exportarMixFiltrado()}
+            title="Exporta todos os CNPJs filtrados, inclusive de outras páginas; cada CNPJ em sua aba">
+            {exportandoMix ? 'Gerando relatório…' : '↓ Excel · MIX por CNPJ'}
+          </button>
+        </div>
+      </div>
       <div className="clients-table-wrap"><table className="clients-table"><thead><tr><th>Prioridade</th><th>Cliente</th><th>Responsável</th><th>Faturamento</th><th>Comparação</th><th>Última compra</th><th>Mix</th><th></th></tr></thead><tbody>
         {loading && <tr><td colSpan={8} className="clients-empty">Carregando clientes…</td></tr>}
         {!loading && (data?.clientes || []).map((client) => <tr key={client.id}>
