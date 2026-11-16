@@ -1,5 +1,6 @@
 import DailyGoal from './DailyGoal'
-import SkuCoverage from './SkuCoverage'
+import SkuPdv from './SkuPdv'
+import './sku-coverage.css'
 import { useEffect, useMemo, useState } from 'react'
 import IntegrationSettings from './IntegrationSettings'
 import ConsultantsModule from './ConsultantsModule'
@@ -223,7 +224,7 @@ export default function App({ user, page, onNavigate, onLogout, onInstall }: Pro
             </article>
           </section>
 
-          <SkuCoverage inicio={selected.inicio || undefined} fim={selected.fim || undefined} uf={uf} />
+          <section className="sku-coverage sku-pdv-primary" aria-label="Meus SKUs — SKU por ponto de venda"><SkuPdv refresh={0} /></section>
 
           <section className="section-heading"><div><span className="eyebrow">Acesso rápido</span><h2>Módulos do painel</h2></div><span className="development-note">{status}</span></section>
           {[

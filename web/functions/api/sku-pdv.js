@@ -2,6 +2,7 @@ import { readSession, json } from '../_lib/credentials.js'
 import { monthlyQuery, queryFilters, categories } from '../_lib/sku-pdv.js'
 import { MAURICIO_ID } from '../_lib/personal-scope.js'
 import { buildXlsx } from '../_lib/xlsx-compatible.js'
+import { retryTurso, isTursoTransient } from '../_lib/turso-retry.js'
 const esc = v => String(v ?? '').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;')
 export async function onRequestGet({ request, env }) {
   try {
@@ -25,11 +26,12 @@ export async function onRequestGet({ request, env }) {
     const available=Boolean(meta?.itens && !meta.invalidos && meta.primeiro_mes===mes && meta.ultimo_mes===mes)
     if (!available) return json({disponivel:false,mes,atualizado_em:meta?.finalizado_em || null,mensagem:'Extração mensal detalhada ausente, incompleta ou de outro mês. Não é possível confirmar o SKU/PDV. Nenhum histórico foi utilizado.'})
     const page=Math.max(1,Math.min(100000,Number.parseInt(p.get('pagina') || '1',10)||1)), limit=25
-    const [summary,count,rows] = await env.DB.batch([
+    // All three CTEs only read data; retry this batch on transient gateway failures.
+    const [summary,count,rows] = await retryTurso(() => env.DB.batch([
       env.DB.prepare(cte+`SELECT COUNT(*) carteira,SUM(CASE WHEN sem_combate>0 THEN 1 ELSE 0 END) compradores,${categories.map(c=>`SUM(${c}) soma_${c},AVG(${c}) ${c}`).join(',')} FROM resultado`).bind(...args),
       env.DB.prepare(cte+`SELECT COUNT(*) total FROM resultado${f.where}`).bind(...args,...f.binds),
       env.DB.prepare(cte+`SELECT * FROM resultado${f.where} ORDER BY ${f.order}${p.get('excel')==='1'?'':' LIMIT ? OFFSET ?'}`).bind(...args,...f.binds,...(p.get('excel')==='1'?[]:[limit,(page-1)*limit]))
-    ])
+    ]))
     const s=summary.results[0], clientes=rows.results || []
     if (p.get('excel')==='1') {
       const headers=['CNPJ','CLIENTE','PRIORITÁRIOS','LANÇAMENTOS','LINHA','SEM COMBATE','CATÁLOGO TOTAL','SITUAÇÃO']
@@ -39,5 +41,10 @@ export async function onRequestGet({ request, env }) {
       return new Response(bytes,{headers:{'content-type':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet','content-disposition':`attachment; filename="SKU_PDV_${mes}.xlsx"`,'cache-control':'no-store'}})
     }
     return json({disponivel:true,mes,atualizado_em:meta.finalizado_em,resumo:{...s,zerados:s.carteira-s.compradores,cobertura:s.carteira?s.compradores/s.carteira*100:null,compradores_media:s.compradores?s.soma_sem_combate/s.compradores:null},clientes,paginacao:{pagina:page,limite:limit,total:count.results[0].total},mensagem:'Bússola mensal; saldo líquido positivo por CNPJ completo e EAN. Carteira oficial atual. Análise complementar compara com a média de toda a carteira.'})
-  } catch (e) { return json({erro:'Não foi possível consultar o SKU/PDV mensal.'},500) }
+  } catch (e) {
+    console.error('Falha na consulta SKU/PDV mensal:', e instanceof Error ? e.message : String(e))
+    return isTursoTransient(e)
+      ? json({erro:'O banco está temporariamente indisponível. Tente atualizar o SKU/PDV novamente.'},503,{'retry-after':'5'})
+      : json({erro:'Não foi possível consultar o SKU/PDV mensal. Tente atualizar novamente.'},500)
+  }
 }

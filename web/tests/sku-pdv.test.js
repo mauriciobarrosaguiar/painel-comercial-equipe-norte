@@ -55,3 +55,28 @@ test('acesso restrito ao Maurício e mês inválido',async()=>{
  const token=await createSessionToken({consultor_id:'outro'},secret)
  assert.equal((await onRequestGet({request:new Request('https://test/api/sku-pdv',{headers:{cookie:`painel_session=${token}`}}),env:{PAINEL_ADMIN_KEY:secret}})).status,401)
 })
+
+test('consulta mensal repete CTE somente em falha temporária e mantém o cálculo', async () => {
+ const secret='test-only-sku-pdv-session-key'
+ const token=await createSessionToken({login:'test',consultor_id:MAURICIO_ID},secret)
+ let attempts=0
+ const summary={carteira:4,compradores:2,soma_sem_combate:10,sem_combate:2.5,soma_total:12,total:3}
+ const DB={prepare:()=>({bind(){return this},first:async()=>({itens:10,invalidos:0,primeiro_mes:'2026-11',ultimo_mes:'2026-11',finalizado_em:'2026-11-16T12:00:00Z'})}),batch:async()=>{
+  if(++attempts===1)throw Object.assign(new Error('Turso HTTP 502'),{tursoTransient:true})
+  return [{results:[summary]},{results:[{total:4}]},{results:[]}]
+ }}
+ const response=await onRequestGet({request:new Request('https://test/api/sku-pdv?mes=2026-11',{headers:{cookie:`painel_session=${token}`}}),env:{DB,PAINEL_ADMIN_KEY:secret}})
+ assert.equal(response.status,200);assert.equal(attempts,2)
+ const body=await response.json();assert.equal(body.resumo.sem_combate,2.5);assert.equal(body.resumo.zerados,2)
+})
+
+test('falha persistente do SKU/PDV retorna indisponibilidade, sem médias inventadas', async t => {
+ t.mock.method(console,'error',()=>{})
+ const secret='test-only-sku-pdv-session-key'
+ const token=await createSessionToken({login:'test',consultor_id:MAURICIO_ID},secret)
+ let attempts=0
+ const DB={prepare:()=>({bind(){return this},first:async()=>({itens:10,invalidos:0,primeiro_mes:'2026-11',ultimo_mes:'2026-11'})}),batch:async()=>{attempts++;throw Object.assign(new Error('Turso HTTP 502'),{tursoTransient:true})}}
+ const response=await onRequestGet({request:new Request('https://test/api/sku-pdv?mes=2026-11',{headers:{cookie:`painel_session=${token}`}}),env:{DB,PAINEL_ADMIN_KEY:secret}})
+ assert.equal(response.status,503);assert.equal(attempts,3)
+ assert.equal((await response.json()).resumo,undefined)
+})

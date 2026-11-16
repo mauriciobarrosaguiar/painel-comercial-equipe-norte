@@ -8,20 +8,22 @@ const currentMonth = () => { const parts = new Intl.DateTimeFormat('en-CA',{time
 export default function SkuPdv({ refresh }: { refresh: number }) {
   const [filters,setFilters] = useState(() => { try { return {...{mes:currentMonth(),busca:'',situacao:'todos',ordem:'sem_combate',direcao:'asc'},...JSON.parse(sessionStorage.getItem('sku-pdv-filtros') || '{}')} } catch { return {mes:currentMonth(),busca:'',situacao:'todos',ordem:'sem_combate',direcao:'asc'} } })
   const [page,setPage]=useState(1),[retry,setRetry]=useState(0),[storedData,setData]=useState<Data|null>(null),[error,setError]=useState(''),[loading,setLoading]=useState(false)
+  const [loadedQuery,setLoadedQuery]=useState('')
   const update = (key:string,value:string) => { setFilters((f:typeof filters)=>({...f,[key]:value}));setPage(1) }
   const params = new URLSearchParams({...filters,pagina:String(page)})
+  const requestKey = params.toString()
   useEffect(()=>{
     try { sessionStorage.setItem('sku-pdv-filtros',JSON.stringify(filters)) } catch { /* Storage is optional. */ }
     const controller=new AbortController(); setLoading(true);setError('')
-    const timer=setTimeout(()=>fetch(`/api/sku-pdv?${new URLSearchParams({...filters,pagina:String(page)})}`,{cache:'no-store',signal:controller.signal}).then(async r=>{const b=await r.json();if(!r.ok)throw new Error(b.erro);return b}).then(setData).catch(e=>{if(!controller.signal.aborted)setError(e.message)}).finally(()=>{if(!controller.signal.aborted)setLoading(false)}),250)
+    const timer=setTimeout(()=>fetch(`/api/sku-pdv?${requestKey}`,{cache:'no-store',signal:controller.signal}).then(async r=>{const b=await r.json();if(!r.ok)throw new Error(b.erro || 'Não foi possível atualizar o SKU/PDV.');return b}).then(body=>{if(!controller.signal.aborted){setData(body);setLoadedQuery(requestKey)}}).catch(e=>{if(!controller.signal.aborted)setError(e.message)}).finally(()=>{if(!controller.signal.aborted)setLoading(false)}),250)
     return ()=>{clearTimeout(timer);controller.abort()}
-  },[filters,page,retry,refresh])
+  },[filters,page,retry,refresh,requestKey])
   useEffect(()=>{ const timer=window.setInterval(()=>{ if(document.visibilityState==='visible')setRetry(v=>v+1) },300000); const focus=()=>setRetry(v=>v+1); window.addEventListener('focus',focus);return ()=>{clearInterval(timer);window.removeEventListener('focus',focus)} },[])
-  const data = !error && storedData?.mes===filters.mes ? storedData : null
+  const data = storedData?.mes===filters.mes && loadedQuery===requestKey ? storedData : null
   const s=data?.resumo
   return <section className="sku-pdv" aria-label="SKU por ponto de venda"><header><h2>SKU/PDV — Produtividade de Mix por Cliente</h2><p>Vendas exclusivamente do mês selecionado ÷ todos os CNPJs da carteira pessoal atual.</p></header>
     <div className="sku-filters"><label>Mês analisado<input type="month" value={filters.mes} onChange={e=>update('mes',e.target.value)}/></label><button type="button" className="secondary-button" onClick={()=>setRetry(v=>v+1)}>Atualizar SKU/PDV</button></div>
-    {loading && <p role="status">Consultando produtividade mensal…</p>}{error && <p role="alert">{error}</p>}
+    {loading && <p role="status">Consultando produtividade mensal…</p>}{error && <p role="alert">{error}{data && ' Exibindo a última consulta concluída para estes filtros.'}</p>}
     {data && <><p>Última extração válida: {data.atualizado_em ? new Date(/Z$|[+-]\d\d:\d\d$/.test(data.atualizado_em)?data.atualizado_em:`${data.atualizado_em}Z`).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo'}) : 'Não disponível'}</p>
       {!data.disponivel ? <p role="status">{data.mensagem}</p> : <>
       <div className="sku-cards">{labels.map(([key,label])=><article key={key} className={key==='sem_combate'?'sku-pdv-main':''}><div className="sku-pdv-card"><h3>SKU/PDV {label}</h3><strong>{decimal(s?.[key])}</strong><span>SKUs por cliente · Carteira: {s?.carteira || 0} PDVs</span></div></article>)}
