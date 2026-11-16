@@ -26,6 +26,8 @@ type ClientDetail = {
   pedidos: Array<{ id: string; pedido_origem: string; nota_fiscal: string; status: string; data: string; valor: number; itens: number }>
   oportunidades: Array<{ id: string; ean: string; produto: string; tipo_mix: string }>
 }
+type PdvOption = Pick<ClientRow, 'cnpj' | 'nome' | 'cidade' | 'uf'>
+type PdvOptionResponse = { pdvs: PdvOption[]; total: number; truncado: boolean; erro?: string }
 type Props = { onBack: () => void; onOpenMarket: () => void }
 
 const currency = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
@@ -57,6 +59,13 @@ export default function ClientsModule({ onBack, onOpenMarket }: Props) {
   const [uf, setUf] = useState('')
   const [city, setCity] = useState('')
   const [search, setSearch] = useState('')
+  const [pdvOptions, setPdvOptions] = useState<PdvOption[]>([])
+  const [pdvOptionsOpen, setPdvOptionsOpen] = useState(false)
+  const [pdvOptionsLoading, setPdvOptionsLoading] = useState(false)
+  const [pdvOptionsTruncated, setPdvOptionsTruncated] = useState(false)
+  const [pdvOptionsError, setPdvOptionsError] = useState('')
+  const [selectionMode, setSelectionMode] = useState(false)
+  const [selectedPdvs, setSelectedPdvs] = useState<PdvOption[]>([])
   const [priority, setPriority] = useState('')
   const [sort, setSort] = useState('prioridade')
   const [page, setPage] = useState(1)
@@ -69,6 +78,74 @@ export default function ClientsModule({ onBack, onOpenMarket }: Props) {
   const [exportandoMix, setExportandoMix] = useState(false)
   const [error, setError] = useState('')
 
+  const selectedCnpjs = useMemo(() => selectedPdvs.map(item => item.cnpj).join(','), [selectedPdvs])
+
+  function togglePdv(item: PdvOption) {
+    setSelectionMode(true)
+    setPdvOptionsError('')
+    setSelectedPdvs(current => {
+      if (current.some(pdv => pdv.cnpj === item.cnpj)) return current.filter(pdv => pdv.cnpj !== item.cnpj)
+      if (current.length >= 100) {
+        setPdvOptionsError('Limite de 100 CNPJs por exportação. Remova algum PDV ou refine a busca.')
+        return current
+      }
+      return [...current, item]
+    })
+  }
+
+  function selecionarTodosEncontrados() {
+    const unicos = new Map([...selectedPdvs, ...pdvOptions].map(item => [item.cnpj, item]))
+    if (pdvOptionsTruncated) {
+      setPdvOptionsError('A busca retornou muitos PDVs. Refine o nome para selecionar todos sem omissões.')
+      return
+    }
+    if (unicos.size > 100) {
+      setPdvOptionsError('São mais de 100 CNPJs. Refine a pesquisa ou escolha os PDVs individualmente.')
+      return
+    }
+    setSelectedPdvs([...unicos.values()])
+    setSelectionMode(true)
+    setPdvOptionsError('')
+  }
+
+  function limparSelecaoPdvs() {
+    setSelectedPdvs([])
+    setSelectionMode(false)
+    setPdvOptionsError('')
+  }
+
+  useEffect(() => {
+    const term = search.trim()
+    if (term.length < 2) {
+      setPdvOptions([])
+      setPdvOptionsLoading(false)
+      setPdvOptionsTruncated(false)
+      return
+    }
+    const controller = new AbortController()
+    const timer = window.setTimeout(async () => {
+      setPdvOptionsLoading(true)
+      setPdvOptionsError('')
+      try {
+        const params = new URLSearchParams({ busca: term })
+        if (uf) params.set('uf', uf)
+        if (city) params.set('cidade', city)
+        const response = await fetch(`/api/clientes/opcoes-pdv?${params}`, { cache: 'no-store', credentials: 'same-origin', signal: controller.signal })
+        const body = await response.json() as PdvOptionResponse
+        if (!response.ok) throw new Error(body.erro || 'Não foi possível buscar PDVs.')
+        setPdvOptions(body.pdvs || [])
+        setPdvOptionsTruncated(!!body.truncado)
+      } catch (reason) {
+        if (reason instanceof DOMException && reason.name === 'AbortError') return
+        setPdvOptions([])
+        setPdvOptionsError(reason instanceof Error ? reason.message : 'Erro ao pesquisar PDVs.')
+      } finally {
+        if (!controller.signal.aborted) setPdvOptionsLoading(false)
+      }
+    }, 250)
+    return () => { controller.abort(); window.clearTimeout(timer) }
+  }, [search, uf, city])
+
   const selectedPeriod = useMemo(() => {
     if (period === 'mes-atual') return monthBounds(0)
     if (period === 'mes-anterior') return monthBounds(-1)
@@ -76,7 +153,7 @@ export default function ClientsModule({ onBack, onOpenMarket }: Props) {
     return { inicio: '', fim: '' }
   }, [period, customStart, customEnd])
 
-  useEffect(() => { setPage(1) }, [period, customStart, customEnd, consultant, uf, city, search, priority, sort])
+  useEffect(() => { setPage(1) }, [period, customStart, customEnd, consultant, uf, city, search, priority, sort, selectionMode, selectedCnpjs])
 
   useEffect(() => {
     if (period === 'personalizado' && (!customStart || !customEnd)) return
@@ -89,7 +166,8 @@ export default function ClientsModule({ onBack, onOpenMarket }: Props) {
         if (consultant) params.set('consultor', consultant)
         if (uf) params.set('uf', uf)
         if (city) params.set('cidade', city)
-        if (search) params.set('busca', search)
+        if (selectionMode) params.set('selecionados', selectedCnpjs)
+        else if (search) params.set('busca', search)
         if (priority) params.set('prioridade', priority)
         const response = await fetch(`/api/clientes?${params}`, { cache: 'no-store', signal: controller.signal })
         const result = await response.json() as ClientResponse & { erro?: string; detalhe?: string }
@@ -101,7 +179,7 @@ export default function ClientsModule({ onBack, onOpenMarket }: Props) {
       } finally { setLoading(false) }
     }, search ? 350 : 0)
     return () => { controller.abort(); window.clearTimeout(timer) }
-  }, [period, customStart, customEnd, selectedPeriod.inicio, selectedPeriod.fim, consultant, uf, city, search, priority, sort, page])
+  }, [period, customStart, customEnd, selectedPeriod.inicio, selectedPeriod.fim, consultant, uf, city, search, priority, sort, page, selectionMode, selectedCnpjs])
 
   async function exportarMixFiltrado() {
     if (exportandoMix || loading || !data?.paginacao.total) return
@@ -116,7 +194,8 @@ export default function ClientsModule({ onBack, onOpenMarket }: Props) {
       if (consultant) params.set('consultor', consultant)
       if (uf) params.set('uf', uf)
       if (city) params.set('cidade', city)
-      if (search) params.set('busca', search)
+      if (selectionMode) params.set('selecionados', selectedCnpjs)
+      else if (search) params.set('busca', search)
       if (priority) params.set('prioridade', priority)
       const response = await fetch(`/api/clientes/exportar-mix?${params}`, { credentials: 'same-origin', cache: 'no-store' })
       if (!response.ok) {
@@ -184,7 +263,50 @@ export default function ClientsModule({ onBack, onOpenMarket }: Props) {
       <label><span>Cidade</span><select value={city} onChange={(event) => setCity(event.target.value)}><option value="">Todas</option>{(data?.filtros.cidades || []).map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
       <label><span>Prioridade</span><select value={priority} onChange={(event) => setPriority(event.target.value)}><option value="">Todas</option><option value="CRITICA">Crítica</option><option value="ALTA">Alta</option><option value="MEDIA">Média</option><option value="BAIXA">Baixa</option><option value="NOVO">Novo</option></select></label>
       <label><span>Ordenar</span><select value={sort} onChange={(event) => setSort(event.target.value)}><option value="prioridade">Maior prioridade</option><option value="dias_sem_comprar">Mais dias sem comprar</option><option value="maior_queda">Maior queda</option><option value="maior_faturamento">Maior faturamento</option><option value="menor_faturamento">Menor faturamento</option><option value="nome">Nome</option></select></label>
-      <label className="client-search"><span>Buscar cliente, CNPJ ou cidade</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Digite para pesquisar" /></label>
+      <div className="client-search client-pdv-multiselect">
+        <label htmlFor="client-pdv-search"><span>Buscar e selecionar PDVs por nome, CNPJ ou cidade</span></label>
+        <div className="client-pdv-searchbox">
+          <input id="client-pdv-search" value={search} autoComplete="off"
+            aria-controls="client-pdv-options" aria-expanded={pdvOptionsOpen && search.trim().length >= 2}
+            onChange={event => { setSearch(event.target.value); setPdvOptionsOpen(true) }}
+            onFocus={() => { if (search.trim().length >= 2) setPdvOptionsOpen(true) }}
+            onKeyDown={event => { if (event.key === 'Escape') setPdvOptionsOpen(false) }}
+            placeholder="Ex.: ULTRA POPU — selecione os CNPJs desejados" />
+          {search && <button type="button" className="client-pdv-clear-search" onClick={() => { setSearch(''); setPdvOptionsOpen(false) }} aria-label="Apagar pesquisa">×</button>}
+        </div>
+        {pdvOptionsOpen && search.trim().length >= 2 && <div className="client-pdv-options" id="client-pdv-options">
+          <div className="client-pdv-options-heading">
+            <strong>{pdvOptionsLoading ? 'Pesquisando PDVs…' : `${pdvOptions.length} PDV(s) encontrado(s)`}</strong>
+            <div className="client-pdv-options-actions">
+              <button type="button" disabled={pdvOptionsLoading || !pdvOptions.length || pdvOptionsTruncated}
+                onClick={selecionarTodosEncontrados}>Selecionar todos</button>
+              <button type="button" onClick={() => setPdvOptionsOpen(false)}>Concluir</button>
+            </div>
+          </div>
+          {pdvOptionsTruncated && <p className="client-pdv-hint">Mais de 500 resultados; refine o nome para visualizar todos.</p>}
+          {pdvOptionsError && <p className="client-pdv-error" role="alert">{pdvOptionsError}</p>}
+          {!pdvOptionsLoading && pdvOptions.length === 0 && <p className="client-pdv-hint">Nenhum PDV encontrado para essa pesquisa.</p>}
+          <div className="client-pdv-option-list" role="group" aria-label="Selecionar PDVs encontrados">
+            {pdvOptions.map(pdv => <label key={pdv.cnpj} className="client-pdv-option">
+              <input type="checkbox" checked={selectedPdvs.some(item => item.cnpj === pdv.cnpj)}
+                onChange={() => togglePdv(pdv)} />
+              <span><strong>{pdv.nome}</strong><small>{pdv.cnpj} · {pdv.cidade}/{pdv.uf}</small></span>
+            </label>)}
+          </div>
+        </div>}
+        {selectionMode && <div className="client-pdv-selection" role="status">
+          <div className="client-pdv-selection-heading"><strong>{selectedPdvs.length} PDV(s) selecionado(s) para a tabela e Excel</strong>
+            <button type="button" onClick={limparSelecaoPdvs}>Limpar seleção</button>
+          </div>
+          {selectedPdvs.length === 0 ? <small>Seleção vazia. Marque um PDV acima ou limpe a seleção para voltar à pesquisa geral.</small> :
+            <div className="client-pdv-selected-chips">{selectedPdvs.map(pdv => <button key={pdv.cnpj} type="button"
+              onClick={() => togglePdv(pdv)} aria-label={`Retirar ${pdv.nome}, CNPJ ${pdv.cnpj}`}
+              title={`Retirar ${pdv.nome} (${pdv.cnpj})`}>
+              <span>{pdv.nome} · {pdv.cnpj}</span> <b aria-hidden="true">×</b>
+            </button>)}</div>}
+        </div>}
+        {!selectionMode && search.trim().length >= 2 && <small className="client-pdv-help">Marque os PDVs desejados ou use “Selecionar todos”; depois retire qualquer unidade desmarcando-a. A seleção será aplicada ao Excel.</small>}
+      </div>
       {period === 'personalizado' && <><label><span>Data inicial</span><input type="date" value={customStart} onChange={(event) => setCustomStart(event.target.value)} /></label><label><span>Data final</span><input type="date" value={customEnd} onChange={(event) => setCustomEnd(event.target.value)} /></label></>}
     </section>
 
