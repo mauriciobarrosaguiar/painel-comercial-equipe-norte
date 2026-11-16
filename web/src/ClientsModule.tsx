@@ -266,7 +266,7 @@ export default function ClientsModule({ onBack, onOpenMarket }: Props) {
         <div className="client-pdv-searchbox">
           <input id="client-pdv-search" value={search} autoComplete="off"
             aria-controls="client-pdv-options" aria-expanded={pdvOptionsOpen && search.trim().length >= 2}
-            onChange={event => { setSearch(event.target.value); setPdvOptionsOpen(true) }}
+            onChange={event => { setSearch(event.target.value); setPdvOptions([]); setPdvOptionsLoading(event.target.value.trim().length >= 2); setPdvOptionsOpen(true) }}
             onFocus={() => { if (search.trim().length >= 2) setPdvOptionsOpen(true) }}
             onKeyDown={event => { if (event.key === 'Escape') setPdvOptionsOpen(false) }}
             placeholder="Ex.: ULTRA POPU — selecione os CNPJs desejados" />
