@@ -1,6 +1,7 @@
 import { buildXlsx, currencyFormatCode, numberCell, stringCell } from '../_lib/xlsx-compatible.js'
-import { authorized } from '../_lib/credentials.js'
+import { authorized, readSession } from '../_lib/credentials.js'
 import { categoriaFarmaceutica } from '../_lib/classificacao-farmaceutica.js'
+import { MIX_POR_EAN, validarMix, validarRanking, mesAtualBrasilia, sqlVendasMes, aplicarRankingVendas } from '../_lib/mercado-farma-comercial.js'
 
 const text = value => String(value ?? '').trim()
 const number = value => Number.isFinite(Number(value)) ? Number(value) : 0
@@ -33,7 +34,7 @@ const styles = () => `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 </styleSheet>`
 
 function worksheet(rows, uf) {
-  const headers = ['UF','CNPJ REFERÊNCIA','EAN','NOME DO PRODUTO','DISTRIBUIDORA','ESTOQUE','DESCONTO (%)','PF DIST. (R$)','PREÇO FINAL (R$)','SEM IMPOSTO (R$)','DATA','CLASSIFICAÇÃO FARMACÊUTICA']
+  const headers = ['UF','CNPJ REFERÊNCIA','EAN','NOME DO PRODUTO','DISTRIBUIDORA','ESTOQUE','DESCONTO (%)','PF DIST. (R$)','PREÇO FINAL (R$)','SEM IMPOSTO (R$)','DATA','CLASSIFICAÇÃO FARMACÊUTICA','MIX COMERCIAL','UNIDADES VENDIDAS (MÊS)','VALOR VENDIDO (MÊS)','POSIÇÃO NO MÊS']
   const lines = [
     `<row r="1" ht="28" customHeight="1">${stringCell('A1', `MERCADO FARMA — ${uf || 'TODAS AS UFs'}`, 1)}</row>`,
     `<row r="3" ht="34" customHeight="1">${headers.map((label,index) => stringCell(`${String.fromCharCode(65 + index)}3`, label, 1)).join('')}</row>`,
@@ -53,15 +54,19 @@ function worksheet(rows, uf) {
       numberCell(`I${row}`, item.preco_com_imposto, 5) +
       numberCell(`J${row}`, item.preco_sem_imposto, 5) +
       stringCell(`K${row}`, item.atualizado_em, style) +
-      stringCell(`L${row}`, item.categoria_farmaceutica, style) + '</row>')
+      stringCell(`L${row}`, item.categoria_farmaceutica, style) +
+      stringCell(`M${row}`, item.tipo_mix, style) +
+      numberCell(`N${row}`, item.unidades_mes || 0, 4) +
+      numberCell(`O${row}`, item.valor_mes || 0, 5) +
+      numberCell(`P${row}`, item.ranking_mes || 0, 4) + '</row>')
   })
   const last = Math.max(3, rows.length + 3)
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
-  <dimension ref="A1:L${last}"/><sheetViews><sheetView workbookViewId="0"><pane ySplit="3" topLeftCell="A4" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>
+  <dimension ref="A1:P${last}"/><sheetViews><sheetView workbookViewId="0"><pane ySplit="3" topLeftCell="A4" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>
   <sheetFormatPr defaultRowHeight="18"/><cols>
-    <col min="1" max="1" width="8" customWidth="1"/><col min="2" max="2" width="20" customWidth="1"/><col min="3" max="3" width="19" customWidth="1"/><col min="4" max="4" width="52" customWidth="1"/><col min="5" max="5" width="35" customWidth="1"/><col min="6" max="7" width="14" customWidth="1"/><col min="8" max="10" width="17" customWidth="1"/><col min="11" max="11" width="22" customWidth="1"/><col min="12" max="12" width="27" customWidth="1"/>
-  </cols><sheetData>${lines.join('')}</sheetData><autoFilter ref="A3:L${last}"/><mergeCells count="1"><mergeCell ref="A1:L1"/></mergeCells>
+    <col min="1" max="1" width="8" customWidth="1"/><col min="2" max="2" width="20" customWidth="1"/><col min="3" max="3" width="19" customWidth="1"/><col min="4" max="4" width="52" customWidth="1"/><col min="5" max="5" width="35" customWidth="1"/><col min="6" max="7" width="14" customWidth="1"/><col min="8" max="10" width="17" customWidth="1"/><col min="11" max="11" width="22" customWidth="1"/><col min="12" max="12" width="27" customWidth="1"/><col min="13" max="13" width="17" customWidth="1"/><col min="14" max="16" width="22" customWidth="1"/>
+  </cols><sheetData>${lines.join('')}</sheetData><autoFilter ref="A3:P${last}"/><mergeCells count="1"><mergeCell ref="A1:P1"/></mergeCells>
   <pageMargins left="0.2" right="0.2" top="0.4" bottom="0.4" header="0.2" footer="0.2"/><pageSetup orientation="landscape" fitToWidth="1" fitToHeight="0" paperSize="9"/>
 </worksheet>`
 }
@@ -74,28 +79,50 @@ export async function onRequestGet({ request, env }) {
     const rawCategoria = text(params.get('categoria'))
     const categoria = rawCategoria ? categoriaFarmaceutica(rawCategoria) : ''
     if (rawCategoria && !categoria) return new Response('Categoria inválida.', { status: 400 })
+    const rawMix = text(params.get('mix'))
+    const mix = rawMix ? validarMix(rawMix) : ''
+    if (rawMix && !mix) return new Response('Filtro MIX inválido.', { status: 400 })
+    const rawRanking = text(params.get('mais_vendidos'))
+    const ranking = rawRanking ? validarRanking(rawRanking) : ''
+    if (rawRanking && !ranking) return new Response('Filtro Mais vendidos inválido.', { status: 400 })
+    const session = ranking ? await readSession(request, env.PAINEL_ADMIN_KEY) : null
+    if (ranking && !session?.consultor_id) return new Response('Faça login para exportar seus mais vendidos.', { status: 401 })
+    const dist = text(params.get('distribuidora')).slice(0, 120)
+    const stock = params.get('estoque') === '1'
+    const rankingMes = mesAtualBrasilia()
     const result = await env.DB.prepare(`
       SELECT UPPER(TRIM(COALESCE(uf,''))) uf,COALESCE(cnpj_referencia,'') cnpj_referencia,
              COALESCE(ean,'') ean,COALESCE(produto,'') produto,COALESCE(distribuidora,'') distribuidora,
              COALESCE(estoque,0) estoque,COALESCE(desconto,0) desconto,
              COALESCE(pf_distribuidora,0) pf_distribuidora,
              COALESCE(preco_com_imposto,0) preco_com_imposto,COALESCE(preco_sem_imposto,0) preco_sem_imposto,
-             COALESCE(atualizado_em,'') atualizado_em,
+             COALESCE(atualizado_em,'') atualizado_em,${MIX_POR_EAN} tipo_mix,
              COALESCE((SELECT cf.categoria FROM produto_classificacao_farmaceutica cf WHERE cf.ean=mercado_farma_precos.ean),'NAO_CLASSIFICADO') categoria_farmaceutica
       FROM mercado_farma_precos
       WHERE (?='' OR UPPER(TRIM(uf))=?)
+        AND (?='' OR distribuIdora=?)
+        AND (?=0 OR COALESCE(estoque,0)>0)
+        AND (?='' OR ${MIX_POR_EAN}=?)
         AND (?='' OR COALESCE((SELECT cf.categoria FROM produto_classificacao_farmaceutica cf WHERE cf.ean=mercado_farma_precos.ean),'NAO_CLASSIFICADO')=?)
       ORDER BY UPPER(TRIM(uf)),produto COLLATE NOCASE,distribuidora COLLATE NOCASE,ean
-    `).bind(uf, uf, categoria, categoria).all()
-    const rows = (result.results || []).map(item => ({
+    `).bind(uf, uf, dist, dist, stock ? 1 : 0, mix, mix, categoria, categoria).all()
+    let filteredRows = result.results || []
+    if (ranking) {
+      const vendas = await env.DB.prepare(sqlVendasMes(uf)).bind(
+        session.consultor_id, session.consultor_id, rankingMes.inicio, rankingMes.proximo,
+        ...(uf ? [uf] : []),
+      ).all()
+      filteredRows = aplicarRankingVendas(filteredRows, vendas.results || [], ranking)
+    }
+    const rows = filteredRows.map(item => ({
       ...item,
       estoque: number(item.estoque), desconto: number(item.desconto), pf_distribuidora: number(item.pf_distribuidora),
       preco_com_imposto: number(item.preco_com_imposto), preco_sem_imposto: number(item.preco_sem_imposto),
     }))
-    const bytes = buildXlsx({ sheetName: uf || 'Todas UFs', title: `Mercado Farma - ${uf || 'Todas as UFs'}`, worksheetXml: worksheet(rows, uf), stylesXml: styles() })
+    const bytes = buildXlsx({ sheetName: uf || 'Todas UFs', title: `Mercado Farma - ${uf || 'Todas as UFs'} - ${ranking ? rankingMes.mes : 'Ofertas'}`, worksheetXml: worksheet(rows, uf), stylesXml: styles() })
     return new Response(bytes, { headers: {
       'content-type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      'content-disposition': `attachment; filename="mercado-farma-${safe(uf || 'todas-ufs')}${categoria ? '-' + safe(categoria) : ''}.xlsx"`,
+      'content-disposition': `attachment; filename="mercado-farma-${safe(uf || 'todas-ufs')}${categoria ? '-' + safe(categoria) : ''}${mix ? '-' + safe(mix) : ''}${ranking ? '-' + safe(ranking) : ''}.xlsx"`,
       'cache-control': 'no-store', 'x-content-type-options': 'nosniff',
     } })
   } catch (error) {
