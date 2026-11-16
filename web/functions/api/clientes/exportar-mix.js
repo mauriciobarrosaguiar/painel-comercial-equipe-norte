@@ -100,12 +100,24 @@ export async function onRequestGet({request,env}) {
     const ufIn = ufs.map(()=>'?').join(',')
     // Sempre oferecer somente distribuidoras que atendem a UF dos clientes.
     const existentes = await env.DB.prepare(`
-      SELECT DISTINCT TRIM(distribuidora) nome FROM mercado_farma_precos
+      SELECT DISTINCT UPPER(TRIM(uf)) uf, TRIM(distribuidora) nome
+      FROM mercado_farma_precos
       WHERE UPPER(TRIM(COALESCE(uf,''))) IN (${ufIn})
         AND TRIM(COALESCE(distribuidora,''))<>''
-      ORDER BY nome COLLATE NOCASE
+        AND TRIM(COALESCE(ean,''))<>''
+      ORDER BY nome COLLATE NOCASE, uf
     `).bind(...ufs).all()
-    const disponiveis = (existentes.results || []).map(item=>String(item.nome || '')).filter(Boolean)
+    // Cada CNPJ recebe somente as distribuidoras que aparecem em sua UF
+    // na extração Mercado Farma, intersectadas com a seleção feita na tela.
+    const atendimentoPorUf = Object.fromEntries(ufs.map(uf => [uf, []]))
+    for (const item of existentes.results || []) {
+      const uf = String(item.uf || '').trim().toUpperCase()
+      const nome = String(item.nome || '').trim()
+      if (atendimentoPorUf[uf] && nome && !atendimentoPorUf[uf].includes(nome)) {
+        atendimentoPorUf[uf].push(nome)
+      }
+    }
+    const disponiveis = [...new Set(Object.values(atendimentoPorUf).flat())]
     const explicit = params.has('distribuidora')
     const selecionadas = explicit
       ? [...new Set(params.getAll('distribuidora').map(item=>String(item).trim()).filter(Boolean))]
@@ -148,7 +160,7 @@ export async function onRequestGet({request,env}) {
       busca:params.get('busca')||'',uf:params.get('uf')||'',
       cidade:params.get('cidade')||'',prioridade:params.get('prioridade')||'',
       periodo:lista.periodo?.rotulo||'',
-    },selecionadas)
+    },selecionadas,atendimentoPorUf)
     return new Response(bytes,{headers:{
       'content-type':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       'content-disposition':`attachment; filename="carteira-mix-${periodo.meses[0]}-a-${periodo.mes}-${cnpjs.length}-cnpjs.xlsx"`,
