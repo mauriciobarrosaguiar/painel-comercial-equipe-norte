@@ -81,16 +81,14 @@ export default function ClientsModule({ onBack, onOpenMarket }: Props) {
   const selectedCnpjs = useMemo(() => selectedPdvs.map(item => item.cnpj).join(','), [selectedPdvs])
 
   function togglePdv(item: PdvOption) {
+    const marcado = selectedPdvs.some(pdv => pdv.cnpj === item.cnpj)
+    if (!marcado && selectedPdvs.length >= 100) {
+      setPdvOptionsError('Limite de 100 CNPJs por exportação. Remova algum PDV ou refine a busca.')
+      return
+    }
     setSelectionMode(true)
     setPdvOptionsError('')
-    setSelectedPdvs(current => {
-      if (current.some(pdv => pdv.cnpj === item.cnpj)) return current.filter(pdv => pdv.cnpj !== item.cnpj)
-      if (current.length >= 100) {
-        setPdvOptionsError('Limite de 100 CNPJs por exportação. Remova algum PDV ou refine a busca.')
-        return current
-      }
-      return [...current, item]
-    })
+    setSelectedPdvs(current => marcado ? current.filter(pdv => pdv.cnpj !== item.cnpj) : [...current, item])
   }
 
   function selecionarTodosEncontrados() {
