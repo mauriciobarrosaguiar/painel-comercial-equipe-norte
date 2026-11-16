@@ -506,11 +506,13 @@ export default function MarketFarmaModule({ onBack, onAutomations }: { onBack: (
       <label><span>Produto ou EAN</span><input value={search} placeholder="Ex.: Amitriptilina 75 ou EAN" onChange={event => setSearch(event.target.value)} /></label>
       <label className="stock-check"><input type="checkbox" checked={stock} onChange={event => setStock(event.target.checked)} /><span>Com estoque</span></label>
     </section>
-    {maisVendidos && <div className="market-sales-explanation">
-      <strong>Média dos últimos 3 meses · {(data?.ranking?.meses || []).map(mesCurto).join(' · ') || 'incluindo o mês atual'}</strong>
-      <span>Ranking por média mensal de vendas faturadas na Bússola (somatório dos três meses dividido por 3), com devoluções descontadas. O mês atual é parcial. É venda às farmácias, não ao consumidor.</span>
-      {!!data?.ranking?.meses_sem_registro?.length && <span className="market-sales-warning">Atenção: sem registros do Bússola em {data.ranking.meses_sem_registro.map(mesCurto).join(', ')}. A média de 3 meses pode estar subestimada até a inclusão desses dados.</span>}
-    </div>}
+    {maisVendidos && <>
+      <details className="market-sales-explanation">
+        <summary><strong>Média dos últimos 3 meses</strong><span>{(data?.ranking?.meses || []).map(mes => `${mes.slice(5, 7)}/${mes.slice(2, 4)}`).join(' · ') || 'Incluindo o mês atual'}</span><small>Detalhes</small></summary>
+        <p>Ranking por média mensal de vendas faturadas na Bússola: somatório dos três meses dividido por 3, com devoluções descontadas. O mês atual é parcial. São vendas às farmácias, não ao consumidor.</p>
+      </details>
+      {!!data?.ranking?.meses_sem_registro?.length && <div role="status" className="market-sales-warning">Atenção: sem registros do Bússola em {data.ranking.meses_sem_registro.map(mesCurto).join(', ')}. A média pode estar subestimada.</div>}
+    </>}
     <section className="market-mini-tools" aria-label="Classificação e relatórios do Mercado Farma">
       <button type="button" className={`market-mini-tool ${painelAuxiliar === 'classificar' ? 'is-active' : ''}`}
         aria-expanded={painelAuxiliar === 'classificar'} aria-controls="market-classification-panel"
