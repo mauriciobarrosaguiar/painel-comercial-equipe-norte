@@ -112,7 +112,7 @@ const merged = ranges => `<mergeCells count="${ranges.length}">${ranges.map(ref 
 const outer = (last, lines, merges, widths, filter = '', freeze = 8) => `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
 <dimension ref="A1:K${last}"/><sheetViews><sheetView workbookViewId="0"><pane ySplit="${freeze}" topLeftCell="A${freeze + 1}" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>
 <sheetFormatPr defaultRowHeight="19"/><cols>${widths.map((width, i) => `<col min="${i + 1}" max="${i + 1}" width="${width}" customWidth="1"/>`).join('')}</cols>
-<sheetData>${lines.join('')}</sheetData>${merged(merges)}${filter ? `<autoFilter ref="${filter}"/>` : ''}<pageMargins left="0.3" right="0.3" top="0.45" bottom="0.45" header="0.2" footer="0.2"/><pageSetup orientation="landscape" paperSize="9" fitToWidth="1"/></worksheet>`
+<sheetData>${lines.join('')}</sheetData>${filter ? `<autoFilter ref="${filter}"/>` : ''}${merged(merges)}<pageMargins left="0.3" right="0.3" top="0.45" bottom="0.45" header="0.2" footer="0.2"/><pageSetup orientation="landscape" paperSize="9" fitToWidth="1"/></worksheet>`
 
 export function workbookClientesMix(analise, periodo, filtros = {}) {
   const summaryLines = []
