@@ -110,7 +110,7 @@
 .client-pdv-option{display:flex;align-items:center;gap:11px;padding:11px 13px;border-bottom:1px solid #edf1f4;cursor:pointer;min-width:0}
 .client-pdv-option:hover{background:#f2f8fa}
 .client-pdv-option:last-child{border-bottom:0}
-.client-pdv-option input[type="checkbox"]{width:19px;height:19px;flex:none;margin:0;accent-color:#0d8b61}
+.client-pdv-option input[type="checkbox"]{width:19px;height:19px;min-height:19px;flex:none;margin:0;padding:0;accent-color:#0d8b61}
 .client-pdv-option>span{display:flex;min-width:0;flex-direction:column;gap:4px}
 .client-pdv-option strong{font-size:.78rem;color:#243f58;overflow-wrap:anywhere}
 .client-pdv-option small{font-size:.7rem;color:#687f91}
