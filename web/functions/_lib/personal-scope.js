@@ -1,10 +1,13 @@
+import { retryTurso } from './turso-retry.js'
+
 export const MAURICIO_ID = 'cons-1ee6626b98906f06c399a6ad350c'
 export const MAURICIO_NOME = 'MAURICIO BARROS DE AGUIAR'
 export const MAURICIO_LOGIN = 'm0043497'
 
 export async function enforcePersonalScope(env) {
   if (!env?.DB) return
-  await env.DB.batch([
+  // These assignments/deletes enforce the same scope when repeated after a 502.
+  await retryTurso(() => env.DB.batch([
     env.DB.prepare(`
       UPDATE clientes
          SET carteira_importada=0,
@@ -69,5 +72,5 @@ export async function enforcePersonalScope(env) {
            OR COALESCE(parametros_json,'')<>'{}'
          )
     `),
-  ])
+  ]))
 }

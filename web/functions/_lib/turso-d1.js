@@ -1,3 +1,5 @@
+import { retryTurso } from './turso-retry.js'
+
 const text = (value) => String(value ?? '').trim()
 
 function httpUrl(raw) {
@@ -88,7 +90,8 @@ function d1Result(result) {
 }
 
 async function postPipeline(client, requests) {
-  const response = await fetch(`${client.url}/v2/pipeline`, {
+  let response
+  try { response = await fetch(`${client.url}/v2/pipeline`, {
     method: 'POST',
     headers: {
       authorization: `Bearer ${client.token}`,
@@ -97,15 +100,26 @@ async function postPipeline(client, requests) {
     },
     body: JSON.stringify({ requests }),
   })
+  } catch (cause) {
+    const error = new Error('Falha de conexão com o Turso.', { cause })
+    error.tursoTransient = true
+    throw error
+  }
   const payload = await response.json().catch(() => ({}))
-  if (!response.ok) throw new Error(`Turso HTTP ${response.status}: ${JSON.stringify(payload).slice(0, 1000)}`)
+  if (!response.ok) {
+    const error = new Error(`Turso HTTP ${response.status}: ${JSON.stringify(payload).slice(0, 1000)}`)
+    error.tursoTransient = [502, 503, 504].includes(response.status)
+    throw error
+  }
   return payload?.results || []
 }
 
 async function pipeline(client, statements) {
   const requests = statements.map((statement) => ({ type: 'execute', stmt: stmt(statement) }))
   requests.push({ type: 'close' })
-  const results = await postPipeline(client, requests)
+  const send = () => postPipeline(client, requests)
+  const results = statements.every(statement => /^\s*SELECT\b/i.test(statement.sql))
+    ? await retryTurso(send) : await send()
   return statements.map((_, index) => {
     const item = results[index]
     if (!item || item.type !== 'ok' || item.response?.type !== 'execute') {
@@ -221,7 +235,9 @@ class TursoD1Database {
       }
       throw new TypeError('Turso batch recebeu uma instrução inválida.')
     })
-    const results = await transactionalBatch(this.client, normalized)
+    const send = () => transactionalBatch(this.client, normalized)
+    const results = normalized.every(statement => /^\s*SELECT\b/i.test(statement.sql))
+      ? await retryTurso(send) : await send()
     return results.map(d1Result)
   }
 }

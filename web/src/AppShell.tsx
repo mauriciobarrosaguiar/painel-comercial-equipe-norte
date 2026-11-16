@@ -29,19 +29,26 @@ export default function AppShell() {
   const publicSip = new URLSearchParams(window.location.search).get('sip') || ''
   const [user, setUser] = useState<SessionUser | null>(null)
   const [checking, setChecking] = useState(!publicSip)
+  const [sessionError, setSessionError] = useState('')
+  const [sessionRetry, setSessionRetry] = useState(0)
   const [install, setInstall] = useState<InstallEvent | null>(null)
   const [page, setPage] = useState<AppPage>(() => publicSip ? 'sips' : readPageFromUrl())
 
   useEffect(() => {
     if (publicSip) return
-    fetch('/api/auth/session', { cache: 'no-store' })
+    const controller = new AbortController()
+    setChecking(true)
+    setSessionError('')
+    fetch('/api/auth/session', { cache: 'no-store', signal: controller.signal })
       .then(async (response) => {
-        if (!response.ok) throw new Error()
+        if (response.status === 401) { setUser(null); return }
+        if (!response.ok) throw new Error('Não foi possível verificar sua sessão. Tente novamente em alguns segundos.')
         setUser((await response.json()).usuario)
       })
-      .catch(() => setUser(null))
-      .finally(() => setChecking(false))
-  }, [publicSip])
+      .catch(() => { if (!controller.signal.aborted) setSessionError('Conexão temporariamente indisponível. Sua sessão foi preservada.') })
+      .finally(() => { if (!controller.signal.aborted) setChecking(false) })
+    return () => controller.abort()
+  }, [publicSip, sessionRetry])
 
   useEffect(() => {
     const handler = (event: Event) => {
@@ -96,6 +103,7 @@ export default function AppShell() {
   if (checking) {
     return <main className="login-page"><div className="login-card"><strong>Carregando acesso…</strong></div></main>
   }
+  if (sessionError) return <main className="login-page"><div className="login-card"><h1>Conexão indisponível</h1><p role="alert">{sessionError}</p><button type="button" className="primary-action" onClick={() => setSessionRetry(value => value + 1)}>Tentar novamente</button></div></main>
   if (!user) return <LoginPage onLogin={setUser} />
 
   if (corePages.has(page)) {

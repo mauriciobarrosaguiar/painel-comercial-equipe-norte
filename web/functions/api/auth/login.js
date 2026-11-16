@@ -1,5 +1,6 @@
 import { createSessionToken, json, sessionCookie } from '../../_lib/credentials.js'
 import { enforcePersonalScope } from '../../_lib/personal-scope.js'
+import { isTursoTransient } from '../../_lib/turso-retry.js'
 
 const ACESSOS = {
   m0043497: {
@@ -43,6 +44,7 @@ export async function onRequestPost({ request, env }) {
     const token = await createSessionToken(usuario, env.PAINEL_ADMIN_KEY)
     return json({ usuario }, 200, { 'set-cookie': sessionCookie(token) })
   } catch (error) {
+    if (isTursoTransient(error)) return json({ erro: 'O banco está temporariamente indisponível. Tente entrar novamente em alguns segundos.' }, 503, { 'retry-after': '5' })
     const detalhe = error instanceof Error ? error.message : String(error)
     return json({ erro: 'Não foi possível entrar no painel.', detalhe }, 500)
   }
