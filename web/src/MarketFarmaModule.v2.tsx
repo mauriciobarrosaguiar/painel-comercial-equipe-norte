@@ -13,12 +13,29 @@ const CATEGORIAS: { value: Categoria; label: string }[] = [
   { value: 'NAO_CLASSIFICADO', label: 'A classificar' },
 ]
 const categoriaLabel = (value: string) => CATEGORIAS.find(item => item.value === value)?.label || 'A classificar'
+const MIX_OPCOES = [
+  { value: 'PRIORITARIO', label: 'Prioritários' },
+  { value: 'LANCAMENTO', label: 'Lançamentos' },
+  { value: 'COMBATE', label: 'Combate' },
+  { value: 'LINHA', label: 'Linha' },
+]
+const MIX_ROTULOS: Record<string, string> = Object.fromEntries(MIX_OPCOES.map(opcao => [opcao.value, opcao.label]))
+const VENDAS_OPCOES = [
+  { value: 'TOP20', label: 'Top 20 por unidades (mês)' },
+  { value: 'TOP50', label: 'Top 50 por unidades (mês)' },
+  { value: 'TOP20_VALOR', label: 'Top 20 por faturamento (mês)' },
+  { value: 'VENDIDOS', label: 'Todos com vendas no mês' },
+]
 
 type Row = {
   uf: string
   ean: string
   produto: string
   categoria_farmaceutica: Categoria
+  tipo_mix: string
+  unidades_mes?: number
+  valor_mes?: number
+  ranking_mes?: number
   distribuidora: string
   estoque: number
   desconto: number
@@ -38,6 +55,7 @@ type Data = {
   clientes: ClientOption[]
   cliente_selecionado: ClientOption | null
   uf_aplicada: string
+  ranking?: { filtro: string; mes: string; criterio: string }
   usuario: { nome: string; consultor_id: string; login: string } | null
 }
 type ProductGroup = { key: string; ean: string; produto: string; rows: Row[] }
@@ -100,6 +118,8 @@ export default function MarketFarmaModule({ onBack, onAutomations }: { onBack: (
   const [search, setSearch] = useState('')
   const [stock, setStock] = useState(false)
   const [categoria, setCategoria] = useState('')
+  const [mix, setMix] = useState('')
+  const [maisVendidos, setMaisVendidos] = useState('')
   const [classificacoesCsv, setClassificacoesCsv] = useState('')
   const [salvandoClasse, setSalvandoClasse] = useState('')
   const [importandoClasses, setImportandoClasses] = useState(false)
@@ -138,6 +158,8 @@ export default function MarketFarmaModule({ onBack, onAutomations }: { onBack: (
         if (search.trim()) params.set('busca', search.trim())
         if (stock) params.set('estoque', '1')
         if (categoria) params.set('categoria', categoria)
+        if (mix) params.set('mix', mix)
+        if (maisVendidos) params.set('mais_vendidos', maisVendidos)
         const response = await fetch(`/api/mercado-farma?${params}`, { cache: 'no-store', signal: controller.signal })
         const json = await response.json()
         if (!response.ok) throw new Error(json.detalhe || json.erro || 'Falha ao carregar Mercado Farma')
@@ -152,7 +174,7 @@ export default function MarketFarmaModule({ onBack, onAutomations }: { onBack: (
       }
     }, search ? 250 : 0)
     return () => { controller.abort(); window.clearTimeout(timer) }
-  }, [uf, dist, search, stock, categoria, reload, clientCnpj])
+  }, [uf, dist, search, stock, categoria, mix, maisVendidos, reload, clientCnpj])
 
   const storageKey = data?.usuario?.login ? `mercado-farma-carrinho:${data.usuario.login}` : ''
   useEffect(() => {
@@ -437,6 +459,10 @@ export default function MarketFarmaModule({ onBack, onAutomations }: { onBack: (
   const excelParams = new URLSearchParams()
   if (effectiveUf) excelParams.set('uf', effectiveUf)
   if (categoria) excelParams.set('categoria', categoria)
+  if (mix) excelParams.set('mix', mix)
+  if (maisVendidos) excelParams.set('mais_vendidos', maisVendidos)
+  if (dist) excelParams.set('distribuidora', dist)
+  if (stock) excelParams.set('estoque', '1')
   const excelHref = `/api/mercado-farma-excel${excelParams.size ? `?${excelParams}` : ''}`
   return <main className="content operations-page">
     <button className="back-button" onClick={onBack}>← Voltar ao painel</button>
@@ -465,9 +491,15 @@ export default function MarketFarmaModule({ onBack, onAutomations }: { onBack: (
       <label><span>UF</span><select value={effectiveUf} disabled={!!selectedClient} onChange={event => setUf(event.target.value)}><option value="">Todas</option>{(data?.filtros.ufs || []).map(value => <option key={value}>{value}</option>)}</select>{selectedClient && <small>Definida pelo CNPJ selecionado</small>}</label>
       <label><span>Distribuidora</span><select value={dist} onChange={event => setDist(event.target.value)}><option value="">Todas que atendem {effectiveUf || 'as UFs'}</option>{(data?.filtros.distribuidoras || []).map(value => <option key={value}>{value}</option>)}</select></label>
       <label><span>Tipo de medicamento</span><select value={categoria} onChange={event => setCategoria(event.target.value)}><option value="">Todos os tipos</option>{CATEGORIAS.map(tipo => <option value={tipo.value} key={tipo.value}>{tipo.label}</option>)}</select></label>
+      <label><span>MIX comercial</span><select value={mix} onChange={event => setMix(event.target.value)}><option value="">Todos os MIX</option>{MIX_OPCOES.map(opcao => <option key={opcao.value} value={opcao.value}>{opcao.label}</option>)}</select></label>
+      <label><span>Mais vendidos</span><select value={maisVendidos} onChange={event => setMaisVendidos(event.target.value)}><option value="">Todos os produtos</option>{VENDAS_OPCOES.map(opcao => <option key={opcao.value} value={opcao.value}>{opcao.label}</option>)}</select></label>
       <label><span>Produto ou EAN</span><input value={search} placeholder="Ex.: Amitriptilina 75 ou EAN" onChange={event => setSearch(event.target.value)} /></label>
       <label className="stock-check"><input type="checkbox" checked={stock} onChange={event => setStock(event.target.checked)} /><span>Com estoque</span></label>
     </section>
+    {maisVendidos && <div className="market-sales-explanation">
+      <strong>Ranking da Bússola · {data?.ranking?.mes?.split('-').reverse().join('/') || 'mês atual'}</strong>
+      <span>Considera apenas suas unidades ou valores faturados neste mês, descontando devoluções, na UF selecionada. É venda às farmácias, não ao consumidor.</span>
+    </div>}
     <details className="market-classification-management">
       <summary>Classificar medicamentos por EAN (individualmente ou em lote)</summary>
       <p>A classificação sanitária é independente do MIX. Confira cada apresentação conforme a Anvisa antes de classificar. EANs ainda não verificados ficam como “A classificar”.</p>
@@ -492,7 +524,7 @@ export default function MarketFarmaModule({ onBack, onAutomations }: { onBack: (
     </section>
     <section className="market-product-grid">
       {loading && <div className="operations-empty">Carregando…</div>}
-      {!loading && !groups.length && <div className="operations-empty">Nenhum produto encontrado para os filtros informados.</div>}
+      {!loading && !groups.length && <div className="operations-empty">{maisVendidos ? 'Nenhum produto com unidades faturadas na Bússola neste mês para esta combinação de filtros.' : 'Nenhum produto encontrado para os filtros informados.'}</div>}
       {groups.map(product => {
         const selectedKey = selectedRows[product.key]
         const selected = product.rows.find(row => rowKey(row) === selectedKey) || product.rows[0]
@@ -501,7 +533,7 @@ export default function MarketFarmaModule({ onBack, onAutomations }: { onBack: (
         const menuOpen = openBuybox === product.key
         return <article className={`mef-product-card ${menuOpen ? 'is-open' : ''}`} key={product.key}>
           <div className="mef-card-top"><span className="mef-discount">{discount(selected?.desconto || 0)}</span><button className="mef-info" type="button" title={`Atualizado em ${date(selected?.atualizado_em)} · atende ${selected?.uf || effectiveUf}`}>i</button></div>
-          <div className="mef-product-info"><h2>{product.produto}</h2><span className={`market-classification-tag type-${selected?.categoria_farmaceutica || "NAO_CLASSIFICADO"}`}>{categoriaLabel(selected?.categoria_farmaceutica || "NAO_CLASSIFICADO")}</span><div className="mef-brand-ean"><span>EMS Genéricos</span><button type="button" onClick={() => copyEan(product.ean)} title="Copiar EAN">{product.ean || 'EAN não informado'} <b>▣</b></button></div></div>
+          <div className="mef-product-info"><h2>{product.produto}</h2><div className="market-product-badges"><span className={`market-classification-tag type-${selected?.categoria_farmaceutica || "NAO_CLASSIFICADO"}`}>{categoriaLabel(selected?.categoria_farmaceutica || "NAO_CLASSIFICADO")}</span><span className="market-mix-tag">{MIX_ROTULOS[selected?.tipo_mix || ''] || 'MIX não informado'}</span></div>{maisVendidos && selected?.ranking_mes && <div className="market-sales-badge"><strong>#{selected.ranking_mes} · {num.format(selected.unidades_mes || 0)} un. faturadas</strong><small>{money.format(selected.valor_mes || 0)} neste mês</small></div>}<div className="mef-brand-ean"><span>EMS Genéricos</span><button type="button" onClick={() => copyEan(product.ean)} title="Copiar EAN">{product.ean || 'EAN não informado'} <b>▣</b></button></div></div>
           {selected && <div className="mef-buybox-wrap">
             <button className="mef-buybox" type="button" aria-expanded={menuOpen} onClick={() => setOpenBuybox(menuOpen ? '' : product.key)}>
               <span className="mef-buybox-distributor"><strong>{distributorLabel(selected)}</strong><small>{num.format(selected.estoque)} un. disponíveis · atende {selected.uf}</small></span>
