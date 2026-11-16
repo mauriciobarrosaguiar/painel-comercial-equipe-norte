@@ -502,14 +502,28 @@ export default function MarketFarmaModule({ onBack, onAutomations }: { onBack: (
       {selectedClient ? <div className="market-selected-client"><strong>{selectedClient.nome}</strong><span>CNPJ {selectedClient.cnpj} · {selectedClient.cidade}/{selectedClient.uf}</span><span>Consultor: {selectedClient.consultor || data?.usuario?.nome}</span><b>Ofertas liberadas somente para a UF {selectedClient.uf}</b><button type="button" onClick={clearClient}>Trocar cliente</button></div> : <div className="market-client-help"><strong>Selecione o PDV</strong><span>Pesquise pelo nome, parte do nome ou pelos números do CNPJ.</span></div>}
     </section>
 
-    <section className="filters market-filters">
+    <section className="market-compact-search" aria-label="Busca e filtros do Mercado Farma">
+      <label className="market-quick-search"><span>Produto ou EAN</span><input value={search} placeholder="Buscar medicamento ou EAN…" aria-label="Buscar produto ou EAN" onChange={event => setSearch(event.target.value)} /></label>
+      <button type="button" className={`market-filters-toggle ${filtersOpen ? 'is-open' : ''}`}
+        aria-expanded={filtersOpen} aria-controls="market-filter-panel" onClick={() => setFiltersOpen(value => !value)}>
+        <span aria-hidden="true">☷</span> Filtros{filterLabels.length ? ` (${filterLabels.length})` : ''} <span aria-hidden="true">{filtersOpen ? '−' : '+'}</span>
+      </button>
+    </section>
+    {!filtersOpen && !!filterLabels.length && <div className="market-filter-tags" aria-label="Filtros aplicados">
+      {filterLabels.map((label, index) => <span key={`${label}-${index}`}>{label}</span>)}
+      <button type="button" onClick={() => { setUf(''); setDist(''); setCategoria(''); setMix(''); setMaisVendidos(''); setStock(false) }}>Limpar</button>
+    </div>}
+    <section id="market-filter-panel" className="filters market-filters market-filter-panel" hidden={!filtersOpen} aria-label="Filtros avançados">
       <label><span>UF</span><select value={effectiveUf} disabled={!!selectedClient} onChange={event => setUf(event.target.value)}><option value="">Todas</option>{(data?.filtros.ufs || []).map(value => <option key={value}>{value}</option>)}</select>{selectedClient && <small>Definida pelo CNPJ selecionado</small>}</label>
       <label><span>Distribuidora</span><select value={dist} onChange={event => setDist(event.target.value)}><option value="">Todas que atendem {effectiveUf || 'as UFs'}</option>{(data?.filtros.distribuidoras || []).map(value => <option key={value}>{value}</option>)}</select></label>
       <label><span>Tipo de medicamento</span><select value={categoria} onChange={event => setCategoria(event.target.value)}><option value="">Todos os tipos</option>{CATEGORIAS.map(tipo => <option value={tipo.value} key={tipo.value}>{tipo.label}</option>)}</select></label>
       <label><span>MIX comercial</span><select value={mix} onChange={event => setMix(event.target.value)}><option value="">Todos os MIX</option>{MIX_OPCOES.map(opcao => <option key={opcao.value} value={opcao.value}>{opcao.label}</option>)}</select></label>
       <label><span>Mais vendidos</span><select value={maisVendidos} onChange={event => setMaisVendidos(event.target.value)}><option value="">Todos os produtos</option>{VENDAS_OPCOES.map(opcao => <option key={opcao.value} value={opcao.value}>{opcao.label}</option>)}</select></label>
-      <label><span>Produto ou EAN</span><input value={search} placeholder="Ex.: Amitriptilina 75 ou EAN" onChange={event => setSearch(event.target.value)} /></label>
       <label className="stock-check"><input type="checkbox" checked={stock} onChange={event => setStock(event.target.checked)} /><span>Com estoque</span></label>
+      <div className="market-filter-footer">
+        <button type="button" className="market-filter-clear" onClick={() => { setUf(''); setDist(''); setCategoria(''); setMix(''); setMaisVendidos(''); setStock(false) }}>Limpar filtros</button>
+        <button type="button" className="market-filter-apply" onClick={() => setFiltersOpen(false)}>Ver produtos</button>
+      </div>
     </section>
     {maisVendidos && <>
       <details className="market-sales-explanation">
