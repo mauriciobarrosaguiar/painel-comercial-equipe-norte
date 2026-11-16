@@ -1,7 +1,7 @@
 import { buildXlsx, currencyFormatCode, numberCell, stringCell } from '../_lib/xlsx-compatible.js'
 import { authorized, readSession } from '../_lib/credentials.js'
 import { categoriaFarmaceutica } from '../_lib/classificacao-farmaceutica.js'
-import { MIX_POR_EAN, validarMix, validarRanking, mesAtualBrasilia, sqlVendasMes, aplicarRankingVendas } from '../_lib/mercado-farma-comercial.js'
+import { MIX_POR_EAN, validarMix, validarRanking, periodoTresMesesBrasilia, sqlVendasTresMeses, aplicarRankingVendas } from '../_lib/mercado-farma-comercial.js'
 
 const text = value => String(value ?? '').trim()
 const number = value => Number.isFinite(Number(value)) ? Number(value) : 0
@@ -33,8 +33,13 @@ const styles = () => `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
   </cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>
 </styleSheet>`
 
-function worksheet(rows, uf) {
-  const headers = ['UF','CNPJ REFERÊNCIA','EAN','NOME DO PRODUTO','DISTRIBUIDORA','ESTOQUE','DESCONTO (%)','PF DIST. (R$)','PREÇO FINAL (R$)','SEM IMPOSTO (R$)','DATA','CLASSIFICAÇÃO FARMACÊUTICA','MIX COMERCIAL','UNIDADES VENDIDAS (MÊS)','VALOR VENDIDO (MÊS)','POSIÇÃO NO MÊS']
+function worksheet(rows, uf, periodoVendas) {
+  const meses = periodoVendas.meses.map(mes => mes.slice(5, 7) + '/' + mes.slice(0, 4))
+  const mensal = (item, index) => item.vendas_por_mes?.[index] || { unidades: 0, valor: 0 }
+  const headers = ['UF','CNPJ REFERÊNCIA','EAN','NOME DO PRODUTO','DISTRIBUIDORA','ESTOQUE','DESCONTO (%)','PF DIST. (R$)','PREÇO FINAL (R$)','SEM IMPOSTO (R$)','DATA','CLASSIFICAÇÃO FARMACÊUTICA','MIX COMERCIAL','MÉDIA MENSAL UNIDADES (3M)','MÉDIA MENSAL FATURAMENTO (3M)','POSIÇÃO (3M)',
+    ...meses.map(mes => `UNIDADES ${mes}`),
+    ...meses.map(mes => `FATURAMENTO ${mes}`),
+    'UNIDADES TOTAL (3M)','FATURAMENTO TOTAL (3M)']
   const lines = [
     `<row r="1" ht="28" customHeight="1">${stringCell('A1', `MERCADO FARMA — ${uf || 'TODAS AS UFs'}`, 1)}</row>`,
     `<row r="3" ht="34" customHeight="1">${headers.map((label,index) => stringCell(`${String.fromCharCode(65 + index)}3`, label, 1)).join('')}</row>`,
@@ -56,17 +61,25 @@ function worksheet(rows, uf) {
       stringCell(`K${row}`, item.atualizado_em, style) +
       stringCell(`L${row}`, item.categoria_farmaceutica, style) +
       stringCell(`M${row}`, item.tipo_mix, style) +
-      numberCell(`N${row}`, item.unidades_mes || 0, 4) +
-      numberCell(`O${row}`, item.valor_mes || 0, 5) +
-      numberCell(`P${row}`, item.ranking_mes || 0, 4) + '</row>')
+      numberCell(`N${row}`, item.unidades_media_mensal || 0, 4) +
+      numberCell(`O${row}`, item.valor_media_mensal || 0, 5) +
+      numberCell(`P${row}`, item.ranking_mes || 0, 4) +
+      numberCell(`Q${row}`, mensal(item, 0).unidades, 4) +
+      numberCell(`R${row}`, mensal(item, 1).unidades, 4) +
+      numberCell(`S${row}`, mensal(item, 2).unidades, 4) +
+      numberCell(`T${row}`, mensal(item, 0).valor, 5) +
+      numberCell(`U${row}`, mensal(item, 1).valor, 5) +
+      numberCell(`V${row}`, mensal(item, 2).valor, 5) +
+      numberCell(`W${row}`, item.unidades_periodo || 0, 4) +
+      numberCell(`X${row}`, item.valor_periodo || 0, 5) + '</row>')
   })
   const last = Math.max(3, rows.length + 3)
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
-  <dimension ref="A1:P${last}"/><sheetViews><sheetView workbookViewId="0"><pane ySplit="3" topLeftCell="A4" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>
+  <dimension ref="A1:X${last}"/><sheetViews><sheetView workbookViewId="0"><pane ySplit="3" topLeftCell="A4" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>
   <sheetFormatPr defaultRowHeight="18"/><cols>
-    <col min="1" max="1" width="8" customWidth="1"/><col min="2" max="2" width="20" customWidth="1"/><col min="3" max="3" width="19" customWidth="1"/><col min="4" max="4" width="52" customWidth="1"/><col min="5" max="5" width="35" customWidth="1"/><col min="6" max="7" width="14" customWidth="1"/><col min="8" max="10" width="17" customWidth="1"/><col min="11" max="11" width="22" customWidth="1"/><col min="12" max="12" width="27" customWidth="1"/><col min="13" max="13" width="17" customWidth="1"/><col min="14" max="16" width="22" customWidth="1"/>
-  </cols><sheetData>${lines.join('')}</sheetData><autoFilter ref="A3:P${last}"/><mergeCells count="1"><mergeCell ref="A1:P1"/></mergeCells>
+    <col min="1" max="1" width="8" customWidth="1"/><col min="2" max="2" width="20" customWidth="1"/><col min="3" max="3" width="19" customWidth="1"/><col min="4" max="4" width="52" customWidth="1"/><col min="5" max="5" width="35" customWidth="1"/><col min="6" max="7" width="14" customWidth="1"/><col min="8" max="10" width="17" customWidth="1"/><col min="11" max="11" width="22" customWidth="1"/><col min="12" max="12" width="27" customWidth="1"/><col min="13" max="13" width="17" customWidth="1"/><col min="14" max="16" width="22" customWidth="1"/><col min="17" max="24" width="22" customWidth="1"/>
+  </cols><sheetData>${lines.join('')}</sheetData><autoFilter ref="A3:X${last}"/><mergeCells count="1"><mergeCell ref="A1:X1"/></mergeCells>
   <pageMargins left="0.2" right="0.2" top="0.4" bottom="0.4" header="0.2" footer="0.2"/><pageSetup orientation="landscape" fitToWidth="1" fitToHeight="0" paperSize="9"/>
 </worksheet>`
 }
@@ -89,7 +102,7 @@ export async function onRequestGet({ request, env }) {
     if (ranking && !session?.consultor_id) return new Response('Faça login para exportar seus mais vendidos.', { status: 401 })
     const dist = text(params.get('distribuidora')).slice(0, 120)
     const stock = params.get('estoque') === '1'
-    const rankingMes = mesAtualBrasilia()
+    const periodoVendas = periodoTresMesesBrasilia()
     const result = await env.DB.prepare(`
       SELECT UPPER(TRIM(COALESCE(uf,''))) uf,COALESCE(cnpj_referencia,'') cnpj_referencia,
              COALESCE(ean,'') ean,COALESCE(produto,'') produto,COALESCE(distribuidora,'') distribuidora,
@@ -108,18 +121,19 @@ export async function onRequestGet({ request, env }) {
     `).bind(uf, uf, dist, dist, stock ? 1 : 0, mix, mix, categoria, categoria).all()
     let filteredRows = result.results || []
     if (ranking) {
-      const vendas = await env.DB.prepare(sqlVendasMes(uf)).bind(
-        session.consultor_id, session.consultor_id, rankingMes.inicio, rankingMes.proximo,
+      const vendas = await env.DB.prepare(sqlVendasTresMeses(uf)).bind(
+        session.consultor_id, session.consultor_id,
+        periodoVendas.inicio, periodoVendas.proximo, periodoVendas.inicioMesAtual,
         ...(uf ? [uf] : []),
       ).all()
-      filteredRows = aplicarRankingVendas(filteredRows, vendas.results || [], ranking)
+      filteredRows = aplicarRankingVendas(filteredRows, vendas.results || [], ranking, periodoVendas)
     }
     const rows = filteredRows.map(item => ({
       ...item,
       estoque: number(item.estoque), desconto: number(item.desconto), pf_distribuidora: number(item.pf_distribuidora),
       preco_com_imposto: number(item.preco_com_imposto), preco_sem_imposto: number(item.preco_sem_imposto),
     }))
-    const bytes = buildXlsx({ sheetName: uf || 'Todas UFs', title: `Mercado Farma - ${uf || 'Todas as UFs'} - ${ranking ? rankingMes.mes : 'Ofertas'}`, worksheetXml: worksheet(rows, uf), stylesXml: styles() })
+    const bytes = buildXlsx({ sheetName: uf || 'Todas UFs', title: `Mercado Farma - ${uf || 'Todas as UFs'} - ${ranking ? periodoVendas.meses.join(' a ') : 'Ofertas'}`, worksheetXml: worksheet(rows, uf, periodoVendas), stylesXml: styles() })
     return new Response(bytes, { headers: {
       'content-type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       'content-disposition': `attachment; filename="mercado-farma-${safe(uf || 'todas-ufs')}${categoria ? '-' + safe(categoria) : ''}${mix ? '-' + safe(mix) : ''}${ranking ? '-' + safe(ranking) : ''}.xlsx"`,
