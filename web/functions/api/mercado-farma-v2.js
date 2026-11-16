@@ -1,6 +1,6 @@
 import { readSession } from '../_lib/credentials.js'
 import { categoriaFarmaceutica } from '../_lib/classificacao-farmaceutica.js'
-import { MIX_POR_EAN, validarMix, validarRanking, mesAtualBrasilia, sqlVendasMes, aplicarRankingVendas, resumoDasOfertas } from '../_lib/mercado-farma-comercial.js'
+import { MIX_POR_EAN, validarMix, validarRanking, periodoTresMesesBrasilia, sqlVendasTresMeses, sqlCoberturaTresMeses, aplicarRankingVendas, resumoDasOfertas } from '../_lib/mercado-farma-comercial.js'
 
 const HEADERS = { 'content-type': 'application/json; charset=UTF-8', 'cache-control': 'no-store,no-cache,must-revalidate' }
 const json = (data, status = 200) => new Response(JSON.stringify(data), { status, headers: HEADERS })
@@ -68,7 +68,7 @@ export async function onRequestGet({ request, env }) {
     const maisVendidos = vendasParam ? validarRanking(vendasParam) : null
     if (vendasParam && !maisVendidos) return json({ erro: 'Filtro Mais vendidos inválido.' }, 400)
     if (maisVendidos && !session?.consultor_id) return json({ erro: 'Faça login para consultar seus produtos mais vendidos.' }, 401)
-    const mesVendas = mesAtualBrasilia()
+    const periodoVendas = periodoTresMesesBrasilia()
     const limit = Math.min(5000, Math.max(20, Number(params.get('limite') || 1000)))
     const conditions = ['1=1']
     const binds = []
@@ -108,15 +108,20 @@ export async function onRequestGet({ request, env }) {
       `).bind(session?.nome || '', ...clientBinds),
     ]
     if (maisVendidos) {
-      statements.push(env.DB.prepare(sqlVendasMes(effectiveUf)).bind(
-        session.consultor_id, session.consultor_id, mesVendas.inicio, mesVendas.proximo,
+      const bindsPeriodo = [
+        session.consultor_id, session.consultor_id,
+        periodoVendas.inicio, periodoVendas.proximo, periodoVendas.inicioMesAtual,
         ...(effectiveUf ? [effectiveUf] : []),
-      ))
+      ]
+      statements.push(env.DB.prepare(sqlVendasTresMeses(effectiveUf)).bind(...bindsPeriodo))
+      statements.push(env.DB.prepare(sqlCoberturaTresMeses(effectiveUf)).bind(...bindsPeriodo))
     }
-    const [summaryResult, rowsResult, ufsResult, distributorsResult, extractionResult, clientsResult, vendasResult] = await env.DB.batch(statements)
+    const [summaryResult, rowsResult, ufsResult, distributorsResult, extractionResult, clientsResult, vendasResult, coberturaResult] = await env.DB.batch(statements)
     const rowsOriginais = rowsResult.results || []
-    const rows = maisVendidos ? aplicarRankingVendas(rowsOriginais, vendasResult?.results || [], maisVendidos) : rowsOriginais
+    const rows = maisVendidos ? aplicarRankingVendas(rowsOriginais, vendasResult?.results || [], maisVendidos, periodoVendas) : rowsOriginais
     const resumoRanking = maisVendidos ? resumoDasOfertas(rows) : null
+    const mesesRegistrados = (coberturaResult?.results || []).map(item => String(item.mes || ''))
+    const mesesSemRegistro = maisVendidos ? periodoVendas.meses.filter(mes => !mesesRegistrados.includes(mes)) : []
 
     const summary = summaryResult.results?.[0] || {}
     return json({
@@ -134,7 +139,16 @@ export async function onRequestGet({ request, env }) {
         pf_fabrica: number(item.pf_fabrica), preco_com_imposto: number(item.preco_com_imposto),
         preco_sem_imposto: number(item.preco_sem_imposto), melhor_preco: item.melhor_preco === null ? null : number(item.melhor_preco),
       })),
-      ranking: { filtro: maisVendidos || '', mes: mesVendas.mes, criterio: 'Unidades ou valor líquido faturado na Bússola do mês atual, na carteira do consultor e UF selecionada. Não é sell-out do varejo.' },
+      ranking: {
+        filtro: maisVendidos || '',
+        mes: periodoVendas.mes,
+        meses: periodoVendas.meses,
+        inicio: periodoVendas.inicio,
+        fim_exclusivo: periodoVendas.proximo,
+        divisor: 3,
+        meses_sem_registro: mesesSemRegistro,
+        criterio: 'Média mensal de unidades líquidas ou faturamento da Bússola nos 3 meses-calendário (incluindo o mês atual). Inclui extrações arquivadas dos meses fechados; exclui pedidos não faturados e dados agregados. Não representa vendas ao consumidor.',
+      },
       filtros: {
         ufs: (ufsResult.results || []).map(item => String(item.uf || '')).filter(Boolean),
         distribuidoras: (distributorsResult.results || []).map(item => String(item.distribuidora || '')).filter(Boolean),

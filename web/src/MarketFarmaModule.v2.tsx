@@ -21,10 +21,10 @@ const MIX_OPCOES = [
 ]
 const MIX_ROTULOS: Record<string, string> = Object.fromEntries(MIX_OPCOES.map(opcao => [opcao.value, opcao.label]))
 const VENDAS_OPCOES = [
-  { value: 'TOP20', label: 'Top 20 por unidades (mês)' },
-  { value: 'TOP50', label: 'Top 50 por unidades (mês)' },
-  { value: 'TOP20_VALOR', label: 'Top 20 por faturamento (mês)' },
-  { value: 'VENDIDOS', label: 'Todos com vendas no mês' },
+  { value: 'TOP20', label: 'Top 20 · média de unidades (3 meses)' },
+  { value: 'TOP50', label: 'Top 50 · média de unidades (3 meses)' },
+  { value: 'TOP20_VALOR', label: 'Top 20 · média de faturamento (3 meses)' },
+  { value: 'VENDIDOS', label: 'Todos vendidos nos últimos 3 meses' },
 ]
 
 type Row = {
@@ -33,8 +33,11 @@ type Row = {
   produto: string
   categoria_farmaceutica: Categoria
   tipo_mix: string
-  unidades_mes?: number
-  valor_mes?: number
+  unidades_media_mensal?: number
+  valor_media_mensal?: number
+  unidades_periodo?: number
+  valor_periodo?: number
+  vendas_por_mes?: Array<{ mes: string; unidades: number; valor: number }>
   ranking_mes?: number
   distribuidora: string
   estoque: number
@@ -55,7 +58,7 @@ type Data = {
   clientes: ClientOption[]
   cliente_selecionado: ClientOption | null
   uf_aplicada: string
-  ranking?: { filtro: string; mes: string; criterio: string }
+  ranking?: { filtro: string; mes: string; meses: string[]; meses_sem_registro?: string[]; divisor: number; criterio: string }
   usuario: { nome: string; consultor_id: string; login: string } | null
 }
 type ProductGroup = { key: string; ean: string; produto: string; rows: Row[] }
@@ -70,6 +73,12 @@ const CHAVE_TRANSFERENCIA = 'mercado-farma-importacao-proposta'
 
 const money = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
 const num = new Intl.NumberFormat('pt-BR')
+const mediaNum = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })
+const mesCurto = (mes: string) => {
+  const [ano, mesNumero] = mes.split('-').map(Number)
+  if (!ano || !mesNumero) return mes
+  return new Date(Date.UTC(ano, mesNumero - 1, 1)).toLocaleDateString('pt-BR', { month: 'short', year: '2-digit', timeZone: 'UTC' }).replace('.', '')
+}
 const date = (value: string | null | undefined) => {
   if (!value) return '—'
   const parsed = new Date(value)
@@ -497,8 +506,9 @@ export default function MarketFarmaModule({ onBack, onAutomations }: { onBack: (
       <label className="stock-check"><input type="checkbox" checked={stock} onChange={event => setStock(event.target.checked)} /><span>Com estoque</span></label>
     </section>
     {maisVendidos && <div className="market-sales-explanation">
-      <strong>Ranking da Bússola · {data?.ranking?.mes?.split('-').reverse().join('/') || 'mês atual'}</strong>
-      <span>Considera apenas suas unidades ou valores faturados neste mês, descontando devoluções, na UF selecionada. É venda às farmácias, não ao consumidor.</span>
+      <strong>Média dos últimos 3 meses · {(data?.ranking?.meses || []).map(mesCurto).join(' · ') || 'incluindo o mês atual'}</strong>
+      <span>Ranking por média mensal de vendas faturadas na Bússola (somatório dos três meses dividido por 3), com devoluções descontadas. O mês atual é parcial. É venda às farmácias, não ao consumidor.</span>
+      {!!data?.ranking?.meses_sem_registro?.length && <span className="market-sales-warning">Atenção: sem registros do Bússola em {data.ranking.meses_sem_registro.map(mesCurto).join(', ')}. A média de 3 meses pode estar subestimada até a inclusão desses dados.</span>}
     </div>}
     <details className="market-classification-management">
       <summary>Classificar medicamentos por EAN (individualmente ou em lote)</summary>
@@ -524,7 +534,7 @@ export default function MarketFarmaModule({ onBack, onAutomations }: { onBack: (
     </section>
     <section className="market-product-grid">
       {loading && <div className="operations-empty">Carregando…</div>}
-      {!loading && !groups.length && <div className="operations-empty">{maisVendidos ? 'Nenhum produto com unidades faturadas na Bússola neste mês para esta combinação de filtros.' : 'Nenhum produto encontrado para os filtros informados.'}</div>}
+      {!loading && !groups.length && <div className="operations-empty">{maisVendidos ? 'Nenhum produto com unidades faturadas na Bússola no período de três meses para esta combinação de filtros.' : 'Nenhum produto encontrado para os filtros informados.'}</div>}
       {groups.map(product => {
         const selectedKey = selectedRows[product.key]
         const selected = product.rows.find(row => rowKey(row) === selectedKey) || product.rows[0]
@@ -533,7 +543,11 @@ export default function MarketFarmaModule({ onBack, onAutomations }: { onBack: (
         const menuOpen = openBuybox === product.key
         return <article className={`mef-product-card ${menuOpen ? 'is-open' : ''}`} key={product.key}>
           <div className="mef-card-top"><span className="mef-discount">{discount(selected?.desconto || 0)}</span><button className="mef-info" type="button" title={`Atualizado em ${date(selected?.atualizado_em)} · atende ${selected?.uf || effectiveUf}`}>i</button></div>
-          <div className="mef-product-info"><h2>{product.produto}</h2><div className="market-product-badges"><span className={`market-classification-tag type-${selected?.categoria_farmaceutica || "NAO_CLASSIFICADO"}`}>{categoriaLabel(selected?.categoria_farmaceutica || "NAO_CLASSIFICADO")}</span><span className="market-mix-tag">{MIX_ROTULOS[selected?.tipo_mix || ''] || 'MIX não informado'}</span></div>{maisVendidos && selected?.ranking_mes && <div className="market-sales-badge"><strong>#{selected.ranking_mes} · {num.format(selected.unidades_mes || 0)} un. faturadas</strong><small>{money.format(selected.valor_mes || 0)} neste mês</small></div>}<div className="mef-brand-ean"><span>EMS Genéricos</span><button type="button" onClick={() => copyEan(product.ean)} title="Copiar EAN">{product.ean || 'EAN não informado'} <b>▣</b></button></div></div>
+          <div className="mef-product-info"><h2>{product.produto}</h2><div className="market-product-badges"><span className={`market-classification-tag type-${selected?.categoria_farmaceutica || "NAO_CLASSIFICADO"}`}>{categoriaLabel(selected?.categoria_farmaceutica || "NAO_CLASSIFICADO")}</span><span className="market-mix-tag">{MIX_ROTULOS[selected?.tipo_mix || ''] || 'MIX não informado'}</span></div>{maisVendidos && selected?.ranking_mes && <div className="market-sales-badge">
+            <strong>#{selected.ranking_mes} · {mediaNum.format(selected.unidades_media_mensal || 0)} un./mês (média 3m)</strong>
+            <small>{money.format(selected.valor_media_mensal || 0)}/mês</small>
+            <span className="market-sales-months">{(selected.vendas_por_mes || []).map(item => <small key={item.mes}>{mesCurto(item.mes)}: {num.format(item.unidades)} un.</small>)}</span>
+          </div>}<div className="mef-brand-ean"><span>EMS Genéricos</span><button type="button" onClick={() => copyEan(product.ean)} title="Copiar EAN">{product.ean || 'EAN não informado'} <b>▣</b></button></div></div>
           {selected && <div className="mef-buybox-wrap">
             <button className="mef-buybox" type="button" aria-expanded={menuOpen} onClick={() => setOpenBuybox(menuOpen ? '' : product.key)}>
               <span className="mef-buybox-distributor"><strong>{distributorLabel(selected)}</strong><small>{num.format(selected.estoque)} un. disponíveis · atende {selected.uf}</small></span>
