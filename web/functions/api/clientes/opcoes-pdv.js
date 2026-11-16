@@ -15,7 +15,7 @@ export async function onRequestGet({ request, env }) {
     const digits = busca.replace(/\D/g, '')
     const where = ["cl.consultor_id=?", "cl.ativo=1", "cl.carteira_importada=1",
       "(UPPER(COALESCE(cl.nome_fantasia,'')) LIKE UPPER(?) OR UPPER(COALESCE(cl.razao_social,'')) LIKE UPPER(?) OR COALESCE(cl.cnpj,'') LIKE ? OR UPPER(COALESCE(cl.cidade,'')) LIKE UPPER(?))"]
-    const binds = [session.consultor_id, termo, termo, digits ? `%${digits}%` : '\u0000', termo]
+    const binds = [session.consultor_id, termo, termo, digits ? `%${digits}%` : '-SEM-CNPJ-', termo]
     if (uf) { where.push("UPPER(TRIM(COALESCE(cl.uf,'')))=?"); binds.push(uf) }
     if (cidade) { where.push("UPPER(TRIM(COALESCE(cl.cidade,'')))=UPPER(?)"); binds.push(cidade) }
     const result = await env.DB.prepare(`
