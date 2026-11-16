@@ -28,6 +28,7 @@ type ClientDetail = {
 }
 type PdvOption = Pick<ClientRow, 'cnpj' | 'nome' | 'cidade' | 'uf'>
 type PdvOptionResponse = { pdvs: PdvOption[]; total: number; truncado: boolean; erro?: string }
+type DistributorOption = { nome: string; ufs: string[] }
 type Props = { onBack: () => void; onOpenMarket: () => void }
 
 const currency = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
@@ -76,9 +77,46 @@ export default function ClientsModule({ onBack, onOpenMarket }: Props) {
   const [loading, setLoading] = useState(true)
   const [detailLoading, setDetailLoading] = useState(false)
   const [exportandoMix, setExportandoMix] = useState(false)
+  const [distribuidoras, setDistribuidoras] = useState<DistributorOption[]>([])
+  const [distribuidorasEscolhidas, setDistribuidorasEscolhidas] = useState<string[] | null>(null)
+  const [distribuidorasLoading, setDistribuidorasLoading] = useState(false)
+  const [distribuidorasError, setDistribuidorasError] = useState('')
   const [error, setError] = useState('')
 
   const selectedCnpjs = useMemo(() => selectedPdvs.map(item => item.cnpj).join(','), [selectedPdvs])
+  const distribuidoresDisponiveis = useMemo(() => distribuidoras.map(item=>item.nome),[distribuidoras])
+  const distribuidoresAtivos = useMemo(() =>
+    distribuidorasEscolhidas === null ? distribuidoresDisponiveis
+      : distribuidorasEscolhidas.filter(item=>distribuidoresDisponiveis.includes(item)),
+  [distribuidorasEscolhidas,distribuidoresDisponiveis])
+
+  function alterarDistribuidora(nome: string) {
+    setDistribuidorasEscolhidas(current => {
+      const nomes = current === null ? distribuidoresDisponiveis : current
+      return nomes.includes(nome) ? nomes.filter(item=>item!==nome) : [...nomes,nome]
+    })
+  }
+
+  useEffect(() => {
+    const controller = new AbortController()
+    setDistribuidorasLoading(true)
+    setDistribuidorasError('')
+    setDistribuidorasEscolhidas(null)
+    const params = new URLSearchParams()
+    if (uf) params.set('uf',uf)
+    fetch(`/api/clientes/distribuidoras?${params}`, {
+      credentials:'same-origin',cache:'no-store',signal:controller.signal,
+    }).then(async response => {
+      const body = await response.json() as { distribuidoras?: DistributorOption[]; erro?: string }
+      if (!response.ok) throw new Error(body.erro || 'Erro ao listar distribuidoras.')
+      if (!controller.signal.aborted) setDistribuidoras(body.distribuidoras || [])
+    }).catch(reason => {
+      if (controller.signal.aborted) return
+      setDistribuidoras([])
+      setDistribuidorasError(reason instanceof Error ? reason.message : 'Não foi possível consultar o estoque.')
+    }).finally(() => { if (!controller.signal.aborted) setDistribuidorasLoading(false) })
+    return () => controller.abort()
+  },[uf])
 
   function togglePdv(item: PdvOption) {
     const marcado = selectedPdvs.some(pdv => pdv.cnpj === item.cnpj)
@@ -181,6 +219,10 @@ export default function ClientsModule({ onBack, onOpenMarket }: Props) {
 
   async function exportarMixFiltrado() {
     if (exportandoMix || loading || !data?.paginacao.total) return
+    if (!distribuidoresAtivos.length) {
+      setError('Selecione ao menos uma distribuidora para incluir as colunas de estoque no Excel.')
+      return
+    }
     setExportandoMix(true)
     setError('')
     try {
@@ -195,6 +237,7 @@ export default function ClientsModule({ onBack, onOpenMarket }: Props) {
       if (selectionMode) params.set('selecionados', selectedCnpjs)
       else if (search) params.set('busca', search)
       if (priority) params.set('prioridade', priority)
+      distribuidoresAtivos.forEach(nome => params.append('distribuidora',nome))
       const response = await fetch(`/api/clientes/exportar-mix?${params}`, { credentials: 'same-origin', cache: 'no-store' })
       if (!response.ok) {
         const reason = await response.text()
@@ -261,6 +304,25 @@ export default function ClientsModule({ onBack, onOpenMarket }: Props) {
       <label><span>Cidade</span><select value={city} onChange={(event) => setCity(event.target.value)}><option value="">Todas</option>{(data?.filtros.cidades || []).map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
       <label><span>Prioridade</span><select value={priority} onChange={(event) => setPriority(event.target.value)}><option value="">Todas</option><option value="CRITICA">Crítica</option><option value="ALTA">Alta</option><option value="MEDIA">Média</option><option value="BAIXA">Baixa</option><option value="NOVO">Novo</option></select></label>
       <label><span>Ordenar</span><select value={sort} onChange={(event) => setSort(event.target.value)}><option value="prioridade">Maior prioridade</option><option value="dias_sem_comprar">Mais dias sem comprar</option><option value="maior_queda">Maior queda</option><option value="maior_faturamento">Maior faturamento</option><option value="menor_faturamento">Menor faturamento</option><option value="nome">Nome</option></select></label>
+      <details className="clients-distributors" aria-label="Selecionar distribuidoras para o Excel">
+        <summary>Estoque por distribuidora no Excel <strong>{distribuidorasLoading ? 'Carregando...' : `${distribuidoresAtivos.length} de ${distribuidoras.length} selecionadas`}</strong></summary>
+        <div className="clients-distributors-menu">
+          <p>Selecione quais distribuidoras terão colunas no RESUMO e em cada aba por CNPJ. O estoque é do distribuidor, por UF, e não do PDV.</p>
+          <div className="clients-distributors-actions">
+            <button type="button" onClick={() => setDistribuidorasEscolhidas(null)}>Selecionar todas</button>
+            <button type="button" onClick={() => setDistribuidorasEscolhidas([])}>Limpar seleção</button>
+          </div>
+          {distribuidorasError && <small role="alert">{distribuidorasError}</small>}
+          {!distribuidorasLoading && !distribuidoras.length && <small>Sem distribuidoras disponíveis para a UF.</small>}
+          <div className="clients-distributors-options">
+            {distribuidoras.map(item => <label key={item.nome}>
+              <input type="checkbox" checked={distribuidoresAtivos.includes(item.nome)}
+                onChange={() => alterarDistribuidora(item.nome)} />
+              <span>{item.nome}<small>{item.ufs.join(' / ')}</small></span>
+            </label>)}
+          </div>
+        </div>
+      </details>
       <div className="client-search client-pdv-multiselect">
         <label htmlFor="client-pdv-search"><span>Buscar e selecionar PDVs por nome, CNPJ ou cidade</span></label>
         <div className="client-pdv-searchbox">
@@ -321,7 +383,7 @@ export default function ClientsModule({ onBack, onOpenMarket }: Props) {
         <div><span className="eyebrow">Prioridades</span><h2>Carteira organizada</h2></div>
         <div className="clients-list-actions">
           <span>{integer.format(data?.paginacao.total || 0)} clientes encontrados</span>
-          <button type="button" className="clients-export-mix" disabled={loading || exportandoMix || !(data?.paginacao.total)}
+          <button type="button" className="clients-export-mix" disabled={loading || exportandoMix || distribuidoresAtivos.length===0 || distribuidorasLoading || !(data?.paginacao.total)}
             onClick={() => void exportarMixFiltrado()}
             title="Exporta todos os CNPJs filtrados, inclusive de outras páginas; cada CNPJ em sua aba">
             {exportandoMix ? 'Gerando relatório…' : '↓ Excel · MIX por CNPJ'}
