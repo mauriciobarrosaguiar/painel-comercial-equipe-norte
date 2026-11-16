@@ -148,7 +148,7 @@ const outer = (last, lines, merges, widths, filter = '', freeze = 8) => `<?xml v
 <sheetFormatPr defaultRowHeight="19"/><cols>${widths.map((width, i) => `<col min="${i + 1}" max="${i + 1}" width="${width}" customWidth="1"/>`).join('')}</cols>
 <sheetData>${lines.join('')}</sheetData>${filter ? `<autoFilter ref="${filter}"/>` : ''}${merged(merges)}<pageMargins left="0.3" right="0.3" top="0.45" bottom="0.45" header="0.2" footer="0.2"/><pageSetup orientation="landscape" paperSize="9" fitToWidth="1"/></worksheet>`
 
-export function workbookClientesMix(analise, periodo, filtros = {}, distribuidoras = []) {
+export function workbookClientesMix(analise, periodo, filtros = {}, distribuidoras = [], atendimentoPorUf = null) {
   const escolhidas = [...new Set(distribuidoras.map(item=>String(item).trim()).filter(Boolean))]
   const ultimaColuna = columnName(10+escolhidas.length)
   const tituloEstoque = nome => `ESTOQUE P/ SKUs NÃO COMPRADOS · ${nome} (UN.)`
@@ -203,18 +203,28 @@ export function workbookClientesMix(analise, periodo, filtros = {}, distribuidor
     `A8:${ultimaColuna}${Math.max(8,analise.length+8)}`)
   const sheets = [{ name: 'RESUMO', xml: summaryXml }]
   analise.forEach((a, index) => {
+    const ufCliente = String(a.cliente.uf || '').trim().toUpperCase()
+    // A seleção global serve ao RESUMO; em cada aba CNPJ apenas distribuidoras
+    // existentes na UF do próprio cliente. Lista vazia => nenhuma coluna extra.
+    const distribuidorasCliente = atendimentoPorUf === null
+      ? escolhidas
+      : escolhidas.filter(dist => (atendimentoPorUf[ufCliente] || []).includes(dist))
+    const colunaFinalCliente = columnName(10 + distribuidorasCliente.length)
+    const notaEstoqueCliente = distribuidorasCliente.length
+      ? `Estoque Mercado Farma somente da UF ${ufCliente}: ${distribuidorasCliente.join(', ')}. — = sem cotação; não é estoque do PDV.`
+      : `Nenhuma distribuidora selecionada atende a UF ${ufCliente}; sem colunas de estoque nesta aba.`
     const lines = []
     lines.push(row(1,stringCell('A1', `CLIENTE  |  ${a.cliente.nome}`,1),36))
     lines.push(row(2,stringCell('A2', `CNPJ: ${a.cliente.cnpj}  ·  ${a.cliente.cidade}/${a.cliente.uf}  ·  Consultor: ${a.cliente.consultor || 'Não informado'}`,2),27))
     lines.push(row(3,stringCell('A3', `PERÍODO: ${periodo.meses.map(fmt).join(' · ')}  |  Compras faturadas identificadas por apresentação (EAN ou SKU SAP)`,3),23))
     lines.push(row(4,stringCell('A4', `PRIORITÁRIOS: ${a.prioritarios.comprados} comprados / ${a.prioritarios.faltantes} não comprados  |  LANÇAMENTOS: ${a.lancamentos.comprados} comprados / ${a.lancamentos.faltantes} não comprados`,2),24))
     lines.push(row(5,stringCell('A5', `Unidades líquidas em 3 meses: ${a.unidades}  |  ● VERDE: COMPROU  |  ● VERMELHO: NÃO COMPROU`,3),22))
-    lines.push(row(6,stringCell('A6', `Critério: Bússola faturada (3 meses), com devoluções descontadas. ${notaEstoque}`,3),26))
+    lines.push(row(6,stringCell('A6', `Critério: Bússola faturada (3 meses), com devoluções descontadas. ${notaEstoqueCliente}`,3),26))
     const cols = [
       'TIPO MIX','PRODUTO / APRESENTAÇÃO','EAN OU SKU SAP','STATUS',
       ...periodo.meses.map(m=>`UN. ${fmt(m)}`),
       'UNIDADES TOTAL (3M)','MÉDIA MENSAL (UN.)','PEDIDOS','ÚLTIMA COMPRA',
-      ...escolhidas.map(dist=>`ESTOQUE ${dist} (UN.)`),
+      ...distribuidorasCliente.map(dist=>`ESTOQUE ${dist} (UN.)`),
     ]
     lines.push(row(8, cols.map((name,j)=>stringCell(`${columnName(j)}8`,name,4)).join(''),30))
     a.produtos.forEach((p,i) => {
@@ -228,7 +238,7 @@ export function workbookClientesMix(analise, periodo, filtros = {}, distribuidor
         numberCell(`I${pos}`,Math.round(p.media*100)/100,st === 5 ? 9 : 10)+
         numberCell(`J${pos}`,p.pedidos,st === 5 ? 9 : 10)+
         stringCell(`K${pos}`,dataSegura(p.ultima),st) +
-        escolhidas.map((dist,index)=>{
+        distribuidorasCliente.map((dist,index)=>{
           const v = p.estoques?.[dist]
           const ref = `${columnName(11+index)}${pos}`
           return v === null || v === undefined ? stringCell(ref,'—',st)
@@ -238,8 +248,8 @@ export function workbookClientesMix(analise, periodo, filtros = {}, distribuidor
     })
     const last = Math.max(8, a.produtos.length + 8)
     sheets.push({ name: `${String(index+1).padStart(2,'0')} ${a.cliente.cnpj}`,
-      xml: outer(last,lines,[1,2,3,4,5,6].map(n=>`A${n}:${ultimaColuna}${n}`),
-        [17,50,23,19,16,16,16,17,17,14,18,...escolhidas.map(()=>27)],`A8:${ultimaColuna}${last}`) })
+      xml: outer(last,lines,[1,2,3,4,5,6].map(n=>`A${n}:${colunaFinalCliente}${n}`),
+        [17,50,23,19,16,16,16,17,17,14,18,...distribuidorasCliente.map(()=>27)],`A8:${colunaFinalCliente}${last}`) })
   })
   return buildMultiSheetXlsx({ sheets, title: 'Relatório de MIX Prioritários e Lançamentos por CNPJ', stylesXml: styles() })
 }
