@@ -59,3 +59,11 @@
 .market-card-classify{display:flex;align-items:center;justify-content:space-between;gap:7px;font-size:.72rem;color:#566879}
 .market-card-classify select{min-width:0;max-width:65%;padding:6px 8px;border:1px solid #d3e0e8;border-radius:8px;background:#fff;font-size:.75rem}
 @media(max-width:650px){.market-card-classify{align-items:stretch;flex-direction:column}.market-card-classify select{max-width:100%}}
+
+/* Filtros MIX e ranking por vendas Bússola. */
+.market-product-badges{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.market-mix-tag{display:inline-flex;align-items:center;padding:3px 9px;background:#ecf2ff;color:#22517d;border-radius:6px;font-size:.7rem;font-weight:800}
+.market-sales-explanation{display:flex;gap:10px;flex-wrap:wrap;align-items:baseline;margin:13px 0 0;padding:12px 15px;background:#f5f8fb;border:1px solid #dae6ef;border-radius:12px;color:#425970;font-size:.8rem}
+.market-sales-explanation strong{color:#16456e}
+.market-sales-badge{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;padding:7px 10px;background:#edf6f2;border:1px solid #cde9d8;border-radius:8px;color:#236147;font-size:.74rem}
+.market-sales-badge small{font-size:.71rem;color:#426c5b}
