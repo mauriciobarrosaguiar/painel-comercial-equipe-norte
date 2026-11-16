@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import './sku-coverage.css'
+import SkuPdv from './SkuPdv'
 
 type Group = { total: number; comprados: number; faltantes: number; percentual: number; unidades: number }
 type Groups = Record<string, Group>
@@ -75,6 +76,7 @@ export default function SkuCoverage({ clienteId = '', inicio = '', fim = '', uf 
           <span>{num.format(g.percentual)}% de cobertura · faltam {num.format(g.faltantes)}</span>
           <b>{num.format(g.unidades)} unidades faturadas</b><span className="sku-card-action">Ver produtos não vendidos →</span></button></article>
       })}</div>
+      {!clienteId && <SkuPdv refresh={retry} />}
       <p className="sku-note">{data.criterio}</p>
       {data.resumo.DESAFIO?.total === 0 && <p className="sku-note">Desafio de Gigantes: não há produtos da campanha cadastrados para o período. Importe as metas da campanha na Administração.</p>}
       {openedGroup && <MissingProductsDialog label={labels.find(([key]) => key === openedGroup)?.[1] || ''} periodo={periodo}
