@@ -129,6 +129,8 @@ export default function MarketFarmaModule({ onBack, onAutomations }: { onBack: (
   const [categoria, setCategoria] = useState('')
   const [mix, setMix] = useState('')
   const [maisVendidos, setMaisVendidos] = useState('')
+  const [filtersOpen, setFiltersOpen] = useState(() => typeof window !== 'undefined' && window.matchMedia('(min-width: 901px)').matches)
+  const [visibleCount, setVisibleCount] = useState(24)
   const [classificacoesCsv, setClassificacoesCsv] = useState('')
   const [salvandoClasse, setSalvandoClasse] = useState('')
   const [importandoClasses, setImportandoClasses] = useState(false)
@@ -330,6 +332,9 @@ export default function MarketFarmaModule({ onBack, onAutomations }: { onBack: (
     return [...map.values()].map(item => ({ ...item, rows: [...item.rows].sort((a, b) => priceOrder(a) - priceOrder(b)) })).filter(item => item.rows.length)
   }, [data?.resultados, selectedClient?.uf])
   const groups = useMemo(() => allGroups.filter(product => matchesProduct(product, search)), [allGroups, search])
+  const visibleGroups = useMemo(() => groups.slice(0, visibleCount), [groups, visibleCount])
+  const filterLabels = [effectiveUf ? `UF ${effectiveUf}` : '', dist, categoria ? categoriaLabel(categoria) : '', mix ? MIX_ROTULOS[mix] : '', maisVendidos ? 'Mais vendidos' : '', stock ? 'Em estoque' : ''].filter(Boolean)
+  useEffect(() => { setVisibleCount(24) }, [effectiveUf, dist, categoria, mix, maisVendidos, stock, search, clientCnpj])
   const visibleRows = useMemo(() => groups.reduce((sum, group) => sum + group.rows.length, 0), [groups])
   const visibleStock = useMemo(() => groups.reduce((sum, group) => sum + group.rows.filter(row => row.estoque > 0).length, 0), [groups])
 
@@ -497,14 +502,28 @@ export default function MarketFarmaModule({ onBack, onAutomations }: { onBack: (
       {selectedClient ? <div className="market-selected-client"><strong>{selectedClient.nome}</strong><span>CNPJ {selectedClient.cnpj} · {selectedClient.cidade}/{selectedClient.uf}</span><span>Consultor: {selectedClient.consultor || data?.usuario?.nome}</span><b>Ofertas liberadas somente para a UF {selectedClient.uf}</b><button type="button" onClick={clearClient}>Trocar cliente</button></div> : <div className="market-client-help"><strong>Selecione o PDV</strong><span>Pesquise pelo nome, parte do nome ou pelos números do CNPJ.</span></div>}
     </section>
 
-    <section className="filters market-filters">
+    <section className="market-compact-search" aria-label="Busca e filtros do Mercado Farma">
+      <label className="market-quick-search"><span>Produto ou EAN</span><input value={search} placeholder="Buscar medicamento ou EAN…" aria-label="Buscar produto ou EAN" onChange={event => setSearch(event.target.value)} /></label>
+      <button type="button" className={`market-filters-toggle ${filtersOpen ? 'is-open' : ''}`}
+        aria-expanded={filtersOpen} aria-controls="market-filter-panel" onClick={() => setFiltersOpen(value => !value)}>
+        <span aria-hidden="true">☷</span> Filtros{filterLabels.length ? ` (${filterLabels.length})` : ''} <span aria-hidden="true">{filtersOpen ? '−' : '+'}</span>
+      </button>
+    </section>
+    {!filtersOpen && !!filterLabels.length && <div className="market-filter-tags" aria-label="Filtros aplicados">
+      {filterLabels.map((label, index) => <span key={`${label}-${index}`}>{label}</span>)}
+      <button type="button" onClick={() => { setUf(''); setDist(''); setCategoria(''); setMix(''); setMaisVendidos(''); setStock(false) }}>Limpar</button>
+    </div>}
+    <section id="market-filter-panel" className="filters market-filters market-filter-panel" hidden={!filtersOpen} aria-label="Filtros avançados">
       <label><span>UF</span><select value={effectiveUf} disabled={!!selectedClient} onChange={event => setUf(event.target.value)}><option value="">Todas</option>{(data?.filtros.ufs || []).map(value => <option key={value}>{value}</option>)}</select>{selectedClient && <small>Definida pelo CNPJ selecionado</small>}</label>
       <label><span>Distribuidora</span><select value={dist} onChange={event => setDist(event.target.value)}><option value="">Todas que atendem {effectiveUf || 'as UFs'}</option>{(data?.filtros.distribuidoras || []).map(value => <option key={value}>{value}</option>)}</select></label>
       <label><span>Tipo de medicamento</span><select value={categoria} onChange={event => setCategoria(event.target.value)}><option value="">Todos os tipos</option>{CATEGORIAS.map(tipo => <option value={tipo.value} key={tipo.value}>{tipo.label}</option>)}</select></label>
       <label><span>MIX comercial</span><select value={mix} onChange={event => setMix(event.target.value)}><option value="">Todos os MIX</option>{MIX_OPCOES.map(opcao => <option key={opcao.value} value={opcao.value}>{opcao.label}</option>)}</select></label>
       <label><span>Mais vendidos</span><select value={maisVendidos} onChange={event => setMaisVendidos(event.target.value)}><option value="">Todos os produtos</option>{VENDAS_OPCOES.map(opcao => <option key={opcao.value} value={opcao.value}>{opcao.label}</option>)}</select></label>
-      <label><span>Produto ou EAN</span><input value={search} placeholder="Ex.: Amitriptilina 75 ou EAN" onChange={event => setSearch(event.target.value)} /></label>
       <label className="stock-check"><input type="checkbox" checked={stock} onChange={event => setStock(event.target.checked)} /><span>Com estoque</span></label>
+      <div className="market-filter-footer">
+        <button type="button" className="market-filter-clear" onClick={() => { setUf(''); setDist(''); setCategoria(''); setMix(''); setMaisVendidos(''); setStock(false) }}>Limpar filtros</button>
+        <button type="button" className="market-filter-apply" onClick={() => setFiltersOpen(false)}>Ver produtos</button>
+      </div>
     </section>
     {maisVendidos && <>
       <details className="market-sales-explanation">
@@ -555,7 +574,7 @@ export default function MarketFarmaModule({ onBack, onAutomations }: { onBack: (
     <section className="market-product-grid">
       {loading && <div className="operations-empty">Carregando…</div>}
       {!loading && !groups.length && <div className="operations-empty">{maisVendidos ? 'Nenhum produto com unidades faturadas na Bússola no período de três meses para esta combinação de filtros.' : 'Nenhum produto encontrado para os filtros informados.'}</div>}
-      {groups.map(product => {
+      {visibleGroups.map(product => {
         const selectedKey = selectedRows[product.key]
         const selected = product.rows.find(row => rowKey(row) === selectedKey) || product.rows[0]
         const quantity = quantities[product.key] || 0
@@ -581,12 +600,19 @@ export default function MarketFarmaModule({ onBack, onAutomations }: { onBack: (
               </button>
             })}</div>}
           </div>}
-          <label className="market-card-classify"><span>Classificação sanitária</span><select aria-label={`Classificação de ${product.produto}`} value={selected?.categoria_farmaceutica || "NAO_CLASSIFICADO"} disabled={salvandoClasse === product.ean} onChange={event => void classificarProduto(product.ean, event.target.value as Categoria)}>{CATEGORIAS.map(tipo => <option key={tipo.value} value={tipo.value}>{tipo.label}</option>)}</select></label>
-          <div className="mef-quantity"><button type="button" disabled={quantity === 0} onClick={() => changeQuantity(product.key, -1)}>−</button><input aria-label="Quantidade" value={quantity} onChange={event => { const value = Number(event.target.value.replace(/\D/g, '')); setQuantities(current => ({ ...current, [product.key]: Math.max(0, Math.min(99999, value || 0)) })) }} /><button type="button" onClick={() => changeQuantity(product.key, 1)}>+</button></div>
-          <button className="mef-cart-total" type="button" disabled={quantity === 0 || !selectedClient} onClick={() => addToCart(product, selected, quantity)}>🛒 {quantity ? `Adicionar · ${money.format(total)}` : money.format(0)}</button>
+          <details className="market-card-extra">
+            <summary>Informações e classificação <span aria-hidden="true">⌄</span></summary>
+            <label className="market-card-classify"><span>Classificação sanitária</span><select aria-label={`Classificação de ${product.produto}`} value={selected?.categoria_farmaceutica || "NAO_CLASSIFICADO"} disabled={salvandoClasse === product.ean} onChange={event => void classificarProduto(product.ean, event.target.value as Categoria)}>{CATEGORIAS.map(tipo => <option key={tipo.value} value={tipo.value}>{tipo.label}</option>)}</select></label>
+            <small>PF distribuidora: {money.format(selected?.pf_distribuidora || 0)} · Sem imposto: {money.format(selected?.preco_sem_imposto || 0)}</small>
+          </details>
+          <div className="mef-card-actions">
+            <div className="mef-quantity"><button type="button" disabled={quantity === 0} onClick={() => changeQuantity(product.key, -1)}>−</button><input aria-label={`Quantidade de ${product.produto}`} value={quantity} onChange={event => { const value = Number(event.target.value.replace(/\D/g, '')); setQuantities(current => ({ ...current, [product.key]: Math.max(0, Math.min(99999, value || 0)) })) }} /><button type="button" onClick={() => changeQuantity(product.key, 1)}>+</button></div>
+            <button className="mef-cart-total" type="button" disabled={quantity === 0 || !selectedClient} onClick={() => addToCart(product, selected, quantity)} title={quantity ? `Adicionar ${quantity} unidades: ${money.format(total)}` : 'Selecione o cliente e a quantidade'}>🛒 {quantity ? money.format(total) : 'Adicionar'}</button>
+          </div>
         </article>
       })}
     </section>
+    {groups.length > visibleGroups.length && <button className="market-show-more" type="button" onClick={() => setVisibleCount(value => value + 24)}>Mostrar mais produtos <span>({num.format(visibleGroups.length)} de {num.format(groups.length)})</span></button>}
 
     {cartOpen && <div className="market-cart-overlay" onMouseDown={event => { if (event.target === event.currentTarget) setCartOpen(false) }}><aside className="market-cart-drawer" role="dialog" aria-modal="true">
       <header><div><span>PEDIDO MERCADO FARMA</span><h2>Carrinho</h2></div><button type="button" onClick={() => setCartOpen(false)}>×</button></header>
