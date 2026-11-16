@@ -509,7 +509,7 @@ export default function MarketFarmaModule({ onBack, onAutomations }: { onBack: (
       <strong>Média dos últimos 3 meses · {(data?.ranking?.meses || []).map(mesCurto).join(' · ') || 'incluindo o mês atual'}</strong>
       <span>Ranking por média mensal de vendas faturadas na Bússola (somatório dos três meses dividido por 3), com devoluções descontadas. O mês atual é parcial. É venda às farmácias, não ao consumidor.</span>
       {!!data?.ranking?.meses_sem_registro?.length && <span className="market-sales-warning">Atenção: sem registros do Bússola em {data.ranking.meses_sem_registro.map(mesCurto).join(', ')}. A média de 3 meses pode estar subestimada até a inclusão desses dados.</span>}
-    </div>
+    </div>}
     <details className="market-classification-management">
       <summary>Classificar medicamentos por EAN (individualmente ou em lote)</summary>
       <p>A classificação sanitária é independente do MIX. Confira cada apresentação conforme a Anvisa antes de classificar. EANs ainda não verificados ficam como “A classificar”.</p>
