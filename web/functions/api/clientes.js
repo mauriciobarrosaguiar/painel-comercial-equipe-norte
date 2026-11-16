@@ -1,4 +1,5 @@
 import { ITEM_FATURADO, MIX_SEM_COMBATE } from '../_lib/commercial.js'
+import { readSession } from '../_lib/credentials.js'
 
 const HEADERS = {
   'content-type': 'application/json; charset=UTF-8',
@@ -86,6 +87,19 @@ export async function onRequestGet({ request, env }) {
     const uf = String(params.get('uf') || '').trim().toUpperCase().slice(0, 2)
     const cidade = String(params.get('cidade') || '').trim().slice(0, 120)
     const busca = String(params.get('busca') || '').trim().slice(0, 160)
+    const selecaoAtiva = params.has('selecionados')
+    let selecionados = []
+    let consultorSessao = ''
+    if (selecaoAtiva) {
+      const session = await readSession(request, env.PAINEL_ADMIN_KEY)
+      if (!session?.consultor_id) return json({ erro: 'Faça login para selecionar PDVs.' }, 401)
+      consultorSessao = session.consultor_id
+      const texto = String(params.get('selecionados') || '')
+      if (texto.length > 1700) return json({ erro: 'Selecione até 100 PDVs.' }, 400)
+      selecionados = [...new Set(texto.split(',').filter(Boolean).map(value => value.replace(/\D/g, '')))]
+      if (selecionados.length > 100 || selecionados.some(cnpj => !/^\d{14}$/.test(cnpj)))
+        return json({ erro: 'Seleção de CNPJ inválida; máximo de 100 PDVs.' }, 400)
+    }
     const filtroPrioridade = String(params.get('prioridade') || '').trim().toUpperCase()
     const ordenacao = String(params.get('ordenar') || 'prioridade').trim()
     const limite = Math.min(500, Math.max(10, Number(params.get('limite') || 100)))
@@ -100,6 +114,14 @@ export async function onRequestGet({ request, env }) {
 
     const where = ['cl.carteira_importada=1', 'cl.ativo=1']
     const binds = []
+    if (selecaoAtiva) {
+      where.push('cl.consultor_id=?'); binds.push(consultorSessao)
+      if (!selecionados.length) where.push('1=0')
+      else {
+        where.push("REPLACE(REPLACE(REPLACE(COALESCE(cl.cnpj,''),'.',''),'/',''),'-','') IN (" + selecionados.map(() => '?').join(',') + ')')
+        binds.push(...selecionados)
+      }
+    }
     if (consultor) { where.push('cl.consultor_id=?'); binds.push(consultor) }
     if (uf) { where.push("UPPER(TRIM(COALESCE(cl.uf,'')))=?"); binds.push(uf) }
     if (cidade) { where.push("UPPER(TRIM(COALESCE(cl.cidade,'')))=UPPER(?)"); binds.push(cidade) }
