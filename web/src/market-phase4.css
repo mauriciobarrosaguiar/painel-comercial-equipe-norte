@@ -153,3 +153,109 @@ details.market-sales-explanation{
 
 /* UX mobile: filtros recolhidos e resumo de 2 colunas. */
 @media(max-width:760px){.market-summary{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:10px}.market-summary article{padding:12px}.market-summary strong{margin-top:4px;font-size:1.17rem}}
+
+
+/* Mercado Farma: busca imediata e filtros opcionais, sem painel gigante. */
+.market-compact-search{
+  display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:end;gap:9px;
+  min-width:0;margin-top:12px
+}
+.market-quick-search{display:grid;min-width:0;gap:4px}
+.market-quick-search span{font-size:.74rem;font-weight:700;color:#465c70}
+.market-quick-search input{
+  min-width:0;width:100%;height:42px;box-sizing:border-box;padding:0 12px;
+  border:1px solid #d3dfe7;border-radius:10px;background:#fff;font-size:16px
+}
+.market-filters-toggle{
+  display:flex;align-items:center;gap:6px;justify-content:center;
+  min-width:112px;height:42px;box-sizing:border-box;padding:7px 11px;
+  border:1px solid #c3d7e4;border-radius:10px;background:#eaf4fa;
+  color:#124466;font-size:.78rem;font-weight:750;white-space:nowrap;cursor:pointer
+}
+.market-filters-toggle.is-open{background:#d9edf7}
+.market-filters-toggle:focus-visible{outline:2px solid #1272a5;outline-offset:2px}
+.market-filter-panel[hidden]{display:none!important}
+.market-filter-panel{min-width:0;box-sizing:border-box;margin-top:8px}
+.market-filter-panel>label{min-width:0}
+.market-filter-panel select{min-width:0;width:100%;max-width:100%;box-sizing:border-box}
+.market-filter-tags{display:flex;flex-wrap:wrap;gap:5px;align-items:center;margin-top:7px}
+.market-filter-tags span{
+  display:inline-block;max-width:100%;padding:3px 8px;border-radius:99px;
+  background:#e7eff7;color:#215273;font-size:.66rem;font-weight:750;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis
+}
+.market-filter-tags button{border:0;background:transparent;color:#087092;font-size:.68rem;font-weight:750}
+.market-filter-footer{grid-column:1/-1;display:flex;justify-content:flex-end;gap:8px;align-items:center}
+.market-filter-footer button{
+  min-height:36px;padding:7px 12px;border-radius:9px;
+  font-size:.78rem;font-weight:750;cursor:pointer
+}
+.market-filter-clear{color:#2c647f;border:1px solid #c7d6df;background:#fff}
+.market-filter-apply{color:#fff;border:1px solid #0d7196;background:#0d7196}
+.market-show-more{
+  display:flex;justify-content:center;align-items:center;flex-wrap:wrap;gap:6px;
+  width:100%;min-height:44px;margin-top:14px;padding:10px 15px;
+  color:#175675;border:1px solid #cbdde6;border-radius:12px;background:#fff;
+  font-weight:750;cursor:pointer
+}
+.market-show-more span{color:#728492;font-size:.73rem}
+
+/* Detalhes secundarios acessiveis ao toque, fora do fluxo principal do card. */
+.market-card-extra{min-width:0;border-top:1px solid #e3ebef;padding-top:5px}
+.market-card-extra summary{
+  display:flex;align-items:center;justify-content:space-between;gap:8px;
+  list-style:none;color:#567488;font-size:.73rem;font-weight:750;cursor:pointer
+}
+.market-card-extra summary::-webkit-details-marker{display:none}
+.market-card-extra[open] summary span{transform:rotate(180deg)}
+.market-card-extra .market-card-classify{margin:9px 0 7px}
+.market-card-extra>small{display:block;color:#607686;font-size:.7rem;line-height:1.45}
+.mef-card-actions{
+  display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.2fr);
+  gap:8px;align-items:stretch;margin-top:auto;min-width:0
+}
+.mef-card-actions .mef-quantity{min-width:0;height:40px;grid-template-columns:34px minmax(0,1fr) 34px}
+.mef-card-actions .mef-cart-total{min-width:0;min-height:40px;margin:0;padding:4px 6px;font-size:.77rem}
+
+/* Os indicadores passam a caber em duas linhas, não quatro cartões altos. */
+@media(max-width:760px){
+  .operations-page .market-filter-panel{
+    display:grid;grid-template-columns:repeat(2,minmax(0,1fr));
+    gap:8px;padding:11px;border-radius:12px
+  }
+  .market-filter-panel>label{display:grid;align-content:start;gap:5px}
+  .market-filter-panel>label span{font-size:.69rem;line-height:1.25}
+  .market-filter-panel select{height:38px;padding:4px 6px;font-size:.77rem}
+  .market-filter-panel .stock-check{padding-top:6px;display:flex!important;align-items:center;gap:6px}
+  .market-filter-panel .stock-check input{width:17px;min-height:17px}
+  .operations-page .market-summary{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:10px}
+  .operations-page .market-summary article{min-width:0;padding:10px 12px;border-radius:12px}
+  .operations-page .market-summary span{font-size:.69rem}
+  .operations-page .market-summary strong{font-size:1.19rem;margin-top:3px}
+  .operations-page .market-product-grid{gap:9px;margin-top:10px}
+  .operations-page .mef-product-card{min-height:0;gap:8px;padding:11px}
+  .operations-page .mef-product-info h2{font-size:.9rem;line-height:1.36}
+  .operations-page .mef-buybox{
+    grid-template-columns:minmax(0,1fr) minmax(82px,auto) 12px;
+    min-height:58px;gap:5px;padding:7px 9px
+  }
+  .operations-page .mef-buybox-price{
+    grid-column:auto;grid-row:auto;align-items:flex-end;text-align:right
+  }
+  .operations-page .mef-chevron{grid-column:auto;grid-row:auto}
+  .operations-page .mef-buybox-price small{display:none}
+  .operations-page .mef-buybox-price b{font-size:1.06rem;margin:0}
+  .operations-page .mef-buybox-distributor strong{font-size:.74rem;white-space:normal;overflow-wrap:anywhere}
+  .operations-page .mef-buybox-distributor small{font-size:.65rem;margin-top:3px}
+  .operations-page .market-sales-badge{padding:6px 8px}
+  .operations-page .market-sales-months{padding-top:4px}
+  .operations-page .mef-brand-ean{font-size:.68rem}
+  .operations-page .market-order-client{margin:10px 0;padding:10px}
+  .operations-page .market-client-help{display:none}
+}
+@media(max-width:365px){
+  .market-filters-toggle{min-width:98px;padding:5px 7px;font-size:.72rem}
+  .market-compact-search{gap:6px}
+  .operations-page .mef-buybox{grid-template-columns:minmax(0,1fr) minmax(74px,auto) 10px}
+  .operations-page .mef-buybox-price b{font-size:.98rem}
+}
